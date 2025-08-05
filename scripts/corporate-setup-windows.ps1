@@ -1,0 +1,499 @@
+# Serena MCP Corporate Quick Setup Script for Windows 11
+# Targets 15-minute deployment time with proxy/cert support
+#
+# Usage: 
+#   .\corporate-setup-windows.ps1 -ProxyUrl "http://proxy:8080" -CaCertPath "C:\Corp\ca.crt"
+#   .\corporate-setup-windows.ps1 -UseDocker -RegistryUrl "corp-registry:5000"
+
+param(
+    [Parameter(Mandatory=$false)]
+    [string]$ProxyUrl = $env:HTTP_PROXY,
+    
+    [Parameter(Mandatory=$false)]
+    [string]$CaCertPath = $env:REQUESTS_CA_BUNDLE,
+    
+    [Parameter(Mandatory=$false)]
+    [string]$InstallPath = "$env:USERPROFILE\serena-mcp",
+    
+    [Parameter(Mandatory=$false)]
+    [switch]$UseDocker,
+    
+    [Parameter(Mandatory=$false)]
+    [string]$RegistryUrl = "",
+    
+    [Parameter(Mandatory=$false)]
+    [switch]$SkipLanguageServers,
+    
+    [Parameter(Mandatory=$false)]
+    [string]$IDEIntegration = "both" # Options: vscode, intellij, both, none
+)
+
+$ErrorActionPreference = "Stop"
+$StartTime = Get-Date
+
+function Write-ColorOutput($message, $color = "Green") {
+    Write-Host $message -ForegroundColor $color
+}
+
+function Test-AdminPrivileges {
+    $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+    return $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Set-ProxyEnvironment {
+    if ($ProxyUrl) {
+        Write-ColorOutput "Setting up proxy environment..." "Yellow"
+        $env:HTTP_PROXY = $ProxyUrl
+        $env:HTTPS_PROXY = $ProxyUrl
+        $env:NO_PROXY = "localhost,127.0.0.1"
+        
+        # Set system-wide proxy for current session
+        [System.Net.WebRequest]::DefaultWebProxy = New-Object System.Net.WebProxy($ProxyUrl)
+        [System.Net.WebRequest]::DefaultWebProxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials
+    }
+}
+
+function Set-CertificateEnvironment {
+    if ($CaCertPath -and (Test-Path $CaCertPath)) {
+        Write-ColorOutput "Setting up certificate environment..." "Yellow"
+        $env:REQUESTS_CA_BUNDLE = $CaCertPath
+        $env:SSL_CERT_FILE = $CaCertPath
+        $env:NODE_EXTRA_CA_CERTS = $CaCertPath
+        $env:CURL_CA_BUNDLE = $CaCertPath
+        $env:PIP_CERT = $CaCertPath
+        $env:UV_CERT = $CaCertPath
+    }
+}
+
+function Install-WithDocker {
+    Write-ColorOutput "`nSetting up Serena with Docker..." "Cyan"
+    
+    # Check if Docker is installed
+    try {
+        docker --version | Out-Null
+    } catch {
+        Write-ColorOutput "Docker not found. Please install Docker Desktop first." "Red"
+        exit 1
+    }
+    
+    # Create Dockerfile for corporate environment
+    $dockerfilePath = "$InstallPath\Dockerfile.corporate"
+    $dockerfileContent = @"
+FROM ghcr.io/oraios/serena:latest
+
+# Add corporate certificates
+COPY ca-cert.crt /usr/local/share/ca-certificates/corporate-ca.crt
+RUN update-ca-certificates
+
+# Set proxy if provided
+ENV HTTP_PROXY=$ProxyUrl
+ENV HTTPS_PROXY=$ProxyUrl
+ENV NO_PROXY=localhost,127.0.0.1
+
+# Pre-install language servers
+RUN mkdir -p /root/.solidlsp/language_servers/static && \
+    cd /root/.solidlsp/language_servers/static && \
+    echo "Pre-downloading language servers..."
+
+WORKDIR /workspaces
+"@
+    
+    New-Item -ItemType Directory -Force -Path $InstallPath | Out-Null
+    Set-Content -Path $dockerfilePath -Value $dockerfileContent
+    
+    if ($CaCertPath) {
+        Copy-Item $CaCertPath "$InstallPath\ca-cert.crt"
+    } else {
+        # Create empty cert file if not provided
+        New-Item -ItemType File -Force -Path "$InstallPath\ca-cert.crt" | Out-Null
+    }
+    
+    # Build Docker image
+    Write-ColorOutput "Building corporate Docker image..." "Yellow"
+    docker build -t serena-corporate:latest -f $dockerfilePath $InstallPath
+    
+    # Create run script
+    $runScriptContent = @"
+@echo off
+docker run --rm -i --network host -v %CD%:/workspaces/projects serena-corporate:latest serena-mcp-server --transport stdio --context ide-assistant %*
+"@
+    Set-Content -Path "$InstallPath\run-serena-docker.bat" -Value $runScriptContent
+    
+    Write-ColorOutput "Docker setup complete!" "Green"
+}
+
+function Install-Local {
+    Write-ColorOutput "`nSetting up Serena locally..." "Cyan"
+    
+    # Install UV if not present
+    if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+        Write-ColorOutput "Installing UV package manager..." "Yellow"
+        $uvInstaller = "$env:TEMP\uv-installer.ps1"
+        
+        # Download with proxy support
+        $webClient = New-Object System.Net.WebClient
+        if ($ProxyUrl) {
+            $webClient.Proxy = New-Object System.Net.WebProxy($ProxyUrl)
+            $webClient.Proxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials
+        }
+        
+        try {
+            $webClient.DownloadFile("https://astral.sh/uv/install.ps1", $uvInstaller)
+            & powershell -ExecutionPolicy Bypass -File $uvInstaller
+        } catch {
+            Write-ColorOutput "Failed to download UV installer. Trying alternative method..." "Yellow"
+            # Try with Invoke-WebRequest as fallback
+            Invoke-WebRequest -Uri "https://astral.sh/uv/install.ps1" -OutFile $uvInstaller -UseBasicParsing
+            & powershell -ExecutionPolicy Bypass -File $uvInstaller
+        }
+    }
+    
+    # Clone or download Serena
+    Write-ColorOutput "Setting up Serena..." "Yellow"
+    if (Test-Path "$InstallPath\.git") {
+        Write-ColorOutput "Updating existing Serena installation..." "Yellow"
+        Push-Location $InstallPath
+        git pull
+        Pop-Location
+    } else {
+        if (Get-Command git -ErrorAction SilentlyContinue) {
+            git clone https://github.com/oraios/serena $InstallPath
+        } else {
+            # Download as ZIP if git is not available
+            Write-ColorOutput "Git not found. Downloading Serena as ZIP..." "Yellow"
+            $zipPath = "$env:TEMP\serena.zip"
+            Invoke-WebRequest -Uri "https://github.com/oraios/serena/archive/refs/heads/main.zip" -OutFile $zipPath -UseBasicParsing
+            Expand-Archive -Path $zipPath -DestinationPath $env:TEMP -Force
+            Move-Item "$env:TEMP\serena-main" $InstallPath -Force
+        }
+    }
+    
+    # Configure UV for corporate network
+    Push-Location $InstallPath
+    
+    $uvConfig = @"
+[tool.uv]
+trusted-host = ["pypi.org", "files.pythonhosted.org", "test.pypi.org"]
+"@
+    if ($ProxyUrl) {
+        $uvConfig += "`nproxy = `"$ProxyUrl`""
+    }
+    Set-Content -Path ".uv.toml" -Value $uvConfig
+    
+    # Install dependencies
+    Write-ColorOutput "Installing dependencies..." "Yellow"
+    uv sync
+    
+    Pop-Location
+    
+    # Pre-download language servers if not skipped
+    if (-not $SkipLanguageServers) {
+        Install-LanguageServers
+    }
+}
+
+function Install-LanguageServers {
+    Write-ColorOutput "`nPre-downloading language servers..." "Cyan"
+    
+    $downloadScript = @"
+import os
+import sys
+import json
+import urllib.request
+import urllib.error
+import ssl
+import zipfile
+import tarfile
+from pathlib import Path
+
+# Configure for corporate proxy
+if os.environ.get('HTTP_PROXY'):
+    proxy = urllib.request.ProxyHandler({
+        'http': os.environ['HTTP_PROXY'],
+        'https': os.environ['HTTPS_PROXY']
+    })
+    opener = urllib.request.build_opener(proxy)
+    urllib.request.install_opener(opener)
+
+# Configure SSL
+ssl_context = ssl.create_default_context()
+if os.environ.get('REQUESTS_CA_BUNDLE'):
+    ssl_context.load_verify_locations(os.environ['REQUESTS_CA_BUNDLE'])
+
+# Language server URLs
+servers = {
+    'pyright': {
+        'url': 'https://registry.npmjs.org/pyright/-/pyright-1.1.396.tgz',
+        'type': 'npm'
+    },
+    'typescript': {
+        'url': 'https://registry.npmjs.org/typescript-language-server/-/typescript-language-server-latest.tgz',
+        'type': 'npm'
+    }
+}
+
+base_dir = Path.home() / '.solidlsp' / 'language_servers' / 'static'
+base_dir.mkdir(parents=True, exist_ok=True)
+
+for name, info in servers.items():
+    print(f"Downloading {name}...")
+    try:
+        target_dir = base_dir / name
+        target_dir.mkdir(exist_ok=True)
+        
+        # Download file
+        temp_file = base_dir / f"{name}_download"
+        urllib.request.urlretrieve(info['url'], temp_file, context=ssl_context)
+        
+        # Extract based on type
+        if info['type'] == 'npm' and str(temp_file).endswith('.tgz'):
+            import gzip
+            with gzip.open(temp_file, 'rb') as gz:
+                with tarfile.open(fileobj=gz) as tar:
+                    tar.extractall(target_dir)
+        
+        temp_file.unlink()
+        print(f"  ✓ {name} downloaded successfully")
+        
+    except Exception as e:
+        print(f"  ✗ Failed to download {name}: {e}")
+        print("    You can manually download later or use Docker deployment")
+
+print("\nLanguage server setup complete!")
+"@
+    
+    $scriptPath = "$InstallPath\download_servers.py"
+    Set-Content -Path $scriptPath -Value $downloadScript
+    
+    Push-Location $InstallPath
+    uv run python $scriptPath
+    Pop-Location
+}
+
+function Setup-IDEIntegration {
+    Write-ColorOutput "`nSetting up IDE integrations..." "Cyan"
+    
+    # Create wrapper scripts
+    $wrapperScript = @"
+@echo off
+setlocal
+
+:: Set corporate environment
+set HTTP_PROXY=$ProxyUrl
+set HTTPS_PROXY=$ProxyUrl
+set REQUESTS_CA_BUNDLE=$CaCertPath
+set SSL_CERT_FILE=$CaCertPath
+set NODE_EXTRA_CA_CERTS=$CaCertPath
+
+:: Run Serena MCP server
+"$InstallPath\.venv\Scripts\python.exe" -m serena.cli start-mcp-server %*
+endlocal
+"@
+    
+    $wrapperPath = "$InstallPath\serena-mcp.bat"
+    Set-Content -Path $wrapperPath -Value $wrapperScript
+    
+    # VS Code Continue setup
+    if ($IDEIntegration -eq "vscode" -or $IDEIntegration -eq "both") {
+        Setup-VSCodeIntegration $wrapperPath
+    }
+    
+    # IntelliJ setup  
+    if ($IDEIntegration -eq "intellij" -or $IDEIntegration -eq "both") {
+        Setup-IntelliJIntegration $wrapperPath
+    }
+}
+
+function Setup-VSCodeIntegration($wrapperPath) {
+    Write-ColorOutput "Configuring VS Code Continue..." "Yellow"
+    
+    $continueConfig = @{
+        mcpServers = @{
+            serena = @{
+                command = $wrapperPath
+                args = @("--context", "ide-assistant")
+                env = @{
+                    HTTP_PROXY = $ProxyUrl
+                    HTTPS_PROXY = $ProxyUrl
+                    REQUESTS_CA_BUNDLE = $CaCertPath
+                }
+            }
+        }
+    }
+    
+    $configDir = "$env:USERPROFILE\.continue"
+    New-Item -ItemType Directory -Force -Path $configDir | Out-Null
+    
+    $configPath = "$configDir\config.json"
+    if (Test-Path $configPath) {
+        Write-ColorOutput "  Backing up existing Continue config..." "Yellow"
+        Copy-Item $configPath "$configPath.backup"
+        
+        # Merge with existing config
+        $existing = Get-Content $configPath | ConvertFrom-Json
+        if (-not $existing.mcpServers) {
+            $existing | Add-Member -MemberType NoteProperty -Name mcpServers -Value @{}
+        }
+        $existing.mcpServers.serena = $continueConfig.mcpServers.serena
+        $existing | ConvertTo-Json -Depth 10 | Set-Content $configPath
+    } else {
+        $continueConfig | ConvertTo-Json -Depth 10 | Set-Content $configPath
+    }
+    
+    Write-ColorOutput "  ✓ VS Code Continue configured" "Green"
+}
+
+function Setup-IntelliJIntegration($wrapperPath) {
+    Write-ColorOutput "Configuring IntelliJ..." "Yellow"
+    
+    # Create IntelliJ run configuration
+    $intellijConfig = @"
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Serena MCP" type="ShConfigurationType">
+    <option name="SCRIPT_TEXT" value="" />
+    <option name="INDEPENDENT_SCRIPT_PATH" value="true" />
+    <option name="SCRIPT_PATH" value="$wrapperPath" />
+    <option name="SCRIPT_OPTIONS" value="--context ide-assistant" />
+    <option name="INDEPENDENT_SCRIPT_WORKING_DIRECTORY" value="true" />
+    <option name="SCRIPT_WORKING_DIRECTORY" value="`$PROJECT_DIR`$" />
+    <envs>
+      <env name="HTTP_PROXY" value="$ProxyUrl" />
+      <env name="HTTPS_PROXY" value="$ProxyUrl" />
+      <env name="REQUESTS_CA_BUNDLE" value="$CaCertPath" />
+    </envs>
+  </configuration>
+</component>
+"@
+    
+    $configPath = "$InstallPath\intellij-serena-mcp.run.xml"
+    Set-Content -Path $configPath -Value $intellijConfig
+    
+    Write-ColorOutput "  ✓ IntelliJ configuration saved to: $configPath" "Green"
+    Write-ColorOutput "  → Import this run configuration in IntelliJ" "Yellow"
+}
+
+function Create-DesktopShortcuts {
+    Write-ColorOutput "`nCreating desktop shortcuts..." "Yellow"
+    
+    $WshShell = New-Object -ComObject WScript.Shell
+    $desktop = [Environment]::GetFolderPath("Desktop")
+    
+    # Serena MCP shortcut
+    $shortcut = $WshShell.CreateShortcut("$desktop\Serena MCP.lnk")
+    $shortcut.TargetPath = "$InstallPath\serena-mcp.bat"
+    $shortcut.WorkingDirectory = $InstallPath
+    $shortcut.IconLocation = "powershell.exe,0"
+    $shortcut.Description = "Launch Serena MCP Server"
+    $shortcut.Save()
+    
+    # Quick test shortcut
+    $testShortcut = $WshShell.CreateShortcut("$desktop\Test Serena.lnk")
+    $testShortcut.TargetPath = "powershell.exe"
+    $testShortcut.Arguments = "-NoExit -Command `"& '$InstallPath\test-serena.ps1'`""
+    $testShortcut.WorkingDirectory = $InstallPath
+    $testShortcut.Description = "Test Serena Installation"
+    $testShortcut.Save()
+}
+
+function Create-TestScript {
+    $testScript = @"
+# Serena MCP Installation Test
+Write-Host "Testing Serena MCP installation..." -ForegroundColor Cyan
+
+# Set environment
+`$env:HTTP_PROXY = "$ProxyUrl"
+`$env:HTTPS_PROXY = "$ProxyUrl"
+`$env:REQUESTS_CA_BUNDLE = "$CaCertPath"
+
+# Test UV
+Write-Host "`nChecking UV..." -ForegroundColor Yellow
+uv --version
+
+# Test Python environment
+Write-Host "`nChecking Python environment..." -ForegroundColor Yellow
+& "$InstallPath\.venv\Scripts\python.exe" --version
+
+# Test Serena import
+Write-Host "`nTesting Serena imports..." -ForegroundColor Yellow
+& "$InstallPath\.venv\Scripts\python.exe" -c "from serena.agent import SerenaAgent; print('✓ Serena imports successfully')"
+
+# Test MCP server
+Write-Host "`nTesting MCP server startup..." -ForegroundColor Yellow
+`$proc = Start-Process -FilePath "$InstallPath\serena-mcp.bat" -ArgumentList "--help" -NoNewWindow -PassThru -Wait
+if (`$proc.ExitCode -eq 0) {
+    Write-Host "✓ MCP server command works" -ForegroundColor Green
+} else {
+    Write-Host "✗ MCP server command failed" -ForegroundColor Red
+}
+
+Write-Host "`nInstallation test complete!" -ForegroundColor Green
+Write-Host "Press any key to exit..."
+`$host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") | Out-Null
+"@
+    
+    Set-Content -Path "$InstallPath\test-serena.ps1" -Value $testScript
+}
+
+function Show-CompletionMessage {
+    $duration = [math]::Round(((Get-Date) - $StartTime).TotalMinutes, 1)
+    
+    Write-ColorOutput "`n╔════════════════════════════════════════════╗" "Cyan"
+    Write-ColorOutput "║     Serena MCP Installation Complete!      ║" "Cyan"
+    Write-ColorOutput "╚════════════════════════════════════════════╝" "Cyan"
+    
+    Write-ColorOutput "`nInstallation Summary:" "Green"
+    Write-ColorOutput "  • Time taken: $duration minutes" "White"
+    Write-ColorOutput "  • Install path: $InstallPath" "White"
+    Write-ColorOutput "  • Deployment type: $(if ($UseDocker) {'Docker'} else {'Local'})" "White"
+    Write-ColorOutput "  • IDE integration: $IDEIntegration" "White"
+    
+    if ($UseDocker) {
+        Write-ColorOutput "`nDocker Usage:" "Yellow"
+        Write-ColorOutput "  docker run --rm -i --network host -v C:\YourProject:/workspaces/projects serena-corporate:latest serena-mcp-server --transport stdio" "Gray"
+    } else {
+        Write-ColorOutput "`nLocal Usage:" "Yellow"
+        Write-ColorOutput "  Run: $InstallPath\serena-mcp.bat" "Gray"
+    }
+    
+    Write-ColorOutput "`nNext Steps:" "Yellow"
+    Write-ColorOutput "  1. Test installation: Run 'Test Serena' from desktop" "White"
+    Write-ColorOutput "  2. Configure your IDE with the provided settings" "White"
+    Write-ColorOutput "  3. Activate a project and start coding!" "White"
+    
+    Write-ColorOutput "`nDocumentation: https://github.com/oraios/serena" "Gray"
+}
+
+# Main execution
+try {
+    Write-ColorOutput "Serena MCP Corporate Setup Starting..." "Cyan"
+    Write-ColorOutput "Target: 15-minute deployment" "Yellow"
+    
+    # Setup environment
+    Set-ProxyEnvironment
+    Set-CertificateEnvironment
+    
+    # Create install directory
+    New-Item -ItemType Directory -Force -Path $InstallPath | Out-Null
+    
+    # Install based on method
+    if ($UseDocker) {
+        Install-WithDocker
+    } else {
+        Install-Local
+        Setup-IDEIntegration
+    }
+    
+    # Create shortcuts and test script
+    Create-DesktopShortcuts
+    Create-TestScript
+    
+    # Show completion
+    Show-CompletionMessage
+    
+} catch {
+    Write-ColorOutput "`nError during installation:" "Red"
+    Write-ColorOutput $_.Exception.Message "Red"
+    Write-ColorOutput "`nStack trace:" "Yellow"
+    Write-ColorOutput $_.ScriptStackTrace "Gray"
+    exit 1
+}
