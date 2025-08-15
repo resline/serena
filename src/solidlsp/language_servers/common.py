@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import logging
 import os
+import platform
 import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass
 
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
+from solidlsp.util.subprocess_util import subprocess_kwargs
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +23,7 @@ class RuntimeDependency:
     url: str | None = None
     archive_type: str | None = None
     binary_name: str | None = None
-    command: str | None = None
+    command: str | list[str] | None = None
     package_name: str | None = None
     package_version: str | None = None
     extract_path: str | None = None
@@ -71,15 +73,21 @@ class RuntimeDependencyCollection:
         return results
 
     @staticmethod
-    def _run_command(command: str, cwd: str) -> None:
-        kwargs = {}
-        if PlatformUtils.get_platform_id().is_windows():
-            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore
-        else:
+    def _run_command(command: str | list[str], cwd: str) -> None:
+        kwargs = subprocess_kwargs()
+        if not PlatformUtils.get_platform_id().is_windows():
             import pwd
 
             kwargs["user"] = pwd.getpwuid(os.getuid()).pw_name
-        log.info("Running command '%s' in '%s'", command, cwd)
+
+        is_windows = platform.system() == "Windows"
+        if not isinstance(command, str) and not is_windows:
+            # Since we are using the shell, we need to convert the command list to a single string
+            # on Linux/macOS
+            command = " ".join(command)
+
+        log.info("Running command %s in '%s'", f"'{command}'" if isinstance(command, str) else command, cwd)
+
         completed_process = subprocess.run(
             command,
             shell=True,
