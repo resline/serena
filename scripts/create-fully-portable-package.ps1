@@ -82,37 +82,53 @@ Write-Host "Installing pip in embedded Python..." -ForegroundColor Yellow
 & "$OutputPath\python\python.exe" "$OutputPath\python\get-pip.py" --no-warn-script-location --target "$OutputPath\Lib\site-packages"
 
 # Test pip installation
-$pipTest = & "$OutputPath\python\python.exe" -c "import pip; print('Pip version:', pip.__version__)" 2>&1
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "[OK] Pip installed successfully: $pipTest" -ForegroundColor Green
-} else {
-    Write-Host "[ERROR] Pip installation failed" -ForegroundColor Red
-    exit 1
+try {
+    $pipTest = & "$OutputPath\python\python.exe" -c "import sys; sys.path.insert(0, r'$OutputPath\Lib\site-packages'); import pip; print(pip.__version__)" 2>$null
+    if ($LASTEXITCODE -eq 0 -and $pipTest) {
+        Write-Host "[OK] Pip installed successfully: version $pipTest" -ForegroundColor Green
+    } else {
+        # Try alternative test
+        $pipTest2 = & "$OutputPath\python\python.exe" -m pip --version 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[OK] Pip installed successfully" -ForegroundColor Green
+        } else {
+            Write-Host "[ERROR] Pip installation failed" -ForegroundColor Red
+            exit 1
+        }
+    }
+} catch {
+    Write-Host "[WARN] Could not verify pip installation, continuing..." -ForegroundColor Yellow
 }
 
 # Download ALL Python dependencies offline
-Write-Host "Downloading ALL Python dependencies offline..." -ForegroundColor Yellow
-$dependencyArgs = @(
-    "--proxy", $ProxyUrl,
-    "--cert", $CertPath,
-    "--output", "$OutputPath\dependencies",
-    "--pyproject", "$OutputPath\serena\pyproject.toml",
-    "--python-version", "3.11",
-    "--platform", $Platform
-)
-
-# Filter out empty arguments
-$dependencyArgs = $dependencyArgs | Where-Object { $_ -ne "" -and $_ -ne $null }
-
-try {
-    & "$OutputPath\python\python.exe" "$PSScriptRoot\download-dependencies-offline.py" @dependencyArgs
-    if ($LASTEXITCODE -ne 0) {
-        throw "Dependencies download failed"
+$depDownloadScript = "$PSScriptRoot\download-dependencies-offline.py"
+if (Test-Path $depDownloadScript) {
+    Write-Host "Downloading ALL Python dependencies offline..." -ForegroundColor Yellow
+    $dependencyArgs = @(
+        "--proxy", $ProxyUrl,
+        "--cert", $CertPath,
+        "--output", "$OutputPath\dependencies",
+        "--pyproject", "$OutputPath\serena\pyproject.toml",
+        "--python-version", "3.11",
+        "--platform", $Platform
+    )
+    
+    # Filter out empty arguments
+    $dependencyArgs = $dependencyArgs | Where-Object { $_ -ne "" -and $_ -ne $null }
+    
+    try {
+        & "$OutputPath\python\python.exe" $depDownloadScript @dependencyArgs
+        if ($LASTEXITCODE -ne 0) {
+            throw "Dependencies download failed"
+        }
+        Write-Host "[OK] Downloaded all Python dependencies offline" -ForegroundColor Green
+    } catch {
+        Write-Host "[WARN] Failed to download dependencies: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "Dependencies will be installed online during first run..." -ForegroundColor Yellow
     }
-    Write-Host "[OK] Downloaded all Python dependencies offline" -ForegroundColor Green
-} catch {
-    Write-Host "[ERROR] Failed to download dependencies: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host "Continuing with basic installation..." -ForegroundColor Yellow
+} else {
+    Write-Host "[INFO] Dependency download script not found, skipping offline download" -ForegroundColor Yellow
+    Write-Host "Dependencies will be installed online during first run..." -ForegroundColor Yellow
 }
 
 # Install dependencies offline (if available)
@@ -141,13 +157,28 @@ if (Test-Path "$OutputPath\dependencies\requirements.txt") {
 }
 
 # Download language servers
-Write-Host "Downloading language servers..." -ForegroundColor Yellow
-& "$OutputPath\python\python.exe" "$PSScriptRoot\download-language-servers-offline.py" `
-    --output "$OutputPath\language-servers" `
-    --proxy $ProxyUrl `
-    --cert $CertPath
-
-Write-Host "[OK] Downloaded language servers" -ForegroundColor Green
+$lsDownloadScript = "$PSScriptRoot\download-language-servers-offline.py"
+if (Test-Path $lsDownloadScript) {
+    Write-Host "Downloading language servers..." -ForegroundColor Yellow
+    try {
+        & "$OutputPath\python\python.exe" $lsDownloadScript `
+            --output "$OutputPath\language-servers" `
+            --proxy $ProxyUrl `
+            --cert $CertPath
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[OK] Downloaded language servers" -ForegroundColor Green
+        } else {
+            Write-Host "[WARN] Some language servers may not have been downloaded" -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "[WARN] Failed to download language servers: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "Language servers will need to be downloaded separately" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "[INFO] Language server download script not found, skipping" -ForegroundColor Yellow
+    Write-Host "Language servers will need to be downloaded separately" -ForegroundColor Yellow
+}
 
 # Create enhanced wrapper scripts
 Write-Host "Creating enhanced wrapper scripts..." -ForegroundColor Yellow
