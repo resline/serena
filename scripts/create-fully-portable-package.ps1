@@ -13,6 +13,9 @@ param(
 Write-Host "Creating FULLY PORTABLE Serena package..." -ForegroundColor Cyan
 Write-Host "This package will be 100% offline-capable" -ForegroundColor Green
 
+# Initialize variables
+$OfflineMode = $false
+
 # Create directory structure
 $dirs = @(
     "$OutputPath",
@@ -63,13 +66,14 @@ Write-Host "Setting up pip..." -ForegroundColor Yellow
 Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile "$OutputPath\python\get-pip.py"
 
 # Create python._pth to enable pip and site-packages
-$pthContent = @"
-python311.zip
-.
-..\..\Lib\site-packages
-..\..\serena\src
-import site
-"@
+$pthLines = @(
+    "python311.zip",
+    ".",
+    "..\..\Lib\site-packages",
+    "..\..\serena\src",
+    "import site"
+)
+$pthContent = $pthLines -join "`n"
 Set-Content -Path "$OutputPath\python\python311._pth" -Value $pthContent
 Write-Host "✓ Configured Python path" -ForegroundColor Green
 
@@ -501,6 +505,7 @@ Write-Host "✓ Created configuration files and documentation" -ForegroundColor 
 Write-Host "Creating ZIP package..." -ForegroundColor Yellow
 $zipName = "serena-fully-portable-windows-v0.1.4.zip"
 $zipPath = Join-Path (Get-Location) $zipName
+$zipSize = 0
 
 try {
     Compress-Archive -Path "$OutputPath\*" -DestinationPath $zipPath -Force -CompressionLevel Optimal
@@ -516,7 +521,11 @@ Write-Host "===========================================" -ForegroundColor Cyan
 Write-Host "  FULLY PORTABLE PACKAGE CREATED!" -ForegroundColor Green
 Write-Host "===========================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "📦 Package: $zipName ($zipSize MB)" -ForegroundColor Yellow
+if ($zipSize -gt 0) {
+    Write-Host "📦 Package: $zipName ($zipSize MB)" -ForegroundColor Yellow
+} else {
+    Write-Host "📦 Package: $zipName" -ForegroundColor Yellow
+}
 Write-Host "🎯 Target: Corporate/Air-gapped environments" -ForegroundColor Yellow  
 Write-Host "🔋 Offline: $(if ($OfflineMode) { "100% Ready" } else { "Requires internet for first setup" })" -ForegroundColor $(if ($OfflineMode) { "Green" } else { "Yellow" })
 Write-Host ""
