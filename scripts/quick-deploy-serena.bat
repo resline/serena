@@ -1,7 +1,8 @@
 @echo off
-:: Serena MCP Quick Deploy for Corporate Windows 11
+:: Serena MCP Quick Deploy for Corporate Windows 11 (v0.1.4)
 :: One-click deployment with automatic proxy/cert detection
 :: Target: Under 15 minutes deployment
+:: Updated: 2025-01-08
 
 setlocal enabledelayedexpansion
 
@@ -85,8 +86,8 @@ goto :end
 
 :download_portable
 :: Download pre-configured portable package
-echo Downloading Serena portable package...
-set PORTABLE_URL=https://github.com/oraios/serena/releases/download/latest/serena-portable-windows.zip
+echo Downloading Serena portable package (v0.1.4)...
+set PORTABLE_URL=https://github.com/resline/serena/releases/download/v0.1.4/serena-portable-windows.zip
 
 :: Create temp download with proxy support
 powershell -Command ^
