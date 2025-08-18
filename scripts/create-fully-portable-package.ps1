@@ -510,7 +510,8 @@ $zipSize = 0
 try {
     Compress-Archive -Path "$OutputPath\*" -DestinationPath $zipPath -Force -CompressionLevel Optimal
     $zipSize = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)
-    Write-Host "✓ Created ZIP package: $zipPath ($zipSize MB)" -ForegroundColor Green
+    $zipMsg = "✓ Created ZIP package: $zipPath (" + $zipSize + " MB)"
+    Write-Host $zipMsg -ForegroundColor Green
 } catch {
     Write-Host "✗ Failed to create ZIP: $($_.Exception.Message)" -ForegroundColor Red
 }
@@ -522,16 +523,20 @@ Write-Host "  FULLY PORTABLE PACKAGE CREATED!" -ForegroundColor Green
 Write-Host "===========================================" -ForegroundColor Cyan
 Write-Host ""
 if ($zipSize -gt 0) {
-    Write-Host "📦 Package: $zipName ($zipSize MB)" -ForegroundColor Yellow
+    $packageMsg = "📦 Package: $zipName (" + $zipSize + " MB)"
+    Write-Host $packageMsg -ForegroundColor Yellow
 } else {
     Write-Host "📦 Package: $zipName" -ForegroundColor Yellow
 }
 Write-Host "🎯 Target: Corporate/Air-gapped environments" -ForegroundColor Yellow  
-Write-Host "🔋 Offline: $(if ($OfflineMode) { "100% Ready" } else { "Requires internet for first setup" })" -ForegroundColor $(if ($OfflineMode) { "Green" } else { "Yellow" })
+$offlineStatus = if ($OfflineMode) { "100% Ready" } else { "Requires internet for first setup" }
+$offlineColor = if ($OfflineMode) { "Green" } else { "Yellow" }
+Write-Host "🔋 Offline: $offlineStatus" -ForegroundColor $offlineColor
 Write-Host ""
 Write-Host "✅ Features included:" -ForegroundColor Green
 Write-Host "   • Embedded Python $PythonVersion" -ForegroundColor White
-Write-Host "   • $(if ($OfflineMode) { "Pre-installed dependencies" } else { "Online dependency installer" })" -ForegroundColor White  
+$depStatus = if ($OfflineMode) { "Pre-installed dependencies" } else { "Online dependency installer" }
+Write-Host "   • $depStatus" -ForegroundColor White  
 Write-Host "   • 13+ Language servers pre-downloaded" -ForegroundColor White
 Write-Host "   • VS Code + Claude Desktop integration" -ForegroundColor White
 Write-Host "   • Corporate proxy/certificate support" -ForegroundColor White
