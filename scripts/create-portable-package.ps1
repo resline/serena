@@ -22,9 +22,9 @@ foreach ($dir in $dirs) {
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
 }
 
-# Clone Serena
+# Clone Serena (using fork for corporate deployment)
 Write-Host "Cloning Serena repository..." -ForegroundColor Yellow
-git clone https://github.com/oraios/serena "$OutputPath\serena-temp"
+git clone https://github.com/resline/serena "$OutputPath\serena-temp"
 
 # Copy only necessary files
 $essentialDirs = @("src", "scripts", "pyproject.toml", "README.md", "LICENSE")
@@ -167,7 +167,7 @@ Set-Content -Path "$OutputPath\SETUP.bat" -Value $setupScript
 
 # Create README
 $readme = @"
-# Serena MCP Portable Package
+# Serena MCP Portable Package v0.1.4
 
 This is a self-contained Serena MCP package for corporate environments.
 
@@ -175,6 +175,23 @@ This is a self-contained Serena MCP package for corporate environments.
 
 1. Run SETUP.bat to install to C:\serena-portable
 2. A desktop shortcut will be created automatically
+
+## Supported Languages
+
+- Python (via Pylsp)
+- TypeScript/JavaScript (via TypeScript Language Server)
+- Go (via gopls)
+- Java (via Eclipse JDT.LS)
+- C# (via OmniSharp)
+- Rust (via rust-analyzer)
+- Ruby (via Solargraph)
+- PHP (via Intelephense)
+- Terraform (via terraform-ls)
+- Elixir (via Elixir-LS)
+- Clojure (via clojure-lsp)
+- Swift (via sourcekit-lsp)
+- Bash (via bash-language-server)
+- C/C++ (via clangd)
 
 ## Usage
 
@@ -185,6 +202,10 @@ This is a self-contained Serena MCP package for corporate environments.
 ### IntelliJ IDEA
 1. Import the run configuration from: config\intellij-serena.run.xml
 2. The configuration will appear in your run configurations
+
+### Claude Desktop
+1. Use the provided MCP configuration for Claude Desktop
+2. Point to serena-mcp-portable.bat as the command
 
 ### Direct Usage
 Run: serena-mcp-portable.bat
@@ -202,13 +223,22 @@ If you need to set proxy/certificates:
 ## Contents
 
 - python\         - Embedded Python 3.11
-- serena\        - Serena source code
+- serena\        - Serena source code (v0.1.4)
 - language-servers\ - Pre-downloaded language servers
 - config\        - Configuration templates
 
+## Features
+
+- Symbol-based code editing with LSP support
+- Project memory and context management
+- Multiple IDE integrations
+- ChatGPT and Claude compatible
+- Offline/air-gapped environment support
+
 ## Support
 
-See https://github.com/oraios/serena for documentation
+See https://github.com/resline/serena for documentation
+Original project: https://github.com/oraios/serena
 "@
 Set-Content -Path "$OutputPath\README.txt" -Value $readme
 

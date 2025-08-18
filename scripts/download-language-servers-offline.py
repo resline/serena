@@ -94,6 +94,17 @@ class CorporateDownloader:
             elif archive_type == 'tar':
                 with tarfile.open(archive_path, 'r') as tar:
                     tar.extractall(dest_dir)
+            elif archive_type == 'gem':
+                # Ruby gem files are tar archives containing data.tar.gz
+                with tarfile.open(archive_path, 'r') as tar:
+                    tar.extractall(dest_dir)
+                # Extract the actual data
+                data_tar = dest_dir / 'data.tar.gz'
+                if data_tar.exists():
+                    with gzip.open(data_tar, 'rb') as gz:
+                        with tarfile.open(fileobj=gz) as tar:
+                            tar.extractall(dest_dir)
+                    data_tar.unlink()
             
             print(f"  ✓ Extracted to {dest_dir}")
             return True
@@ -169,6 +180,49 @@ def get_language_servers() -> Dict[str, Dict[str, Any]]:
                 'win32': 'https://github.com/clangd/clangd/releases/download/19.1.0/clangd-windows-19.1.0.zip',
                 'linux': 'https://github.com/clangd/clangd/releases/download/19.1.0/clangd-linux-19.1.0.zip',
                 'darwin': 'https://github.com/clangd/clangd/releases/download/19.1.0/clangd-mac-19.1.0.zip'
+            }
+        },
+        'bash-language-server': {
+            'url': 'https://registry.npmjs.org/bash-language-server/-/bash-language-server-5.6.0.tgz',
+            'type': 'tgz',
+            'description': 'Bash Language Server',
+        },
+        'solargraph': {
+            'url': 'https://rubygems.org/downloads/solargraph-0.50.0.gem',
+            'type': 'gem',
+            'description': 'Ruby Language Server (Solargraph)',
+            'note': 'Requires Ruby runtime'
+        },
+        'intelephense': {
+            'url': 'https://registry.npmjs.org/intelephense/-/intelephense-1.10.4.tgz',
+            'type': 'tgz',
+            'description': 'PHP Language Server (Intelephense)',
+        },
+        'terraform-ls': {
+            'url': 'https://github.com/hashicorp/terraform-ls/releases/download/v0.34.3/terraform-ls_0.34.3_windows_amd64.zip',
+            'type': 'zip',
+            'description': 'Terraform Language Server',
+            'platform_specific': True,
+            'platforms': {
+                'win32': 'https://github.com/hashicorp/terraform-ls/releases/download/v0.34.3/terraform-ls_0.34.3_windows_amd64.zip',
+                'linux': 'https://github.com/hashicorp/terraform-ls/releases/download/v0.34.3/terraform-ls_0.34.3_linux_amd64.zip',
+                'darwin': 'https://github.com/hashicorp/terraform-ls/releases/download/v0.34.3/terraform-ls_0.34.3_darwin_amd64.zip'
+            }
+        },
+        'elixir-ls': {
+            'url': 'https://github.com/elixir-lsp/elixir-ls/releases/download/v0.24.1/elixir-ls-v0.24.1.zip',
+            'type': 'zip',
+            'description': 'Elixir Language Server',
+        },
+        'clojure-lsp': {
+            'url': 'https://github.com/clojure-lsp/clojure-lsp/releases/download/2024.12.05-21.25.49/clojure-lsp-native-windows-amd64.zip',
+            'type': 'zip',
+            'description': 'Clojure Language Server',
+            'platform_specific': True,
+            'platforms': {
+                'win32': 'https://github.com/clojure-lsp/clojure-lsp/releases/download/2024.12.05-21.25.49/clojure-lsp-native-windows-amd64.zip',
+                'linux': 'https://github.com/clojure-lsp/clojure-lsp/releases/download/2024.12.05-21.25.49/clojure-lsp-native-linux-amd64.zip',
+                'darwin': 'https://github.com/clojure-lsp/clojure-lsp/releases/download/2024.12.05-21.25.49/clojure-lsp-native-macos-amd64.zip'
             }
         }
     }
