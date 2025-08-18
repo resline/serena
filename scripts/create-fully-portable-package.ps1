@@ -31,7 +31,7 @@ foreach ($dir in $dirs) {
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
 }
 
-Write-Host "✓ Created directory structure" -ForegroundColor Green
+Write-Host "[OK] Created directory structure" -ForegroundColor Green
 
 # Clone Serena (using fork for corporate deployment)
 Write-Host "Cloning Serena repository..." -ForegroundColor Yellow
@@ -44,7 +44,7 @@ foreach ($item in $essentialDirs) {
 }
 
 Remove-Item -Path "$OutputPath\serena-temp" -Recurse -Force
-Write-Host "✓ Copied Serena source code" -ForegroundColor Green
+Write-Host "[OK] Copied Serena source code" -ForegroundColor Green
 
 # Download Python embedded
 Write-Host "Downloading Python $PythonVersion embedded..." -ForegroundColor Yellow
@@ -55,9 +55,9 @@ try {
     Invoke-WebRequest -Uri $pythonUrl -OutFile $pythonZip -UseBasicParsing
     Expand-Archive -Path $pythonZip -DestinationPath "$OutputPath\python" -Force
     Remove-Item $pythonZip
-    Write-Host "✓ Downloaded and extracted Python embedded" -ForegroundColor Green
+    Write-Host "[OK] Downloaded and extracted Python embedded" -ForegroundColor Green
 } catch {
-    Write-Host "✗ Failed to download Python: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "[ERROR] Failed to download Python: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }
 
@@ -75,7 +75,7 @@ $pthLines = @(
 )
 $pthContent = $pthLines -join "`n"
 Set-Content -Path "$OutputPath\python\python311._pth" -Value $pthContent
-Write-Host "✓ Configured Python path" -ForegroundColor Green
+Write-Host "[OK] Configured Python path" -ForegroundColor Green
 
 # Install pip in embedded Python
 Write-Host "Installing pip in embedded Python..." -ForegroundColor Yellow
@@ -84,9 +84,9 @@ Write-Host "Installing pip in embedded Python..." -ForegroundColor Yellow
 # Test pip installation
 $pipTest = & "$OutputPath\python\python.exe" -c "import pip; print('Pip version:', pip.__version__)" 2>&1
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "✓ Pip installed successfully: $pipTest" -ForegroundColor Green
+    Write-Host "[OK] Pip installed successfully: $pipTest" -ForegroundColor Green
 } else {
-    Write-Host "✗ Pip installation failed" -ForegroundColor Red
+    Write-Host "[ERROR] Pip installation failed" -ForegroundColor Red
     exit 1
 }
 
@@ -109,9 +109,9 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "Dependencies download failed"
     }
-    Write-Host "✓ Downloaded all Python dependencies offline" -ForegroundColor Green
+    Write-Host "[OK] Downloaded all Python dependencies offline" -ForegroundColor Green
 } catch {
-    Write-Host "✗ Failed to download dependencies: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "[ERROR] Failed to download dependencies: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host "Continuing with basic installation..." -ForegroundColor Yellow
 }
 
@@ -129,14 +129,14 @@ if (Test-Path "$OutputPath\dependencies\requirements.txt") {
     & "$OutputPath\python\python.exe" -m pip install --no-index --find-links "$OutputPath\dependencies" --target "$OutputPath\Lib\site-packages" --requirement "$OutputPath\dependencies\requirements.txt"
     
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "✓ Installed all dependencies offline" -ForegroundColor Green
+        Write-Host "[OK] Installed all dependencies offline" -ForegroundColor Green
         $OfflineMode = $true
     } else {
-        Write-Host "⚠ Offline installation failed, will install online during first run" -ForegroundColor Yellow
+        Write-Host "[WARN] Offline installation failed, will install online during first run" -ForegroundColor Yellow
         $OfflineMode = $false
     }
 } else {
-    Write-Host "⚠ No offline dependencies found, will install online during first run" -ForegroundColor Yellow
+    Write-Host "[WARN] No offline dependencies found, will install online during first run" -ForegroundColor Yellow
     $OfflineMode = $false
 }
 
@@ -147,7 +147,7 @@ Write-Host "Downloading language servers..." -ForegroundColor Yellow
     --proxy $ProxyUrl `
     --cert $CertPath
 
-Write-Host "✓ Downloaded language servers" -ForegroundColor Green
+Write-Host "[OK] Downloaded language servers" -ForegroundColor Green
 
 # Create enhanced wrapper scripts
 Write-Host "Creating enhanced wrapper scripts..." -ForegroundColor Yellow
@@ -250,18 +250,18 @@ set DEPS=requests pyright mcp flask pydantic pyyaml jinja2 psutil tqdm tiktoken 
 
 for %%d in (%DEPS%) do (
     echo Checking %%d...
-    "%PYTHONHOME%\python.exe" -c "import %%d; print('  ✓ %%d:', %%d.__version__ if hasattr(%%d, '__version__') else 'OK')" 2>nul
+    "%PYTHONHOME%\python.exe" -c "import %%d; print('  [OK] %%d:', %%d.__version__ if hasattr(%%d, '__version__') else 'OK')" 2>nul
     if !ERRORLEVEL! neq 0 (
-        echo   ✗ %%d: Missing
+        echo   [ERROR] %%d: Missing
         set HAS_MISSING=1
     )
 )
 
 :: Check Serena
 echo Checking Serena...
-"%PYTHONHOME%\python.exe" -c "import serena; print('  ✓ Serena: Available')" 2>nul
+"%PYTHONHOME%\python.exe" -c "import serena; print('  [OK] Serena: Available')" 2>nul
 if %ERRORLEVEL% neq 0 (
-    echo   ✗ Serena: Missing
+    echo   [ERROR] Serena: Missing
     set HAS_MISSING=1
 )
 
@@ -270,9 +270,9 @@ echo.
 echo Checking language servers...
 dir /b "%SERENA_PORTABLE%language-servers" 2>nul | find /c /v "" >nul
 if %ERRORLEVEL% equ 0 (
-    for /f %%i in ('dir /b "%SERENA_PORTABLE%language-servers" 2^>nul ^| find /c /v ""') do echo   ✓ Language servers: %%i found
+    for /f %%i in ('dir /b "%SERENA_PORTABLE%language-servers" 2^>nul ^| find /c /v ""') do echo   [OK] Language servers: %%i found
 ) else (
-    echo   ✗ Language servers: None found
+    echo   [ERROR] Language servers: None found
 )
 
 if defined HAS_MISSING (
@@ -372,16 +372,16 @@ $readme = @"
 This is a FULLY SELF-CONTAINED Serena MCP package designed for corporate environments,
 air-gapped systems, and offline deployment.
 
-## 🚀 Key Features
+##  Key Features
 
 - **100% Offline**: No internet required after initial setup
 - **Embedded Python**: Python 3.11 included
-- **All Dependencies**: `$(if (`$OfflineMode) { "✓ Pre-installed offline" } else { "⚠ Will install on first run" })
+- **All Dependencies**: `$(if (`$OfflineMode) { "[OK] Pre-installed offline" } else { "[WARN] Will install on first run" })
 - **Language Servers**: Pre-downloaded for 13+ languages  
 - **Corporate Ready**: Proxy and certificate support
 - **Zero Installation**: Runs from any directory
 
-## 📦 Package Contents
+##  Package Contents
 
 - **python/**: Embedded Python 3.11 ($PythonVersion)
 - **dependencies/**: All Python wheels `$(if (`$OfflineMode) { "(~150MB)" } else { "(download on first run)" })
@@ -390,7 +390,7 @@ air-gapped systems, and offline deployment.
 - **Lib/site-packages/**: `$(if (`$OfflineMode) { "Installed Python packages" } else { "Will be populated on first run" })
 - **config/**: IDE integration templates
 
-## 📋 Installation
+##  Installation
 
 ### Option 1: Automated (Recommended)
 1. **Run SETUP.bat** - Copies to C:\serena-fully-portable
@@ -401,7 +401,7 @@ air-gapped systems, and offline deployment.
 2. Run **serena-mcp-portable.bat** 
 3. First run will complete setup if needed
 
-## 🔧 Usage
+##  Usage
 
 ### Direct Usage
 ```cmd
@@ -418,7 +418,7 @@ serena-mcp-portable.bat
 ### IntelliJ IDEA
 1. Use as external tool pointing to serena-mcp-portable.bat
 
-## 🌐 Supported Languages
+##  Supported Languages
 
 Pre-configured language servers for:
 - Python (Pyright)
@@ -436,7 +436,7 @@ Pre-configured language servers for:
 - Bash
 - C/C++ (clangd)
 
-## 🏢 Corporate Environment
+##  Corporate Environment
 
 ### Proxy Support
 Set environment variables before running:
@@ -452,12 +452,12 @@ set REQUESTS_CA_BUNDLE=C:\path\to\ca-bundle.crt
 
 ### Air-Gapped Systems
 `$(if (`$OfflineMode) {
-"✓ This package works completely offline!"
+"[OK] This package works completely offline!"
 } else {
-"⚠ Internet required for first-time dependency installation"
+"[WARN] Internet required for first-time dependency installation"
 })
 
-## 🛠 Troubleshooting
+##  Troubleshooting
 
 ### Check Installation
 ```cmd
@@ -478,14 +478,14 @@ check-dependencies.bat
 1. Delete `Lib\site-packages\*` 
 2. Run `serena-mcp-portable.bat` again
 
-## 📊 Package Statistics
+##  Package Statistics
 
 - **Total Size**: ~`$(if (`$OfflineMode) { "500" } else { "200" })MB (compressed ~`$(if (`$OfflineMode) { "300" } else { "150" })MB)
 - **Python Dependencies**: 21 packages
 - **Language Servers**: 13 servers
-- **Offline Ready**: `$(if (`$OfflineMode) { "✅ YES" } else { "⚠ Requires internet for first setup" })
+- **Offline Ready**: `$(if (`$OfflineMode) { "[YES] YES" } else { "[WARN] Requires internet for first setup" })
 
-## 📞 Support
+##  Support
 
 - GitHub: https://github.com/resline/serena
 - Original: https://github.com/oraios/serena
@@ -499,7 +499,7 @@ check-dependencies.bat
 "@
 Set-Content -Path "$OutputPath\README.txt" -Value $readme
 
-Write-Host "✓ Created configuration files and documentation" -ForegroundColor Green
+Write-Host "[OK] Created configuration files and documentation" -ForegroundColor Green
 
 # Create ZIP package
 Write-Host "Creating ZIP package..." -ForegroundColor Yellow
@@ -510,10 +510,10 @@ $zipSize = 0
 try {
     Compress-Archive -Path "$OutputPath\*" -DestinationPath $zipPath -Force -CompressionLevel Optimal
     $zipSize = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)
-    $zipMsg = "✓ Created ZIP package: $zipPath (" + $zipSize + " MB)"
+    $zipMsg = "[OK] Created ZIP package: $zipPath (" + $zipSize + " MB)"
     Write-Host $zipMsg -ForegroundColor Green
 } catch {
-    Write-Host "✗ Failed to create ZIP: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "[ERROR] Failed to create ZIP: $($_.Exception.Message)" -ForegroundColor Red
 }
 
 # Final summary
@@ -523,24 +523,24 @@ Write-Host "  FULLY PORTABLE PACKAGE CREATED!" -ForegroundColor Green
 Write-Host "===========================================" -ForegroundColor Cyan
 Write-Host ""
 if ($zipSize -gt 0) {
-    $packageMsg = "📦 Package: $zipName (" + $zipSize + " MB)"
+    $packageMsg = " Package: $zipName (" + $zipSize + " MB)"
     Write-Host $packageMsg -ForegroundColor Yellow
 } else {
-    Write-Host "📦 Package: $zipName" -ForegroundColor Yellow
+    Write-Host " Package: $zipName" -ForegroundColor Yellow
 }
-Write-Host "🎯 Target: Corporate/Air-gapped environments" -ForegroundColor Yellow  
+Write-Host " Target: Corporate/Air-gapped environments" -ForegroundColor Yellow  
 $offlineStatus = if ($OfflineMode) { "100% Ready" } else { "Requires internet for first setup" }
 $offlineColor = if ($OfflineMode) { "Green" } else { "Yellow" }
-Write-Host "🔋 Offline: $offlineStatus" -ForegroundColor $offlineColor
+Write-Host " Offline: $offlineStatus" -ForegroundColor $offlineColor
 Write-Host ""
-Write-Host "✅ Features included:" -ForegroundColor Green
-Write-Host "   • Embedded Python $PythonVersion" -ForegroundColor White
+Write-Host "[YES] Features included:" -ForegroundColor Green
+Write-Host "   * Embedded Python $PythonVersion" -ForegroundColor White
 $depStatus = if ($OfflineMode) { "Pre-installed dependencies" } else { "Online dependency installer" }
-Write-Host "   • $depStatus" -ForegroundColor White  
-Write-Host "   • 13+ Language servers pre-downloaded" -ForegroundColor White
-Write-Host "   • VS Code + Claude Desktop integration" -ForegroundColor White
-Write-Host "   • Corporate proxy/certificate support" -ForegroundColor White
-Write-Host "   • Zero-installation deployment" -ForegroundColor White
+Write-Host "   * $depStatus" -ForegroundColor White  
+Write-Host "   * 13+ Language servers pre-downloaded" -ForegroundColor White
+Write-Host "   * VS Code + Claude Desktop integration" -ForegroundColor White
+Write-Host "   * Corporate proxy/certificate support" -ForegroundColor White
+Write-Host "   * Zero-installation deployment" -ForegroundColor White
 Write-Host ""
-Write-Host "🚀 Ready for deployment to corporate environments!" -ForegroundColor Cyan
+Write-Host " Ready for deployment to corporate environments!" -ForegroundColor Cyan
 Write-Host ""
