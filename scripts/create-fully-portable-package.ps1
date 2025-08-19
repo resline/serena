@@ -85,34 +85,59 @@ Write-Host "Installing pip in embedded Python..." -ForegroundColor Yellow
 & "$OutputPath\python\python.exe" "$OutputPath\python\get-pip.py" --no-warn-script-location --target "$OutputPath\python\Lib\site-packages"
 
 # Test pip installation
-# FIXED: Better verification of pip module access
+# ENHANCED: More robust pip module verification with debugging
+Write-Host "Testing pip installation..." -ForegroundColor Yellow
 try {
-    # Test if pip module is accessible
+    # Test 1: Check if pip module is accessible
+    Write-Host "[TEST] Testing 'python -m pip --version'..." -ForegroundColor Gray
     $pipModuleTest = & "$OutputPath\python\python.exe" -m pip --version 2>$null
-    if ($LASTEXITCODE -eq 0 -and $pipModuleTest) {
+    $pipTestExitCode = $LASTEXITCODE
+    
+    if ($pipTestExitCode -eq 0 -and $pipModuleTest) {
         Write-Host "[OK] Pip module accessible: $pipModuleTest" -ForegroundColor Green
     } else {
-        # Alternative test - import pip directly
+        Write-Host "[WARN] pip module test failed (exit code: $pipTestExitCode)" -ForegroundColor Yellow
+        
+        # Test 2: Alternative test - import pip directly
+        Write-Host "[TEST] Testing direct pip import..." -ForegroundColor Gray
         $pipImportTest = & "$OutputPath\python\python.exe" -c "import pip; print('Pip version:', pip.__version__)" 2>$null
-        if ($LASTEXITCODE -eq 0 -and $pipImportTest) {
-            Write-Host "[OK] Pip installed successfully: $pipImportTest" -ForegroundColor Green
+        $importTestExitCode = $LASTEXITCODE
+        
+        if ($importTestExitCode -eq 0 -and $pipImportTest) {
+            Write-Host "[OK] Pip accessible via import: $pipImportTest" -ForegroundColor Green
         } else {
             Write-Host "[ERROR] Pip installation failed - module not accessible" -ForegroundColor Red
-            Write-Host "[INFO] Trying to create Lib\site-packages directory structure..." -ForegroundColor Yellow
-            New-Item -ItemType Directory -Force -Path "$OutputPath\python\Lib\site-packages" | Out-Null
-            # Retry installation with correct structure
-            & "$OutputPath\python\python.exe" "$OutputPath\python\get-pip.py" --no-warn-script-location --target "$OutputPath\python\Lib\site-packages"
-            # Final test
+            Write-Host "[DEBUG] pip -m test exit code: $pipTestExitCode" -ForegroundColor Gray
+            Write-Host "[DEBUG] pip import test exit code: $importTestExitCode" -ForegroundColor Gray
+            
+            Write-Host "[INFO] Attempting pip installation repair..." -ForegroundColor Yellow
+            
+            # Ensure proper directory structure exists
+            $pipLibDir = "$OutputPath\python\Lib\site-packages"
+            New-Item -ItemType Directory -Force -Path $pipLibDir | Out-Null
+            
+            # Retry installation with explicit target
+            Write-Host "[INFO] Reinstalling pip to correct location..." -ForegroundColor Yellow
+            & "$OutputPath\python\python.exe" "$OutputPath\python\get-pip.py" --no-warn-script-location --target $pipLibDir --force-reinstall
+            
+            # Final verification
+            Write-Host "[TEST] Final pip verification..." -ForegroundColor Gray
             $finalTest = & "$OutputPath\python\python.exe" -m pip --version 2>$null
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "[ERROR] Pip installation still failed" -ForegroundColor Red
+            $finalExitCode = $LASTEXITCODE
+            
+            if ($finalExitCode -eq 0 -and $finalTest) {
+                Write-Host "[OK] Pip installation successful after repair: $finalTest" -ForegroundColor Green
+            } else {
+                Write-Host "[ERROR] Pip installation still failed after repair" -ForegroundColor Red
+                Write-Host "[ERROR] Final test exit code: $finalExitCode" -ForegroundColor Red
+                Write-Host "[ERROR] Cannot proceed without working pip installation" -ForegroundColor Red
                 exit 1
             }
-            Write-Host "[OK] Pip installation successful after retry" -ForegroundColor Green
         }
     }
 } catch {
     Write-Host "[ERROR] Failed to verify pip installation: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "[ERROR] Stack trace: $($_.ScriptStackTrace)" -ForegroundColor Gray
     exit 1
 }
 
@@ -154,22 +179,41 @@ if (Test-Path $depDownloadScript) {
 if (Test-Path "$OutputPath\dependencies\requirements.txt") {
     Write-Host "Installing dependencies offline..." -ForegroundColor Yellow
     
-    # FIXED: Use consistent target directory for both Python and dependencies
-    $targetDir = "$OutputPath\Lib\site-packages"
-    
-    # Install UV first (if available)
-    $uvWheels = Get-ChildItem "$OutputPath\dependencies\uv-deps\*.whl" -ErrorAction SilentlyContinue
-    if ($uvWheels) {
-        Write-Host "Installing UV..." -ForegroundColor Yellow
-        & "$OutputPath\python\python.exe" -m pip install --no-index --find-links "$OutputPath\dependencies\uv-deps" --target $targetDir uv
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "[WARN] UV installation failed, continuing without UV..." -ForegroundColor Yellow
+    # CRITICAL: Validate requirements.txt has content
+    $reqContent = Get-Content "$OutputPath\dependencies\requirements.txt" -Raw -ErrorAction SilentlyContinue
+    if (-not $reqContent -or $reqContent.Trim() -eq "") {
+        Write-Host "[ERROR] requirements.txt is empty or unreadable" -ForegroundColor Red
+        Write-Host "[ERROR] This indicates dependency download failed earlier" -ForegroundColor Red
+        $OfflineMode = $false
+    } else {
+        # Count non-empty, non-comment lines
+        $reqLines = ($reqContent -split "`n" | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith("#") }).Count
+        Write-Host "[INFO] Found $reqLines requirements to install" -ForegroundColor Green
+        
+        # FIXED: Use consistent target directory for both Python and dependencies
+        $targetDir = "$OutputPath\Lib\site-packages"
+        
+        # Install UV first (if available)
+        $uvWheels = Get-ChildItem "$OutputPath\dependencies\uv-deps\*.whl" -ErrorAction SilentlyContinue
+        if ($uvWheels) {
+            Write-Host "Installing UV..." -ForegroundColor Yellow
+            # FIXED: Use forward slashes in paths passed to Python for cross-platform compatibility
+            $uvDepsPath = "$OutputPath\dependencies\uv-deps" -replace '\\', '/'
+            $targetDirForward = $targetDir -replace '\\', '/'
+            & "$OutputPath\python\python.exe" -m pip install --no-index --find-links $uvDepsPath --target $targetDirForward uv
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "[WARN] UV installation failed, continuing without UV..." -ForegroundColor Yellow
+            }
         }
-    }
-    
-    # Install main dependencies
-    Write-Host "Installing main dependencies..." -ForegroundColor Yellow
-    & "$OutputPath\python\python.exe" -m pip install --no-index --find-links "$OutputPath\dependencies" --target $targetDir --requirement "$OutputPath\dependencies\requirements.txt"
+        
+        # Install main dependencies
+        Write-Host "Installing main dependencies..." -ForegroundColor Yellow
+        # FIXED: Use forward slashes and proper path escaping
+        $depsPath = "$OutputPath\dependencies" -replace '\\', '/'
+        $reqPath = "$OutputPath\dependencies\requirements.txt" -replace '\\', '/'
+        $targetDirForward = $targetDir -replace '\\', '/'
+        
+        & "$OutputPath\python\python.exe" -m pip install --no-index --find-links $depsPath --target $targetDirForward --requirement $reqPath
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host "[OK] Installed all dependencies offline" -ForegroundColor Green

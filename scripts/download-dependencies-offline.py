@@ -81,6 +81,21 @@ class OfflineDependencyDownloader:
         # Create output directory
         output_dir.mkdir(parents=True, exist_ok=True)
         
+        # CRITICAL: Validate requirements.txt exists and has content
+        if not requirements_path.exists():
+            print(f"❌ Error: Requirements file not found: {requirements_path}")
+            return False
+            
+        with open(requirements_path, 'r') as f:
+            requirements_content = f.read().strip()
+            
+        if not requirements_content:
+            print(f"❌ Error: Requirements file is empty: {requirements_path}")
+            return False
+            
+        req_count = len([line for line in requirements_content.split('\n') if line.strip() and not line.strip().startswith('#')])
+        print(f"✓ Found {req_count} requirements in {requirements_path}")
+        
         # FIXED: Try multiple approaches for calling pip
         pip_methods = [
             # Method 1: python -m pip (preferred)
@@ -91,10 +106,14 @@ class OfflineDependencyDownloader:
             [sys.executable, '-c', 'import pip; pip.main()', 'download']
         ]
         
+        # FIXED: Use forward slashes for cross-platform compatibility
+        requirements_path_str = str(requirements_path).replace('\\', '/')
+        output_dir_str = str(output_dir).replace('\\', '/')
+        
         base_args = [
-            '--dest', str(output_dir),
+            '--dest', output_dir_str,
             '--prefer-binary',
-            '--requirement', str(requirements_path)
+            '--requirement', requirements_path_str
         ] + self.pip_args
         
         # Try each method
@@ -144,12 +163,17 @@ class OfflineDependencyDownloader:
             ['pip', 'download'],
         ]
         
+        # FIXED: Use forward slashes for cross-platform compatibility  
+        uv_dir_str = str(uv_dir).replace('\\', '/')
+        
+        # ENHANCED: Add more specific package requirements for UV
+        uv_packages = ['uv', 'packaging', 'platformdirs']  # UV and its core dependencies
+        
         base_args = [
-            '--dest', str(uv_dir),
-            '--platform', 'win_amd64',
-            '--only-binary=:all:',
-            'uv'
-        ] + self.pip_args
+            '--dest', uv_dir_str,
+            '--platform', 'win_amd64', 
+            '--only-binary=:all:'
+        ] + uv_packages + self.pip_args
         
         # Try each method
         for i, pip_cmd in enumerate(pip_methods, 1):
