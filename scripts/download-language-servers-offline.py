@@ -98,13 +98,21 @@ class CorporateDownloader:
                 # Ruby gem files are tar archives containing data.tar.gz
                 with tarfile.open(archive_path, 'r') as tar:
                     tar.extractall(dest_dir)
-                # Extract the actual data
+                # Extract the actual data - FIXED: Better error handling
                 data_tar = dest_dir / 'data.tar.gz'
                 if data_tar.exists():
-                    with gzip.open(data_tar, 'rb') as gz:
-                        with tarfile.open(fileobj=gz) as tar:
-                            tar.extractall(dest_dir)
-                    data_tar.unlink()
+                    try:
+                        with gzip.open(data_tar, 'rb') as gz:
+                            with tarfile.open(fileobj=gz) as tar:
+                                tar.extractall(dest_dir)
+                        # Try to remove the intermediate file, but don't fail if it's locked
+                        try:
+                            data_tar.unlink()
+                        except (OSError, PermissionError) as e:
+                            print(f"  [WARN] Could not remove {data_tar}: {e}")
+                    except Exception as e:
+                        print(f"  [WARN] Could not extract gem data: {e}")
+                        # Continue with partial extraction
             
             print(f"  ✓ Extracted to {dest_dir}")
             return True
@@ -134,14 +142,14 @@ def get_language_servers() -> Dict[str, Dict[str, Any]]:
             'description': 'VS Code Language Servers (HTML, CSS, JSON)',
         },
         'gopls': {
-            'url': 'https://github.com/golang/tools/releases/download/gopls%2Fv0.16.2/gopls_v0.16.2_windows_amd64.zip',
+            'url': 'https://github.com/golang/tools/releases/download/gopls/v0.16.2/gopls_v0.16.2_windows_amd64.zip',
             'type': 'zip',
             'description': 'Go Language Server (gopls)',
             'platform_specific': True,
             'platforms': {
-                'win32': 'https://github.com/golang/tools/releases/download/gopls%2Fv0.16.2/gopls_v0.16.2_windows_amd64.zip',
-                'linux': 'https://github.com/golang/tools/releases/download/gopls%2Fv0.16.2/gopls_v0.16.2_linux_amd64.tar.gz',
-                'darwin': 'https://github.com/golang/tools/releases/download/gopls%2Fv0.16.2/gopls_v0.16.2_darwin_amd64.tar.gz'
+                'win32': 'https://github.com/golang/tools/releases/download/gopls/v0.16.2/gopls_v0.16.2_windows_amd64.zip',
+                'linux': 'https://github.com/golang/tools/releases/download/gopls/v0.16.2/gopls_v0.16.2_linux_amd64.tar.gz',
+                'darwin': 'https://github.com/golang/tools/releases/download/gopls/v0.16.2/gopls_v0.16.2_darwin_amd64.tar.gz'
             }
         },
         'rust-analyzer': {
@@ -156,7 +164,7 @@ def get_language_servers() -> Dict[str, Dict[str, Any]]:
             }
         },
         'jdtls': {
-            'url': 'https://download.eclipse.org/jdtls/milestones/1.40.0/jdt-language-server-1.40.0-202410021750.tar.gz',
+            'url': 'https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz',
             'type': 'tar.gz',
             'description': 'Java Language Server (Eclipse JDT.LS)',
         },
@@ -199,14 +207,14 @@ def get_language_servers() -> Dict[str, Dict[str, Any]]:
             'description': 'PHP Language Server (Intelephense)',
         },
         'terraform-ls': {
-            'url': 'https://github.com/hashicorp/terraform-ls/releases/download/v0.34.3/terraform-ls_0.34.3_windows_amd64.zip',
+            'url': 'https://github.com/hashicorp/terraform-ls/releases/download/v0.36.5/terraform-ls_0.36.5_windows_amd64.zip',
             'type': 'zip',
             'description': 'Terraform Language Server',
             'platform_specific': True,
             'platforms': {
-                'win32': 'https://github.com/hashicorp/terraform-ls/releases/download/v0.34.3/terraform-ls_0.34.3_windows_amd64.zip',
-                'linux': 'https://github.com/hashicorp/terraform-ls/releases/download/v0.34.3/terraform-ls_0.34.3_linux_amd64.zip',
-                'darwin': 'https://github.com/hashicorp/terraform-ls/releases/download/v0.34.3/terraform-ls_0.34.3_darwin_amd64.zip'
+                'win32': 'https://github.com/hashicorp/terraform-ls/releases/download/v0.36.5/terraform-ls_0.36.5_windows_amd64.zip',
+                'linux': 'https://github.com/hashicorp/terraform-ls/releases/download/v0.36.5/terraform-ls_0.36.5_linux_amd64.zip',
+                'darwin': 'https://github.com/hashicorp/terraform-ls/releases/download/v0.36.5/terraform-ls_0.36.5_darwin_amd64.zip'
             }
         },
         'elixir-ls': {
@@ -215,14 +223,14 @@ def get_language_servers() -> Dict[str, Dict[str, Any]]:
             'description': 'Elixir Language Server',
         },
         'clojure-lsp': {
-            'url': 'https://github.com/clojure-lsp/clojure-lsp/releases/download/2024.12.05-21.25.49/clojure-lsp-native-windows-amd64.zip',
+            'url': 'https://github.com/clojure-lsp/clojure-lsp/releases/download/2025.06.13-20.45.44/clojure-lsp-native-windows-amd64.zip',
             'type': 'zip',
             'description': 'Clojure Language Server',
             'platform_specific': True,
             'platforms': {
-                'win32': 'https://github.com/clojure-lsp/clojure-lsp/releases/download/2024.12.05-21.25.49/clojure-lsp-native-windows-amd64.zip',
-                'linux': 'https://github.com/clojure-lsp/clojure-lsp/releases/download/2024.12.05-21.25.49/clojure-lsp-native-linux-amd64.zip',
-                'darwin': 'https://github.com/clojure-lsp/clojure-lsp/releases/download/2024.12.05-21.25.49/clojure-lsp-native-macos-amd64.zip'
+                'win32': 'https://github.com/clojure-lsp/clojure-lsp/releases/download/2025.06.13-20.45.44/clojure-lsp-native-windows-amd64.zip',
+                'linux': 'https://github.com/clojure-lsp/clojure-lsp/releases/download/2025.06.13-20.45.44/clojure-lsp-native-linux-amd64.zip',
+                'darwin': 'https://github.com/clojure-lsp/clojure-lsp/releases/download/2025.06.13-20.45.44/clojure-lsp-native-macos-amd64.zip'
             }
         }
     }

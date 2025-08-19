@@ -81,25 +81,55 @@ class OfflineDependencyDownloader:
         # Create output directory
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Build pip download command - try binary first, fallback to source
-        cmd = [
-            sys.executable, '-m', 'pip', 'download',
+        # FIXED: Try multiple approaches for calling pip
+        pip_methods = [
+            # Method 1: python -m pip (preferred)
+            [sys.executable, '-m', 'pip', 'download'],
+            # Method 2: Direct pip call
+            ['pip', 'download'],
+            # Method 3: Try with python -c import
+            [sys.executable, '-c', 'import pip; pip.main()', 'download']
+        ]
+        
+        base_args = [
             '--dest', str(output_dir),
             '--prefer-binary',
             '--requirement', str(requirements_path)
         ] + self.pip_args
         
-        print(f"Running: {' '.join(cmd[:10])}... (with proxy/cert args)")
+        # Try each method
+        for i, pip_cmd in enumerate(pip_methods, 1):
+            print(f"Trying method {i}: {' '.join(pip_cmd[:3])}...")
+            cmd = pip_cmd + base_args
+            
+            print(f"Running: {' '.join(cmd[:10])}... (with proxy/cert args)")
+            
+            try:
+                # Test if pip is available first (except for method 3)
+                if i < 3:
+                    test_cmd = pip_cmd + ['--version']
+                    test_result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10)
+                    if test_result.returncode != 0:
+                        print(f"  Method {i} not available: {test_result.stderr.strip()}")
+                        continue
+                
+                result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=300)
+                print("✓ Successfully downloaded all dependencies")
+                return True
+                
+            except subprocess.CalledProcessError as e:
+                print(f"  Method {i} failed: {e}")
+                print(f"  STDERR: {e.stderr.strip()}")
+                continue
+            except subprocess.TimeoutExpired:
+                print(f"  Method {i} timed out")
+                continue
+            except FileNotFoundError:
+                print(f"  Method {i} - command not found")
+                continue
         
-        try:
-            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-            print("✓ Successfully downloaded all dependencies")
-            return True
-        except subprocess.CalledProcessError as e:
-            print(f"✗ Failed to download dependencies: {e}")
-            print(f"STDOUT: {e.stdout}")
-            print(f"STDERR: {e.stderr}")
-            return False
+        print("✗ All pip methods failed")
+        return False
 
     def download_uv_dependencies(self, output_dir: Path):
         """Download UV and its dependencies"""
@@ -108,22 +138,48 @@ class OfflineDependencyDownloader:
         uv_dir = output_dir / 'uv-deps'
         uv_dir.mkdir(exist_ok=True)
         
-        # Download UV with all its dependencies
-        cmd = [
-            sys.executable, '-m', 'pip', 'download',
+        # FIXED: Try multiple approaches for calling pip (same as main dependencies)
+        pip_methods = [
+            [sys.executable, '-m', 'pip', 'download'],
+            ['pip', 'download'],
+        ]
+        
+        base_args = [
             '--dest', str(uv_dir),
             '--platform', 'win_amd64',
             '--only-binary=:all:',
             'uv'
         ] + self.pip_args
         
-        try:
-            subprocess.run(cmd, check=True, capture_output=True)
-            print("✓ Downloaded UV and dependencies")
-            return True
-        except subprocess.CalledProcessError as e:
-            print(f"✗ Failed to download UV: {e}")
-            return False
+        # Try each method
+        for i, pip_cmd in enumerate(pip_methods, 1):
+            print(f"Trying UV download method {i}: {' '.join(pip_cmd[:3])}...")
+            cmd = pip_cmd + base_args
+            
+            try:
+                # Test if pip is available first
+                test_cmd = pip_cmd + ['--version']
+                test_result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10)
+                if test_result.returncode != 0:
+                    print(f"  UV method {i} not available: {test_result.stderr.strip()}")
+                    continue
+                
+                subprocess.run(cmd, check=True, capture_output=True, timeout=120)
+                print("✓ Downloaded UV and dependencies")
+                return True
+                
+            except subprocess.CalledProcessError as e:
+                print(f"  UV method {i} failed: {e}")
+                continue
+            except subprocess.TimeoutExpired:
+                print(f"  UV method {i} timed out")
+                continue
+            except FileNotFoundError:
+                print(f"  UV method {i} - command not found")
+                continue
+        
+        print("✗ Failed to download UV with all methods")
+        return False
 
     def create_offline_installer(self, output_dir: Path):
         """Create offline installation script"""
@@ -137,20 +193,42 @@ setlocal
 set SERENA_PORTABLE=%~dp0..
 set PYTHONHOME=%SERENA_PORTABLE%\\python
 set DEPENDENCIES=%~dp0
+set TARGET_DIR=%SERENA_PORTABLE%\\Lib\\site-packages
 
-:: Install UV first
-echo Installing UV...
-"%PYTHONHOME%\\python.exe" -m pip install --no-index --find-links "%DEPENDENCIES%\\uv-deps" uv
+:: Check if pip module is available
+echo Checking pip availability...
+"%PYTHONHOME%\\python.exe" -m pip --version >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    echo [WARN] pip module not available, trying alternative installation...
+    goto :alternative_install
+)
+
+:: Install UV first (if available)
+if exist "%DEPENDENCIES%\\uv-deps" (
+    echo Installing UV...
+    "%PYTHONHOME%\\python.exe" -m pip install --no-index --find-links "%DEPENDENCIES%\\uv-deps" --target "%TARGET_DIR%" uv
+)
 
 :: Install main dependencies
 echo Installing Serena dependencies...
-"%PYTHONHOME%\\python.exe" -m pip install --no-index --find-links "%DEPENDENCIES%" --requirement "%DEPENDENCIES%\\requirements.txt"
+"%PYTHONHOME%\\python.exe" -m pip install --no-index --find-links "%DEPENDENCIES%" --target "%TARGET_DIR%" --requirement "%DEPENDENCIES%\\requirements.txt"
+goto :verify
 
+:alternative_install
+echo Attempting manual wheel installation...
+:: Try to manually copy wheel files - fallback method
+for %%f in ("%DEPENDENCIES%\\*.whl") do (
+    echo Installing %%~nxf...
+    "%PYTHONHOME%\\python.exe" -m zipfile -e "%%f" "%TARGET_DIR%\\" >nul 2>&1
+)
+
+:verify
 :: Verify installation
 echo Verifying installation...
 "%PYTHONHOME%\\python.exe" -c "import serena; print('✓ Serena dependencies installed successfully')" 2>nul
 if %ERRORLEVEL% neq 0 (
     echo ✗ Installation verification failed
+    echo [INFO] You may need internet access for first run
     pause
     exit /b 1
 )

@@ -66,9 +66,11 @@ Write-Host "Setting up pip..." -ForegroundColor Yellow
 Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile "$OutputPath\python\get-pip.py"
 
 # Create python._pth to enable pip and site-packages
+# FIXED: Include proper paths for pip module access
 $pthLines = @(
     "python311.zip",
     ".",
+    "Lib\site-packages",
     "..\..\Lib\site-packages",
     "..\..\serena\src",
     "import site"
@@ -79,25 +81,39 @@ Write-Host "[OK] Configured Python path" -ForegroundColor Green
 
 # Install pip in embedded Python
 Write-Host "Installing pip in embedded Python..." -ForegroundColor Yellow
-& "$OutputPath\python\python.exe" "$OutputPath\python\get-pip.py" --no-warn-script-location --target "$OutputPath\Lib\site-packages"
+# FIXED: Install pip directly to Python's Lib\site-packages for module access
+& "$OutputPath\python\python.exe" "$OutputPath\python\get-pip.py" --no-warn-script-location --target "$OutputPath\python\Lib\site-packages"
 
 # Test pip installation
+# FIXED: Better verification of pip module access
 try {
-    $pipTest = & "$OutputPath\python\python.exe" -c "import sys; sys.path.insert(0, r'$OutputPath\Lib\site-packages'); import pip; print(pip.__version__)" 2>$null
-    if ($LASTEXITCODE -eq 0 -and $pipTest) {
-        Write-Host "[OK] Pip installed successfully: version $pipTest" -ForegroundColor Green
+    # Test if pip module is accessible
+    $pipModuleTest = & "$OutputPath\python\python.exe" -m pip --version 2>$null
+    if ($LASTEXITCODE -eq 0 -and $pipModuleTest) {
+        Write-Host "[OK] Pip module accessible: $pipModuleTest" -ForegroundColor Green
     } else {
-        # Try alternative test
-        $pipTest2 = & "$OutputPath\python\python.exe" -m pip --version 2>$null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "[OK] Pip installed successfully" -ForegroundColor Green
+        # Alternative test - import pip directly
+        $pipImportTest = & "$OutputPath\python\python.exe" -c "import pip; print('Pip version:', pip.__version__)" 2>$null
+        if ($LASTEXITCODE -eq 0 -and $pipImportTest) {
+            Write-Host "[OK] Pip installed successfully: $pipImportTest" -ForegroundColor Green
         } else {
-            Write-Host "[ERROR] Pip installation failed" -ForegroundColor Red
-            exit 1
+            Write-Host "[ERROR] Pip installation failed - module not accessible" -ForegroundColor Red
+            Write-Host "[INFO] Trying to create Lib\site-packages directory structure..." -ForegroundColor Yellow
+            New-Item -ItemType Directory -Force -Path "$OutputPath\python\Lib\site-packages" | Out-Null
+            # Retry installation with correct structure
+            & "$OutputPath\python\python.exe" "$OutputPath\python\get-pip.py" --no-warn-script-location --target "$OutputPath\python\Lib\site-packages"
+            # Final test
+            $finalTest = & "$OutputPath\python\python.exe" -m pip --version 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "[ERROR] Pip installation still failed" -ForegroundColor Red
+                exit 1
+            }
+            Write-Host "[OK] Pip installation successful after retry" -ForegroundColor Green
         }
     }
 } catch {
-    Write-Host "[WARN] Could not verify pip installation, continuing..." -ForegroundColor Yellow
+    Write-Host "[ERROR] Failed to verify pip installation: $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
 }
 
 # Download ALL Python dependencies offline
@@ -117,6 +133,7 @@ if (Test-Path $depDownloadScript) {
     $dependencyArgs = $dependencyArgs | Where-Object { $_ -ne "" -and $_ -ne $null }
     
     try {
+        # FIXED: Use proper Python executable for dependency download
         & "$OutputPath\python\python.exe" $depDownloadScript @dependencyArgs
         if ($LASTEXITCODE -ne 0) {
             throw "Dependencies download failed"
@@ -125,6 +142,8 @@ if (Test-Path $depDownloadScript) {
     } catch {
         Write-Host "[WARN] Failed to download dependencies: $($_.Exception.Message)" -ForegroundColor Yellow
         Write-Host "Dependencies will be installed online during first run..." -ForegroundColor Yellow
+        # Store the embedded python path for offline installer
+        $env:SERENA_PORTABLE_PYTHON = "$OutputPath\python\python.exe"
     }
 } else {
     Write-Host "[INFO] Dependency download script not found, skipping offline download" -ForegroundColor Yellow
@@ -135,20 +154,29 @@ if (Test-Path $depDownloadScript) {
 if (Test-Path "$OutputPath\dependencies\requirements.txt") {
     Write-Host "Installing dependencies offline..." -ForegroundColor Yellow
     
-    # Install UV first
+    # FIXED: Use consistent target directory for both Python and dependencies
+    $targetDir = "$OutputPath\Lib\site-packages"
+    
+    # Install UV first (if available)
     $uvWheels = Get-ChildItem "$OutputPath\dependencies\uv-deps\*.whl" -ErrorAction SilentlyContinue
     if ($uvWheels) {
-        & "$OutputPath\python\python.exe" -m pip install --no-index --find-links "$OutputPath\dependencies\uv-deps" --target "$OutputPath\Lib\site-packages" uv
+        Write-Host "Installing UV..." -ForegroundColor Yellow
+        & "$OutputPath\python\python.exe" -m pip install --no-index --find-links "$OutputPath\dependencies\uv-deps" --target $targetDir uv
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[WARN] UV installation failed, continuing without UV..." -ForegroundColor Yellow
+        }
     }
     
     # Install main dependencies
-    & "$OutputPath\python\python.exe" -m pip install --no-index --find-links "$OutputPath\dependencies" --target "$OutputPath\Lib\site-packages" --requirement "$OutputPath\dependencies\requirements.txt"
+    Write-Host "Installing main dependencies..." -ForegroundColor Yellow
+    & "$OutputPath\python\python.exe" -m pip install --no-index --find-links "$OutputPath\dependencies" --target $targetDir --requirement "$OutputPath\dependencies\requirements.txt"
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host "[OK] Installed all dependencies offline" -ForegroundColor Green
         $OfflineMode = $true
     } else {
         Write-Host "[WARN] Offline installation failed, will install online during first run" -ForegroundColor Yellow
+        Write-Host "[DEBUG] Last exit code: $LASTEXITCODE" -ForegroundColor Yellow
         $OfflineMode = $false
     }
 } else {
