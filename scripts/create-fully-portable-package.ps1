@@ -16,7 +16,7 @@ Write-Host "This package will be 100% offline-capable" -ForegroundColor Green
 # Initialize variables
 $OfflineMode = $false
 
-# Create directory structure
+# Create directory structure with existence checks to avoid warnings
 $dirs = @(
     "$OutputPath",
     "$OutputPath\serena",
@@ -28,7 +28,9 @@ $dirs = @(
 )
 
 foreach ($dir in $dirs) {
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    if (-not (Test-Path $dir)) {
+        New-Item -ItemType Directory -Path $dir | Out-Null
+    }
 }
 
 Write-Host "[OK] Created directory structure" -ForegroundColor Green
@@ -114,7 +116,9 @@ try {
             
             # Ensure proper directory structure exists
             $pipLibDir = "$OutputPath\python\Lib\site-packages"
-            New-Item -ItemType Directory -Force -Path $pipLibDir | Out-Null
+            if (-not (Test-Path $pipLibDir)) {
+                New-Item -ItemType Directory -Path $pipLibDir | Out-Null
+            }
             
             # Retry installation with explicit target
             Write-Host "[INFO] Reinstalling pip to correct location..." -ForegroundColor Yellow

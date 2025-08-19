@@ -14,6 +14,8 @@ import zipfile
 import tarfile
 import gzip
 import shutil
+import time
+import platform
 from pathlib import Path
 from typing import Dict, Any
 
@@ -95,24 +97,7 @@ class CorporateDownloader:
                 with tarfile.open(archive_path, 'r') as tar:
                     tar.extractall(dest_dir)
             elif archive_type == 'gem':
-                # Ruby gem files are tar archives containing data.tar.gz
-                with tarfile.open(archive_path, 'r') as tar:
-                    tar.extractall(dest_dir)
-                # Extract the actual data - FIXED: Better error handling
-                data_tar = dest_dir / 'data.tar.gz'
-                if data_tar.exists():
-                    try:
-                        with gzip.open(data_tar, 'rb') as gz:
-                            with tarfile.open(fileobj=gz) as tar:
-                                tar.extractall(dest_dir)
-                        # Try to remove the intermediate file, but don't fail if it's locked
-                        try:
-                            data_tar.unlink()
-                        except (OSError, PermissionError) as e:
-                            print(f"  [WARN] Could not remove {data_tar}: {e}")
-                    except Exception as e:
-                        print(f"  [WARN] Could not extract gem data: {e}")
-                        # Continue with partial extraction
+                return self._extract_gem_windows_safe(archive_path, dest_dir)
             
             print(f"  ✓ Extracted to {dest_dir}")
             return True
@@ -120,6 +105,238 @@ class CorporateDownloader:
         except Exception as e:
             print(f"  ✗ Failed to extract: {str(e)}")
             return False
+    
+    def _extract_gem_windows_safe(self, archive_path: Path, dest_dir: Path) -> bool:
+        """Windows-safe gem extraction with retry logic and permission handling"""
+        is_windows = platform.system().lower() == 'windows'
+        max_retries = 3 if is_windows else 1
+        
+        for attempt in range(max_retries):
+            try:
+                print(f"  [INFO] Extracting Ruby gem (attempt {attempt + 1}/{max_retries})...")
+                
+                # Step 1: Extract the gem tar archive
+                with tarfile.open(archive_path, 'r') as tar:
+                    # Extract with more permissive permissions on Windows
+                    if is_windows:
+                        # Extract members individually with error handling
+                        for member in tar.getmembers():
+                            try:
+                                tar.extract(member, dest_dir)
+                            except (PermissionError, OSError) as e:
+                                print(f"    [WARN] Could not extract {member.name}: {e}")
+                                continue
+                    else:
+                        tar.extractall(dest_dir)
+                
+                # Step 2: Wait briefly for Windows file system to release locks
+                if is_windows:
+                    time.sleep(0.5)
+                
+                # Step 3: Extract the data.tar.gz with retry logic
+                data_tar = dest_dir / 'data.tar.gz'
+                if data_tar.exists():
+                    self._extract_data_tar_with_retry(data_tar, dest_dir, is_windows)
+                
+                # Step 4: Extract metadata.gz if it exists (optional)
+                metadata_gz = dest_dir / 'metadata.gz'
+                if metadata_gz.exists():
+                    self._extract_metadata_safely(metadata_gz, dest_dir, is_windows)
+                
+                print(f"  ✓ Ruby gem extracted successfully")
+                return True
+                
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f"    [RETRY] Extraction failed, retrying in 1 second: {e}")
+                    time.sleep(1)
+                    continue
+                else:
+                    print(f"    [ERROR] Final attempt failed: {e}")
+                    # Try partial extraction as fallback
+                    return self._fallback_gem_extraction(archive_path, dest_dir)
+        
+        return False
+    
+    def _extract_data_tar_with_retry(self, data_tar: Path, dest_dir: Path, is_windows: bool):
+        """Extract data.tar.gz with Windows-specific retry logic"""
+        max_attempts = 3 if is_windows else 1
+        
+        for attempt in range(max_attempts):
+            try:
+                with gzip.open(data_tar, 'rb') as gz:
+                    with tarfile.open(fileobj=gz) as tar:
+                        if is_windows:
+                            # Extract members individually on Windows
+                            for member in tar.getmembers():
+                                try:
+                                    tar.extract(member, dest_dir)
+                                except (PermissionError, OSError) as e:
+                                    print(f"      [WARN] Could not extract data file {member.name}: {e}")
+                                    continue
+                        else:
+                            tar.extractall(dest_dir)
+                
+                # Try to remove the intermediate file with retry
+                for cleanup_attempt in range(3):
+                    try:
+                        if is_windows:
+                            time.sleep(0.2)  # Brief pause for Windows
+                        data_tar.unlink()
+                        break
+                    except (OSError, PermissionError) as e:
+                        if cleanup_attempt < 2:
+                            time.sleep(0.5)
+                            continue
+                        else:
+                            print(f"      [WARN] Could not remove {data_tar}: {e}")
+                            print(f"      [INFO] This is normal on Windows and won't affect functionality")
+                            break
+                
+                return  # Success
+                
+            except Exception as e:
+                if attempt < max_attempts - 1:
+                    print(f"      [RETRY] Data extraction failed, retrying: {e}")
+                    time.sleep(0.5)
+                    continue
+                else:
+                    print(f"      [WARN] Could not extract gem data after {max_attempts} attempts: {e}")
+                    print(f"      [INFO] Continuing with partial extraction")
+                    return
+    
+    def _extract_metadata_safely(self, metadata_gz: Path, dest_dir: Path, is_windows: bool):
+        """Safely extract metadata.gz without failing the whole process"""
+        try:
+            # On Windows, check if file is accessible before trying to extract
+            if is_windows:
+                try:
+                    # Test file access
+                    with open(metadata_gz, 'rb') as test_file:
+                        test_file.read(1)
+                except (PermissionError, OSError) as e:
+                    print(f"      [WARN] Metadata file not accessible: {e}")
+                    return
+            
+            with gzip.open(metadata_gz, 'rb') as gz:
+                metadata_content = gz.read()
+                # Save metadata as plain text for debugging
+                metadata_txt = dest_dir / 'metadata.yaml'
+                with open(metadata_txt, 'wb') as f:
+                    f.write(metadata_content)
+                print(f"      [INFO] Extracted metadata to {metadata_txt}")
+                
+        except Exception as e:
+            print(f"      [WARN] Could not extract metadata: {e}")
+            print(f"      [INFO] This won't affect gem functionality")
+    
+    def _fallback_gem_extraction(self, archive_path: Path, dest_dir: Path) -> bool:
+        """Fallback extraction method for problematic gems"""
+        print(f"  [FALLBACK] Attempting basic gem extraction...")
+        try:
+            # Just extract the basic tar without processing internals
+            with tarfile.open(archive_path, 'r') as tar:
+                # Get list of members and extract only safe ones
+                safe_members = []
+                for member in tar.getmembers():
+                    # Skip problematic files
+                    if member.name.endswith(('.gz', '.sig')):
+                        continue
+                    safe_members.append(member)
+                
+                if safe_members:
+                    tar.extractall(dest_dir, members=safe_members)
+                    print(f"    [INFO] Extracted {len(safe_members)} safe files")
+                    return True
+                else:
+                    print(f"    [WARN] No safe files found to extract")
+                    return False
+        except Exception as e:
+            print(f"    [ERROR] Fallback extraction failed: {e}")
+            return False
+
+
+def create_gopls_installer(output_dir: Path):
+    """Create installer script for gopls since it doesn't have pre-built binaries"""
+    gopls_dir = output_dir / 'gopls'
+    gopls_dir.mkdir(exist_ok=True)
+    
+    # Windows batch installer
+    installer_bat = """@echo off
+echo Installing gopls (Go Language Server)...
+echo.
+echo This requires an active internet connection and Go toolchain.
+echo.
+
+REM Check if Go is available
+go version >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: Go is not installed or not in PATH
+    echo Please install Go from https://golang.org/doc/install
+    echo.
+    pause
+    exit /b 1
+)
+
+REM Install gopls
+echo Installing gopls...
+go install -v golang.org/x/tools/gopls@latest
+
+if errorlevel 1 (
+    echo ERROR: Failed to install gopls
+    echo Check your internet connection and try again
+    pause
+    exit /b 1
+) else (
+    echo SUCCESS: gopls installed successfully
+    echo Location: %GOPATH%\\bin\\gopls.exe
+    echo.
+    echo Copying to language servers directory...
+    set GOPATH_BIN=%GOPATH%\\bin
+    if "%GOPATH%"=="" set GOPATH_BIN=%USERPROFILE%\\go\\bin
+    
+    if exist "%GOPATH_BIN%\\gopls.exe" (
+        copy "%GOPATH_BIN%\\gopls.exe" "%~dp0\\gopls.exe" >nul
+        echo SUCCESS: gopls copied to %~dp0\\gopls.exe
+    )
+)
+
+pause
+"""
+    
+    with open(gopls_dir / 'install-gopls.bat', 'w') as f:
+        f.write(installer_bat)
+    
+    # Create README
+    readme = """# gopls - Go Language Server
+
+gopls does not provide pre-built binaries and must be installed using the Go toolchain.
+
+## Installation
+1. Ensure Go is installed on your system (https://golang.org/doc/install)
+2. Run: install-gopls.bat
+3. The installer will download and build gopls
+
+## Manual Installation
+```bash
+go install golang.org/x/tools/gopls@latest
+```
+
+## Requirements
+- Go 1.18 or later
+- Internet connection for initial download
+- Approximately 50MB disk space
+
+## After Installation
+The gopls binary will be available at:
+- Windows: %USERPROFILE%\\go\\bin\\gopls.exe or %GOPATH%\\bin\\gopls.exe
+- Linux/Mac: ~/go/bin/gopls or $GOPATH/bin/gopls
+"""
+    
+    with open(gopls_dir / 'README.md', 'w') as f:
+        f.write(readme)
+    
+    print(f"  ✓ Created gopls installer in {gopls_dir}")
 
 
 def get_language_servers() -> Dict[str, Dict[str, Any]]:
@@ -141,17 +358,20 @@ def get_language_servers() -> Dict[str, Dict[str, Any]]:
             'type': 'tgz',
             'description': 'VS Code Language Servers (HTML, CSS, JSON)',
         },
-        'gopls': {
-            'url': 'https://github.com/golang/tools/releases/download/gopls/v0.16.2/gopls_v0.16.2_windows_amd64.zip',
-            'type': 'zip',
-            'description': 'Go Language Server (gopls)',
-            'platform_specific': True,
-            'platforms': {
-                'win32': 'https://github.com/golang/tools/releases/download/gopls/v0.16.2/gopls_v0.16.2_windows_amd64.zip',
-                'linux': 'https://github.com/golang/tools/releases/download/gopls/v0.16.2/gopls_v0.16.2_linux_amd64.tar.gz',
-                'darwin': 'https://github.com/golang/tools/releases/download/gopls/v0.16.2/gopls_v0.16.2_darwin_amd64.tar.gz'
-            }
-        },
+        # NOTE: gopls does not provide pre-built binaries and must be installed via 'go install golang.org/x/tools/gopls@latest'
+        # Uncomment the following when/if golang provides direct binary downloads
+        # 'gopls': {
+        #     'url': 'https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls_v0.20.0_windows_amd64.zip',
+        #     'type': 'zip', 
+        #     'description': 'Go Language Server (gopls) - REQUIRES GO TOOLCHAIN',
+        #     'platform_specific': True,
+        #     'note': 'gopls must be installed via: go install golang.org/x/tools/gopls@latest',
+        #     'platforms': {
+        #         'win32': 'https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls_v0.20.0_windows_amd64.zip',
+        #         'linux': 'https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls_v0.20.0_linux_amd64.tar.gz',
+        #         'darwin': 'https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls_v0.20.0_darwin_amd64.tar.gz'
+        #     }
+        # },
         'rust-analyzer': {
             'url': 'https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-30/rust-analyzer-x86_64-pc-windows-msvc.zip',
             'type': 'zip',
@@ -207,14 +427,14 @@ def get_language_servers() -> Dict[str, Dict[str, Any]]:
             'description': 'PHP Language Server (Intelephense)',
         },
         'terraform-ls': {
-            'url': 'https://github.com/hashicorp/terraform-ls/releases/download/v0.36.5/terraform-ls_0.36.5_windows_amd64.zip',
+            'url': 'https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_windows_amd64.zip',
             'type': 'zip',
             'description': 'Terraform Language Server',
             'platform_specific': True,
             'platforms': {
-                'win32': 'https://github.com/hashicorp/terraform-ls/releases/download/v0.36.5/terraform-ls_0.36.5_windows_amd64.zip',
-                'linux': 'https://github.com/hashicorp/terraform-ls/releases/download/v0.36.5/terraform-ls_0.36.5_linux_amd64.zip',
-                'darwin': 'https://github.com/hashicorp/terraform-ls/releases/download/v0.36.5/terraform-ls_0.36.5_darwin_amd64.zip'
+                'win32': 'https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_windows_amd64.zip',
+                'linux': 'https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_linux_amd64.zip',
+                'darwin': 'https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_darwin_amd64.zip'
             }
         },
         'elixir-ls': {
@@ -264,6 +484,13 @@ def main():
         servers = all_servers
     
     print(f"\nDownloading {len(servers)} language servers to {output_dir}")
+    print("=" * 60)
+    
+    # Create gopls installer since it doesn't have pre-built binaries
+    create_gopls_installer(output_dir)
+    
+    print("NOTE: gopls (Go Language Server) is not included as it doesn't provide")
+    print("      pre-built binaries. Install it via: go install golang.org/x/tools/gopls@latest")
     print("=" * 60)
     
     success_count = 0

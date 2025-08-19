@@ -106,14 +106,14 @@ class OfflineDependencyDownloader:
             [sys.executable, '-c', 'import pip; pip.main()', 'download']
         ]
         
-        # FIXED: Use forward slashes for cross-platform compatibility
-        requirements_path_str = str(requirements_path).replace('\\', '/')
-        output_dir_str = str(output_dir).replace('\\', '/')
+        # FIXED: Use absolute paths and proper Windows handling
+        requirements_path_abs = requirements_path.resolve()
+        output_dir_abs = output_dir.resolve()
         
         base_args = [
-            '--dest', output_dir_str,
+            '--dest', str(output_dir_abs),
             '--prefer-binary',
-            '--requirement', requirements_path_str
+            '--requirement', str(requirements_path_abs)
         ] + self.pip_args
         
         # Try each method
@@ -132,7 +132,9 @@ class OfflineDependencyDownloader:
                         print(f"  Method {i} not available: {test_result.stderr.strip()}")
                         continue
                 
-                result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=300)
+                # FIXED: Add shell=True for Windows and better error handling
+                result = subprocess.run(cmd, check=True, capture_output=True, text=True, 
+                                      timeout=300, shell=(sys.platform == 'win32'))
                 print("✓ Successfully downloaded all dependencies")
                 return True
                 
@@ -163,14 +165,14 @@ class OfflineDependencyDownloader:
             ['pip', 'download'],
         ]
         
-        # FIXED: Use forward slashes for cross-platform compatibility  
-        uv_dir_str = str(uv_dir).replace('\\', '/')
+        # FIXED: Use absolute paths for Windows compatibility  
+        uv_dir_abs = uv_dir.resolve()
         
         # ENHANCED: Add more specific package requirements for UV
-        uv_packages = ['uv', 'packaging', 'platformdirs']  # UV and its core dependencies
+        uv_packages = ['uv', 'packaging>=21.3', 'platformdirs>=2.5.0']  # UV and its core dependencies
         
         base_args = [
-            '--dest', uv_dir_str,
+            '--dest', str(uv_dir_abs),
             '--platform', 'win_amd64', 
             '--only-binary=:all:'
         ] + uv_packages + self.pip_args
