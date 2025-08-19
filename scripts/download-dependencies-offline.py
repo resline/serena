@@ -81,6 +81,21 @@ class OfflineDependencyDownloader:
         # Create output directory
         output_dir.mkdir(parents=True, exist_ok=True)
         
+        # CRITICAL: Validate requirements.txt exists and has content
+        if not requirements_path.exists():
+            print(f"❌ Error: Requirements file not found: {requirements_path}")
+            return False
+            
+        with open(requirements_path, 'r') as f:
+            requirements_content = f.read().strip()
+            
+        if not requirements_content:
+            print(f"❌ Error: Requirements file is empty: {requirements_path}")
+            return False
+            
+        req_count = len([line for line in requirements_content.split('\n') if line.strip() and not line.strip().startswith('#')])
+        print(f"✓ Found {req_count} requirements in {requirements_path}")
+        
         # FIXED: Try multiple approaches for calling pip
         pip_methods = [
             # Method 1: python -m pip (preferred)
@@ -91,10 +106,14 @@ class OfflineDependencyDownloader:
             [sys.executable, '-c', 'import pip; pip.main()', 'download']
         ]
         
+        # FIXED: Use absolute paths and proper Windows handling
+        requirements_path_abs = requirements_path.resolve()
+        output_dir_abs = output_dir.resolve()
+        
         base_args = [
-            '--dest', str(output_dir),
+            '--dest', str(output_dir_abs),
             '--prefer-binary',
-            '--requirement', str(requirements_path)
+            '--requirement', str(requirements_path_abs)
         ] + self.pip_args
         
         # Try each method
@@ -113,7 +132,9 @@ class OfflineDependencyDownloader:
                         print(f"  Method {i} not available: {test_result.stderr.strip()}")
                         continue
                 
-                result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=300)
+                # FIXED: Add shell=True for Windows and better error handling
+                result = subprocess.run(cmd, check=True, capture_output=True, text=True, 
+                                      timeout=300, shell=(sys.platform == 'win32'))
                 print("✓ Successfully downloaded all dependencies")
                 return True
                 
@@ -144,12 +165,17 @@ class OfflineDependencyDownloader:
             ['pip', 'download'],
         ]
         
+        # FIXED: Use absolute paths for Windows compatibility  
+        uv_dir_abs = uv_dir.resolve()
+        
+        # ENHANCED: Add more specific package requirements for UV
+        uv_packages = ['uv', 'packaging>=21.3', 'platformdirs>=2.5.0']  # UV and its core dependencies
+        
         base_args = [
-            '--dest', str(uv_dir),
-            '--platform', 'win_amd64',
-            '--only-binary=:all:',
-            'uv'
-        ] + self.pip_args
+            '--dest', str(uv_dir_abs),
+            '--platform', 'win_amd64', 
+            '--only-binary=:all:'
+        ] + uv_packages + self.pip_args
         
         # Try each method
         for i, pip_cmd in enumerate(pip_methods, 1):
