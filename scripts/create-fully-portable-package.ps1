@@ -574,7 +574,10 @@ check-dependencies.bat
 
 ### Manual Dependency Installation
 $(if ($OfflineMode) {
-"If dependencies are missing:`n```cmd`ndependencies\install-dependencies-offline.bat`n```"
+"If dependencies are missing:
+````cmd
+dependencies\install-dependencies-offline.bat
+````"
 } else {
 "Ensure internet access for first run, or obtain offline dependency package"
 })
@@ -597,7 +600,7 @@ $(if ($OfflineMode) {
 - Corporate Support: Available
 
 ---
-**Generated**: `$(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+**Generated**: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 **Platform**: $Platform  
 **Python**: $PythonVersion
 **Offline Mode**: $(if ($OfflineMode) { "Enabled" } else { "First-run setup required" })
