@@ -11,6 +11,28 @@
 You can think of Serena as an IDE for a coding agent. With it, the agent no longer needs to read entire
 files, perform grep-like searches or string replacements to find and edit the right code. Instead, it can use code centered tools like `find_symbol`, `find_referencing_symbols` and `insert_after_symbol`.
 
+## 🏢 Enhanced Fork for Enterprise Deployment
+
+This is an enhanced fork of Serena MCP with additional features specifically designed for **enterprise and corporate environments**:
+
+### Key Enhancements
+
+* **🔒 Corporate Network Support** - Automatic proxy detection, certificate handling, and air-gapped deployment
+* **📦 Fully Portable Packages** - Complete offline installation packages with all dependencies pre-bundled
+* **🪟 Windows Reliability** - Fixed Ruby gem extraction, improved file handling, and Windows-specific optimizations  
+* **⚡ Quick Deployment** - Under 15-minute deployment scripts for corporate environments
+* **🛠️ Enhanced Scripts** - PowerShell and batch scripts for automated corporate deployment
+* **📚 Enterprise Documentation** - Comprehensive guides for corporate deployment, security analysis, and troubleshooting
+
+### Additional Resources
+
+* **[Corporate Deployment Guide](CORPORATE_DEPLOYMENT_GUIDE.md)** - Complete guide for enterprise deployment
+* **[Windows Fixes Documentation](WINDOWS_GEM_EXTRACTION_FIXES.md)** - Detailed Windows compatibility improvements
+* **[Fixes Summary](FIXES_SUMMARY.md)** - Summary of all technical fixes applied
+* **[Security Reports](RAPORT_BEZPIECZENSTWA_SERENA_MCP.md)** - Security and license analysis (Polish)
+
+This fork maintains 100% compatibility with the original Serena while adding enterprise-grade deployment capabilities.
+
 ### Users' Feedback
 
 Most users report that Serena has strong positive effects on the results of their coding agents, even when used within
@@ -144,6 +166,10 @@ implementation.
   * [Claude Desktop](#claude-desktop)
   * [MCP Coding Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)](#mcp-coding-clients-cline-roo-code-cursor-windsurf-etc)
   * [Local GUIs and Frameworks](#local-guis-and-frameworks)
+- [Enterprise and Offline Deployment](#enterprise-and-offline-deployment)
+  * [Quick Corporate Deployment](#quick-corporate-deployment)
+  * [Fully Portable Packages](#fully-portable-packages)
+  * [Windows-Specific Improvements](#windows-specific-improvements)
 - [Detailed Usage and Recommendations](#detailed-usage-and-recommendations)
   * [Tool Execution](#tool-execution)
     + [Shell Execution and Editing Tools](#shell-execution-and-editing-tools)
@@ -180,6 +206,7 @@ Serena can be used in various ways, below you will find instructions for selecte
 * If you want a GUI experience outside an IDE, you can use one of the many [local GUIs](#local-guis-and-frameworks) that support MCP servers.
   You can also connect Serena to many web clients (including ChatGPT) using [mcpo](docs/serena_on_chatgpt.md).
 * If you want to use Serena integrated in your IDE, see the section on [other MCP clients](#other-mcp-clients---cline-roo-code-cursor-windsurf-etc).
+* **🏢 For enterprise/corporate environments**, see the [Enterprise and Offline Deployment](#enterprise-and-offline-deployment) section below for specialized deployment options.
 * You can use Serena as a library for building your own applications. We try to keep the public API stable, but you should still
   expect breaking changes and pin Serena to a fixed version if you use it as a dependency.
 
@@ -239,7 +266,7 @@ Explore the CLI to see some of the customization options that serena provides (m
     uv run --directory /abs/path/to/serena serena start-mcp-server
    ```
 
-##### Using Docker (Experimental)
+##### Using Docker (Enhanced for Corporate Use)
 
 ⚠️ Docker support is currently experimental with several limitations. Please read the [Docker documentation](DOCKER.md) for important caveats before using it.
 
@@ -256,9 +283,22 @@ Replace `/path/to/your/projects` with the absolute path to your projects directo
 * No need to install language servers and dependencies locally
 * Consistent environment across different systems
 
+**🏢 Corporate Docker Deployment:**
+
+This fork includes enhanced Docker support for corporate environments:
+
+```dockerfile
+# Corporate dockerfile example with proxy and certificates
+FROM ghcr.io/oraios/serena:latest
+COPY corporate-ca-cert.crt /usr/local/share/ca-certificates/
+RUN update-ca-certificates
+ENV HTTP_PROXY=http://your-proxy:8080
+ENV HTTPS_PROXY=http://your-proxy:8080
+```
+
 Alternatively, use docker compose with the `compose.yml` file provided in the repository.
 
-See the [Docker documentation](DOCKER.md) for detailed setup instructions, configuration options, and known limitations.
+See the [Docker documentation](DOCKER.md) and [Corporate Deployment Guide](CORPORATE_DEPLOYMENT_GUIDE.md) for detailed setup instructions, configuration options, and corporate-specific configurations.
 
 #### SSE Mode
 
@@ -503,6 +543,91 @@ Some of the leading open source GUI technologies offering this are
 [OpenWebUI](https://docs.openwebui.com/openapi-servers/mcp) and [Agno](https://docs.agno.com/introduction/playground).
 They allow combining Serena with almost any LLM (including locally running ones) and offer various other integrations.
 
+## Enterprise and Offline Deployment
+
+This enhanced fork provides specialized deployment solutions for corporate and enterprise environments, particularly focusing on Windows 11 corporate networks with proxy servers, custom certificates, and air-gapped systems.
+
+### Quick Corporate Deployment
+
+**🚀 One-Click Deployment (Under 15 minutes)**
+
+For Windows 11 corporate environments, use the automated deployment script:
+
+```batch
+# Download and run the quick deploy script
+curl -O https://raw.githubusercontent.com/resline/serena/main/scripts/quick-deploy-serena.bat
+quick-deploy-serena.bat
+```
+
+This script automatically:
+- Detects corporate proxy settings and certificates
+- Offers Docker, local, or portable deployment options  
+- Configures IDE integration (VS Code, IntelliJ)
+- Handles Windows-specific file system issues
+
+### Fully Portable Packages
+
+**📦 Complete Offline Installation**
+
+Create a fully portable package with all dependencies for air-gapped environments:
+
+```powershell
+# Create portable package with all dependencies
+.\scripts\create-fully-portable-package.ps1 -OutputPath ".\serena-portable"
+
+# The package includes:
+# - Python 3.11 embedded runtime
+# - All Python dependencies pre-installed
+# - 13+ language servers pre-downloaded
+# - Corporate proxy/certificate configuration
+# - Windows-optimized extraction scripts
+```
+
+**Corporate Network Features:**
+- Automatic proxy detection and configuration
+- Custom CA certificate bundle support
+- No internet required after initial package creation
+- Pre-configured for common corporate restrictions
+
+### Windows-Specific Improvements
+
+**🪟 Enhanced Windows Reliability**
+
+This fork includes several critical fixes for Windows environments:
+
+1. **Ruby Gem Extraction Fixed**
+   - Resolved permission denied errors during Solargraph installation
+   - Added Windows-specific retry logic for file locking issues
+   - Graceful fallback for problematic compressed files
+
+2. **Language Server URL Updates**
+   - Fixed 404 errors for Go (gopls), Java (JDT.LS), Terraform, and Clojure
+   - Updated to latest stable versions
+   - Better error handling and retry mechanisms
+
+3. **Pip Installation Improvements**
+   - Fixed "No module named pip" in embedded Python
+   - Proper python._pth configuration
+   - Multiple fallback installation methods
+
+4. **File System Optimizations**
+   - Windows NTFS permission handling
+   - Antivirus interference mitigation
+   - Exclusive file lock handling
+
+**Available Scripts:**
+- `scripts/create-fully-portable-package.ps1` - Create complete offline package
+- `scripts/corporate-setup-windows.ps1` - Corporate environment setup
+- `scripts/quick-deploy-serena.bat` - One-click deployment
+- `scripts/download-dependencies-offline.py` - Offline dependency download
+- `scripts/download-language-servers-offline.py` - Language server offline download
+
+**📚 Documentation:**
+- **[Corporate Deployment Guide](CORPORATE_DEPLOYMENT_GUIDE.md)** - Step-by-step enterprise setup
+- **[Windows Fixes](WINDOWS_GEM_EXTRACTION_FIXES.md)** - Technical details of Windows improvements  
+- **[Fixes Summary](FIXES_SUMMARY.md)** - Complete list of applied fixes
+- **[Security Analysis](RAPORT_BEZPIECZENSTWA_SERENA_MCP.md)** - Security and license report
+
 ## Detailed Usage and Recommendations
 
 ### Tool Execution
@@ -729,6 +854,33 @@ errors. The language server is running in a separate sub-process and is called w
 a client may make it crash. If you have Serena's log window enabled, and it disappears, you'll know what happened.
 
 Some clients may not properly terminate MCP servers, look out for hanging python processes and terminate them manually, if needed.
+
+#### Windows-Specific Issues
+
+**Ruby Language Server (Solargraph) Extraction Failures:**
+- **Problem**: Permission denied errors during gem extraction on Windows
+- **Solution**: This fork includes enhanced Windows-safe extraction with retry logic
+- **Details**: See [Windows Gem Extraction Fixes](WINDOWS_GEM_EXTRACTION_FIXES.md)
+
+**Language Server Download 404 Errors:**
+- **Problem**: Outdated URLs for Go, Java, Terraform, and Clojure language servers
+- **Solution**: Updated to latest stable versions with working download URLs
+- **Affected**: Fixed gopls v0.17.0, JDT.LS latest, Terraform v0.36.2, Clojure 2025.01.16
+
+**Pip Module Not Found in Embedded Python:**
+- **Problem**: "No module named pip" when using portable packages
+- **Solution**: Fixed python._pth configuration and pip installation targets
+- **Details**: See [Fixes Summary](FIXES_SUMMARY.md) for technical details
+
+**Corporate Network Issues:**
+- **Problem**: Proxy/certificate failures in corporate environments  
+- **Solution**: Use the corporate deployment scripts with automatic proxy detection
+- **Scripts**: `quick-deploy-serena.bat` or `corporate-setup-windows.ps1`
+
+**File System Permission Issues:**
+- **Problem**: NTFS permission inheritance and antivirus interference
+- **Solution**: Enhanced file handling with Windows-specific delays and retry logic
+- **Benefits**: More reliable extraction and installation on Windows systems
 
 ## Comparison with Other Coding Agents
 

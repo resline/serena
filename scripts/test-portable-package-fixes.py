@@ -4,10 +4,10 @@ Test script to verify portable package fixes
 Run this after creating the portable package to verify all fixes work
 """
 
-import sys
 import subprocess
-import urllib.request
+import sys
 import urllib.error
+import urllib.request
 from pathlib import Path
 
 
@@ -41,7 +41,7 @@ def test_language_server_urls():
             print(f"  ❌ {name}: HTTP {e.code} - {e.reason}")
             results.append(False)
         except Exception as e:
-            print(f"  ❌ {name}: {str(e)}")
+            print(f"  ❌ {name}: {e!s}")
             results.append(False)
     
     return all(results)
@@ -67,7 +67,7 @@ def test_python_syntax():
         try:
             result = subprocess.run([
                 sys.executable, '-m', 'py_compile', str(script_path)
-            ], capture_output=True, text=True, timeout=10)
+            ], check=False, capture_output=True, text=True, timeout=10)
             
             if result.returncode == 0:
                 print(f"  ✅ {script}: Syntax OK")
@@ -78,7 +78,7 @@ def test_python_syntax():
                 results.append(False)
                 
         except Exception as e:
-            print(f"  ❌ {script}: Test failed - {str(e)}")
+            print(f"  ❌ {script}: Test failed - {e!s}")
             results.append(False)
     
     return all(results)
@@ -96,7 +96,7 @@ def test_pip_methods():
     results = []
     for cmd, name in methods:
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
                 version = result.stdout.strip()
                 print(f"  ✅ {name}: Available - {version}")
@@ -108,7 +108,7 @@ def test_pip_methods():
             print(f"  ❌ {name}: Command not found")
             results.append(False)
         except Exception as e:
-            print(f"  ❌ {name}: Error - {str(e)}")
+            print(f"  ❌ {name}: Error - {e!s}")
             results.append(False)
     
     # At least one method should work

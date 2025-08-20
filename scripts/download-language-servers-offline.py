@@ -4,20 +4,20 @@ Download language servers for offline/corporate deployment
 Handles proxy and certificate issues
 """
 
-import os
-import sys
-import json
-import urllib.request
-import urllib.error
-import ssl
-import zipfile
-import tarfile
 import gzip
-import shutil
-import time
+import json
+import os
 import platform
+import ssl
+import sys
+import tarfile
+import time
+import urllib.error
+import urllib.request
+import zipfile
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
+
 
 class CorporateDownloader:
     def __init__(self, proxy_url: str = None, ca_cert_path: str = None):
@@ -80,7 +80,7 @@ class CorporateDownloader:
                 return True
                 
         except Exception as e:
-            print(f"\r  ✗ Failed to download {description}: {str(e)}")
+            print(f"\r  ✗ Failed to download {description}: {e!s}")
             return False
 
     def extract_archive(self, archive_path: Path, dest_dir: Path, archive_type: str):
@@ -103,7 +103,7 @@ class CorporateDownloader:
             return True
             
         except Exception as e:
-            print(f"  ✗ Failed to extract: {str(e)}")
+            print(f"  ✗ Failed to extract: {e!s}")
             return False
     
     def _extract_gem_windows_safe(self, archive_path: Path, dest_dir: Path) -> bool:
@@ -143,7 +143,7 @@ class CorporateDownloader:
                 if metadata_gz.exists():
                     self._extract_metadata_safely(metadata_gz, dest_dir, is_windows)
                 
-                print(f"  ✓ Ruby gem extracted successfully")
+                print("  ✓ Ruby gem extracted successfully")
                 return True
                 
             except Exception as e:
@@ -151,10 +151,9 @@ class CorporateDownloader:
                     print(f"    [RETRY] Extraction failed, retrying in 1 second: {e}")
                     time.sleep(1)
                     continue
-                else:
-                    print(f"    [ERROR] Final attempt failed: {e}")
-                    # Try partial extraction as fallback
-                    return self._fallback_gem_extraction(archive_path, dest_dir)
+                print(f"    [ERROR] Final attempt failed: {e}")
+                # Try partial extraction as fallback
+                return self._fallback_gem_extraction(archive_path, dest_dir)
         
         return False
     
@@ -188,10 +187,9 @@ class CorporateDownloader:
                         if cleanup_attempt < 2:
                             time.sleep(0.5)
                             continue
-                        else:
-                            print(f"      [WARN] Could not remove {data_tar}: {e}")
-                            print(f"      [INFO] This is normal on Windows and won't affect functionality")
-                            break
+                        print(f"      [WARN] Could not remove {data_tar}: {e}")
+                        print("      [INFO] This is normal on Windows and won't affect functionality")
+                        break
                 
                 return  # Success
                 
@@ -200,10 +198,9 @@ class CorporateDownloader:
                     print(f"      [RETRY] Data extraction failed, retrying: {e}")
                     time.sleep(0.5)
                     continue
-                else:
-                    print(f"      [WARN] Could not extract gem data after {max_attempts} attempts: {e}")
-                    print(f"      [INFO] Continuing with partial extraction")
-                    return
+                print(f"      [WARN] Could not extract gem data after {max_attempts} attempts: {e}")
+                print("      [INFO] Continuing with partial extraction")
+                return
     
     def _extract_metadata_safely(self, metadata_gz: Path, dest_dir: Path, is_windows: bool):
         """Safely extract metadata.gz without failing the whole process"""
@@ -228,11 +225,11 @@ class CorporateDownloader:
                 
         except Exception as e:
             print(f"      [WARN] Could not extract metadata: {e}")
-            print(f"      [INFO] This won't affect gem functionality")
+            print("      [INFO] This won't affect gem functionality")
     
     def _fallback_gem_extraction(self, archive_path: Path, dest_dir: Path) -> bool:
         """Fallback extraction method for problematic gems"""
-        print(f"  [FALLBACK] Attempting basic gem extraction...")
+        print("  [FALLBACK] Attempting basic gem extraction...")
         try:
             # Just extract the basic tar without processing internals
             with tarfile.open(archive_path, 'r') as tar:
@@ -249,7 +246,7 @@ class CorporateDownloader:
                     print(f"    [INFO] Extracted {len(safe_members)} safe files")
                     return True
                 else:
-                    print(f"    [WARN] No safe files found to extract")
+                    print("    [WARN] No safe files found to extract")
                     return False
         except Exception as e:
             print(f"    [ERROR] Fallback extraction failed: {e}")
@@ -339,7 +336,7 @@ The gopls binary will be available at:
     print(f"  ✓ Created gopls installer in {gopls_dir}")
 
 
-def get_language_servers() -> Dict[str, Dict[str, Any]]:
+def get_language_servers() -> dict[str, dict[str, Any]]:
     """Define language servers to download"""
     return {
         'pyright': {
