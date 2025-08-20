@@ -218,6 +218,7 @@ if (Test-Path "$OutputPath\dependencies\requirements.txt") {
         $targetDirForward = $targetDir -replace '\\', '/'
         
         & "$OutputPath\python\python.exe" -m pip install --no-index --find-links $depsPath --target $targetDirForward --requirement $reqPath
+    }
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host "[OK] Installed all dependencies offline" -ForegroundColor Green
@@ -483,7 +484,7 @@ air-gapped systems, and offline deployment.
 
 - **100% Offline**: No internet required after initial setup
 - **Embedded Python**: Python 3.11 included
-- **All Dependencies**: `$(if (`$OfflineMode) { "[OK] Pre-installed offline" } else { "[WARN] Will install on first run" })
+- **All Dependencies**: $(if ($OfflineMode) { "[OK] Pre-installed offline" } else { "[WARN] Will install on first run" })
 - **Language Servers**: Pre-downloaded for 13+ languages  
 - **Corporate Ready**: Proxy and certificate support
 - **Zero Installation**: Runs from any directory
@@ -491,10 +492,10 @@ air-gapped systems, and offline deployment.
 ##  Package Contents
 
 - **python/**: Embedded Python 3.11 ($PythonVersion)
-- **dependencies/**: All Python wheels `$(if (`$OfflineMode) { "(~150MB)" } else { "(download on first run)" })
+- **dependencies/**: All Python wheels $(if ($OfflineMode) { "(~150MB)" } else { "(download on first run)" })
 - **language-servers/**: Pre-downloaded language servers (~200MB)
 - **serena/**: Complete Serena source code
-- **Lib/site-packages/**: `$(if (`$OfflineMode) { "Installed Python packages" } else { "Will be populated on first run" })
+- **Lib/site-packages/**: $(if ($OfflineMode) { "Installed Python packages" } else { "Will be populated on first run" })
 - **config/**: IDE integration templates
 
 ##  Installation
@@ -558,7 +559,7 @@ set REQUESTS_CA_BUNDLE=C:\path\to\ca-bundle.crt
 ```
 
 ### Air-Gapped Systems
-`$(if (`$OfflineMode) {
+$(if ($OfflineMode) {
 "[OK] This package works completely offline!"
 } else {
 "[WARN] Internet required for first-time dependency installation"
@@ -572,7 +573,7 @@ check-dependencies.bat
 ```
 
 ### Manual Dependency Installation
-`$(if (`$OfflineMode) {
+$(if ($OfflineMode) {
 "If dependencies are missing:"
 "```cmd"
 "dependencies\install-dependencies-offline.bat"
@@ -587,10 +588,10 @@ check-dependencies.bat
 
 ##  Package Statistics
 
-- **Total Size**: ~`$(if (`$OfflineMode) { "500" } else { "200" })MB (compressed ~`$(if (`$OfflineMode) { "300" } else { "150" })MB)
+- **Total Size**: ~$(if ($OfflineMode) { "500" } else { "200" })MB (compressed ~$(if ($OfflineMode) { "300" } else { "150" })MB)
 - **Python Dependencies**: 21 packages
 - **Language Servers**: 13 servers
-- **Offline Ready**: `$(if (`$OfflineMode) { "[YES] YES" } else { "[WARN] Requires internet for first setup" })
+- **Offline Ready**: $(if ($OfflineMode) { "[YES] YES" } else { "[WARN] Requires internet for first setup" })
 
 ##  Support
 
@@ -602,7 +603,7 @@ check-dependencies.bat
 **Generated**: `$(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 **Platform**: $Platform  
 **Python**: $PythonVersion
-**Offline Mode**: `$(if (`$OfflineMode) { "Enabled" } else { "First-run setup required" })
+**Offline Mode**: $(if ($OfflineMode) { "Enabled" } else { "First-run setup required" })
 "@
 Set-Content -Path "$OutputPath\README.txt" -Value $readme
 
