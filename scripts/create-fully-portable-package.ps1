@@ -155,7 +155,8 @@ if (Test-Path $depDownloadScript) {
         "--output", "$OutputPath\dependencies",
         "--pyproject", "$OutputPath\serena\pyproject.toml",
         "--python-version", "3.11",
-        "--platform", $Platform
+        "--platform", $Platform,
+        "--python-exe", "$OutputPath\python\python.exe"  # Pass embedded Python path
     )
     
     # Filter out empty arguments
@@ -304,7 +305,8 @@ if (Test-Path $lsDownloadScript) {
         & "$OutputPath\python\python.exe" $lsDownloadScript `
             --output "$OutputPath\language-servers" `
             --proxy $ProxyUrl `
-            --cert $CertPath
+            --cert $CertPath `
+            --python-exe "$OutputPath\python\python.exe"
         
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[OK] Downloaded language servers" -ForegroundColor Green

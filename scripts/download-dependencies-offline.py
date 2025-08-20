@@ -12,9 +12,10 @@ from pathlib import Path
 
 
 class OfflineDependencyDownloader:
-    def __init__(self, proxy_url: str | None = None, ca_cert_path: str | None = None):
+    def __init__(self, proxy_url: str | None = None, ca_cert_path: str | None = None, python_exe: str | None = None):
         self.proxy_url = proxy_url or os.environ.get("HTTP_PROXY")
         self.ca_cert_path = ca_cert_path or os.environ.get("REQUESTS_CA_BUNDLE")
+        self.python_exe = python_exe or sys.executable  # Allow override of Python executable
         self.pip_args = self._build_pip_args()
 
     def _build_pip_args(self) -> list[str]:
@@ -105,8 +106,8 @@ class OfflineDependencyDownloader:
         # FIXED: Try multiple approaches for calling pip
         pip_methods = [
             # Method 1: python -m pip (preferred)
-            [sys.executable, "-m", "pip", "download"],
-            # Method 2: Direct pip call
+            [self.python_exe, "-m", "pip", "download"],
+            # Method 2: Direct pip call (fallback)
             ["pip", "download"],
         ]
 
@@ -142,8 +143,8 @@ class OfflineDependencyDownloader:
                     print(f"  Method {i} not available: {test_result.stderr.strip()}")
                     continue
 
-                # FIXED: Add shell=True for Windows and better error handling
-                result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=300, shell=(sys.platform == "win32"))
+                # CRITICAL FIX: Do NOT use shell=True on Windows - it breaks argument parsing
+                result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=300)
 
                 if result.returncode == 0:
                     print("✓ Successfully downloaded all dependencies")
@@ -184,10 +185,12 @@ class OfflineDependencyDownloader:
 
         for requirement in requirements:
             print(f"  Downloading: {requirement}")
-            cmd = [sys.executable, "-m", "pip", "download", "--dest", str(output_dir), "--prefer-binary"] + self.pip_args + [requirement]
+            # Use the correct Python executable (embedded Python, not system Python)
+            cmd = [self.python_exe, "-m", "pip", "download", "--dest", str(output_dir), "--prefer-binary"] + self.pip_args + [requirement]
 
             try:
-                result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=60, shell=(sys.platform == "win32"))
+                # CRITICAL FIX: Do NOT use shell=True - it breaks on Windows
+                result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=60)
                 if result.returncode == 0:
                     print(f"    ✓ {requirement}")
                     successful_downloads += 1
@@ -198,8 +201,32 @@ class OfflineDependencyDownloader:
 
         print(f"Individual downloads: {successful_downloads}/{len(requirements)} successful")
 
+        # Cleanup any temporary files that might have been created
+        self._cleanup_temp_files(output_dir)
+
         # Consider it successful if we got most packages
         return successful_downloads >= len(requirements) * 0.8
+
+    def _cleanup_temp_files(self, directory: Path):
+        """Remove temporary files created during failed download attempts"""
+        try:
+            # Remove any temporary pip download files
+            for temp_file in directory.glob("*.tmp"):
+                try:
+                    temp_file.unlink()
+                    print(f"[CLEANUP] Removed temporary file: {temp_file.name}")
+                except Exception:
+                    pass
+
+            # Remove any incomplete downloads
+            for partial_file in directory.glob("*.partial"):
+                try:
+                    partial_file.unlink()
+                    print(f"[CLEANUP] Removed partial file: {partial_file.name}")
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"[CLEANUP] Warning: Could not clean temporary files: {e}")
 
     def download_uv_dependencies(self, output_dir: Path):
         """Download UV and its dependencies"""
@@ -210,7 +237,7 @@ class OfflineDependencyDownloader:
 
         # FIXED: Try multiple approaches for calling pip (same as main dependencies)
         pip_methods = [
-            [sys.executable, "-m", "pip", "download"],
+            [self.python_exe, "-m", "pip", "download"],
             ["pip", "download"],
         ]
 
@@ -239,7 +266,8 @@ class OfflineDependencyDownloader:
                     print(f"  UV method {i} not available: {test_result.stderr.strip()}")
                     continue
 
-                result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=120, shell=(sys.platform == "win32"))
+                # CRITICAL FIX: Do NOT use shell=True
+                result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=120)
                 if result.returncode == 0:
                     print("✓ Downloaded UV and dependencies")
                     return True
@@ -267,13 +295,14 @@ class OfflineDependencyDownloader:
         for package in uv_packages:
             print(f"  Downloading: {package}")
             cmd = (
-                [sys.executable, "-m", "pip", "download", "--dest", str(uv_dir_abs), "--platform", "win_amd64", "--only-binary=:all:"]
+                [self.python_exe, "-m", "pip", "download", "--dest", str(uv_dir_abs), "--platform", "win_amd64", "--only-binary=:all:"]
                 + self.pip_args
                 + [package]
             )
 
             try:
-                result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=60, shell=(sys.platform == "win32"))
+                # CRITICAL FIX: Do NOT use shell=True
+                result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=60)
                 if result.returncode == 0:
                     print(f"    ✓ {package}")
                     successful_uv_downloads += 1
@@ -379,11 +408,12 @@ def main():
     parser.add_argument("--pyproject", default="pyproject.toml", help="Path to pyproject.toml")
     parser.add_argument("--python-version", default="3.11", help="Target Python version")
     parser.add_argument("--platform", default="win_amd64", help="Target platform")
+    parser.add_argument("--python-exe", help="Path to Python executable to use for pip commands")
 
     args = parser.parse_args()
 
-    # Initialize downloader
-    downloader = OfflineDependencyDownloader(args.proxy, args.cert)
+    # Initialize downloader with optional Python executable path
+    downloader = OfflineDependencyDownloader(args.proxy, args.cert, args.python_exe)
 
     # Setup paths
     pyproject_path = Path(args.pyproject)
