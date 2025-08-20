@@ -574,10 +574,7 @@ check-dependencies.bat
 
 ### Manual Dependency Installation
 $(if ($OfflineMode) {
-"If dependencies are missing:"
-"```cmd"
-"dependencies\install-dependencies-offline.bat"
-"```"
+"If dependencies are missing:`n```cmd`ndependencies\install-dependencies-offline.bat`n```"
 } else {
 "Ensure internet access for first run, or obtain offline dependency package"
 })
