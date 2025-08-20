@@ -125,6 +125,7 @@ class TestCSharpLanguageServer:
         refs_second_call = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
         assert refs_second_call == refs, "Second call to request_references should return the same results"
 
+
 @pytest.mark.csharp
 class TestCSharpSolutionProjectOpening:
     """Test C# language server solution and project opening functionality."""
