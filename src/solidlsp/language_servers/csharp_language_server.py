@@ -13,7 +13,6 @@ import threading
 import urllib.request
 import zipfile
 from pathlib import Path
-from time import sleep
 from typing import cast
 
 from overrides import override
@@ -22,7 +21,6 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_logger import LanguageServerLogger
-from solidlsp.ls_types import Location
 from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo

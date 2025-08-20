@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = "==3.11.*"
 
 [[package]]
@@ -1127,7 +1127,9 @@ dependencies = [
     { name = "joblib" },
     { name = "mcp" },
     { name = "overrides" },
+    { name = "packaging" },
     { name = "pathspec" },
+    { name = "platformdirs" },
     { name = "psutil" },
     { name = "pydantic" },
     { name = "pyright" },
@@ -1162,6 +1164,11 @@ google = [
     { name = "google-genai" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "poethepoet" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "agno", marker = "extra == 'agno'", specifier = ">=1.2.6" },
@@ -1177,7 +1184,9 @@ requires-dist = [
     { name = "mcp", specifier = "==1.12.3" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.16.1" },
     { name = "overrides", specifier = ">=7.7.0,<8" },
+    { name = "packaging", specifier = ">=21.3" },
     { name = "pathspec", specifier = ">=0.12.1" },
+    { name = "platformdirs", specifier = ">=2.5.0" },
     { name = "poethepoet", marker = "extra == 'dev'", specifier = ">=0.20.0" },
     { name = "psutil", specifier = ">=7.0.0" },
     { name = "pydantic", specifier = ">=2.10.6" },
@@ -1199,6 +1208,9 @@ requires-dist = [
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12.20241230" },
 ]
 provides-extras = ["dev", "agno", "google"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "poethepoet", specifier = ">=0.36.0" }]
 
 [[package]]
 name = "shellingham"

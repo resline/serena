@@ -4,14 +4,11 @@ Download all Python dependencies as wheels for offline portable deployment
 Handles proxy and certificate issues for corporate environments
 """
 
-import os
-import sys
-import subprocess
-import tempfile
-import shutil
-from pathlib import Path
-from typing import List, Optional
 import argparse
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 
 class OfflineDependencyDownloader:
@@ -20,7 +17,7 @@ class OfflineDependencyDownloader:
         self.ca_cert_path = ca_cert_path or os.environ.get('REQUESTS_CA_BUNDLE')
         self.pip_args = self._build_pip_args()
         
-    def _build_pip_args(self) -> List[str]:
+    def _build_pip_args(self) -> list[str]:
         """Build pip arguments for proxy and certificate handling"""
         args = []
         
@@ -86,7 +83,7 @@ class OfflineDependencyDownloader:
             print(f"❌ Error: Requirements file not found: {requirements_path}")
             return False
             
-        with open(requirements_path, 'r') as f:
+        with open(requirements_path) as f:
             requirements_content = f.read().strip()
             
         if not requirements_content:
@@ -127,7 +124,7 @@ class OfflineDependencyDownloader:
                 # Test if pip is available first (except for method 3)
                 if i < 3:
                     test_cmd = pip_cmd + ['--version']
-                    test_result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10)
+                    test_result = subprocess.run(test_cmd, check=False, capture_output=True, text=True, timeout=10)
                     if test_result.returncode != 0:
                         print(f"  Method {i} not available: {test_result.stderr.strip()}")
                         continue
@@ -185,7 +182,7 @@ class OfflineDependencyDownloader:
             try:
                 # Test if pip is available first
                 test_cmd = pip_cmd + ['--version']
-                test_result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10)
+                test_result = subprocess.run(test_cmd, check=False, capture_output=True, text=True, timeout=10)
                 if test_result.returncode != 0:
                     print(f"  UV method {i} not available: {test_result.stderr.strip()}")
                     continue
@@ -270,7 +267,7 @@ pause
         
         print(f"✓ Created offline installer: {installer_script}")
 
-    def create_manifest(self, output_dir: Path, dependencies: List[str]):
+    def create_manifest(self, output_dir: Path, dependencies: list[str]):
         """Create manifest with dependency information"""
         import json
         from datetime import datetime
@@ -342,7 +339,7 @@ def main():
         uv_wheels = list((output_dir / 'uv-deps').glob('*.whl'))
         
         print("=" * 60)
-        print(f"✓ Download completed successfully!")
+        print("✓ Download completed successfully!")
         print(f"Main dependencies: {len(wheel_files)} wheels")
         print(f"UV dependencies: {len(uv_wheels)} wheels")
         print(f"Total size: {sum(f.stat().st_size for f in wheel_files + uv_wheels) / 1024 / 1024:.1f} MB")
@@ -354,7 +351,7 @@ def main():
         return 0
         
     except Exception as e:
-        print(f"✗ Error: {str(e)}")
+        print(f"✗ Error: {e!s}")
         return 1
 
 
