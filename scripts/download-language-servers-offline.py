@@ -20,23 +20,20 @@ from typing import Any
 
 
 class CorporateDownloader:
-    def __init__(self, proxy_url: str = None, ca_cert_path: str = None):
-        self.proxy_url = proxy_url or os.environ.get('HTTP_PROXY')
-        self.ca_cert_path = ca_cert_path or os.environ.get('REQUESTS_CA_BUNDLE')
+    def __init__(self, proxy_url: str | None = None, ca_cert_path: str | None = None):
+        self.proxy_url = proxy_url or os.environ.get("HTTP_PROXY")
+        self.ca_cert_path = ca_cert_path or os.environ.get("REQUESTS_CA_BUNDLE")
         self.setup_urllib()
-        
+
     def setup_urllib(self):
         """Configure urllib for corporate proxy and certificates"""
         # Setup proxy
         if self.proxy_url:
-            proxy = urllib.request.ProxyHandler({
-                'http': self.proxy_url,
-                'https': self.proxy_url
-            })
+            proxy = urllib.request.ProxyHandler({"http": self.proxy_url, "https": self.proxy_url})
             opener = urllib.request.build_opener(proxy)
             urllib.request.install_opener(opener)
             print(f"✓ Configured proxy: {self.proxy_url}")
-        
+
         # Setup SSL context
         self.ssl_context = ssl.create_default_context()
         if self.ca_cert_path and os.path.exists(self.ca_cert_path):
@@ -52,33 +49,31 @@ class CorporateDownloader:
     def download_file(self, url: str, dest_path: Path, description: str = ""):
         """Download file with progress indication"""
         print(f"Downloading {description or url}...")
-        
+
         try:
             # Create request with headers
-            req = urllib.request.Request(url, headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            })
-            
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
+
             with urllib.request.urlopen(req, context=self.ssl_context) as response:
-                total_size = int(response.headers.get('Content-Length', 0))
+                total_size = int(response.headers.get("Content-Length", 0))
                 downloaded = 0
                 block_size = 8192
-                
-                with open(dest_path, 'wb') as f:
+
+                with open(dest_path, "wb") as f:
                     while True:
                         chunk = response.read(block_size)
                         if not chunk:
                             break
                         f.write(chunk)
                         downloaded += len(chunk)
-                        
+
                         if total_size > 0:
                             percent = (downloaded / total_size) * 100
-                            print(f"\r  Progress: {percent:.1f}%", end='', flush=True)
-                
+                            print(f"\r  Progress: {percent:.1f}%", end="", flush=True)
+
                 print(f"\r  ✓ Downloaded {description}")
                 return True
-                
+
         except Exception as e:
             print(f"\r  ✗ Failed to download {description}: {e!s}")
             return False
@@ -86,37 +81,37 @@ class CorporateDownloader:
     def extract_archive(self, archive_path: Path, dest_dir: Path, archive_type: str):
         """Extract downloaded archive"""
         try:
-            if archive_type == 'zip':
-                with zipfile.ZipFile(archive_path, 'r') as zf:
+            if archive_type == "zip":
+                with zipfile.ZipFile(archive_path, "r") as zf:
                     zf.extractall(dest_dir)
-            elif archive_type == 'tar.gz' or archive_type == 'tgz':
-                with gzip.open(archive_path, 'rb') as gz:
+            elif archive_type == "tar.gz" or archive_type == "tgz":
+                with gzip.open(archive_path, "rb") as gz:
                     with tarfile.open(fileobj=gz) as tar:
                         tar.extractall(dest_dir)
-            elif archive_type == 'tar':
-                with tarfile.open(archive_path, 'r') as tar:
+            elif archive_type == "tar":
+                with tarfile.open(archive_path, "r") as tar:
                     tar.extractall(dest_dir)
-            elif archive_type == 'gem':
+            elif archive_type == "gem":
                 return self._extract_gem_windows_safe(archive_path, dest_dir)
-            
+
             print(f"  ✓ Extracted to {dest_dir}")
             return True
-            
+
         except Exception as e:
             print(f"  ✗ Failed to extract: {e!s}")
             return False
-    
+
     def _extract_gem_windows_safe(self, archive_path: Path, dest_dir: Path) -> bool:
         """Windows-safe gem extraction with retry logic and permission handling"""
-        is_windows = platform.system().lower() == 'windows'
+        is_windows = platform.system().lower() == "windows"
         max_retries = 3 if is_windows else 1
-        
+
         for attempt in range(max_retries):
             try:
                 print(f"  [INFO] Extracting Ruby gem (attempt {attempt + 1}/{max_retries})...")
-                
+
                 # Step 1: Extract the gem tar archive
-                with tarfile.open(archive_path, 'r') as tar:
+                with tarfile.open(archive_path, "r") as tar:
                     # Extract with more permissive permissions on Windows
                     if is_windows:
                         # Extract members individually with error handling
@@ -128,24 +123,24 @@ class CorporateDownloader:
                                 continue
                     else:
                         tar.extractall(dest_dir)
-                
+
                 # Step 2: Wait briefly for Windows file system to release locks
                 if is_windows:
                     time.sleep(0.5)
-                
+
                 # Step 3: Extract the data.tar.gz with retry logic
-                data_tar = dest_dir / 'data.tar.gz'
+                data_tar = dest_dir / "data.tar.gz"
                 if data_tar.exists():
                     self._extract_data_tar_with_retry(data_tar, dest_dir, is_windows)
-                
+
                 # Step 4: Extract metadata.gz if it exists (optional)
-                metadata_gz = dest_dir / 'metadata.gz'
+                metadata_gz = dest_dir / "metadata.gz"
                 if metadata_gz.exists():
                     self._extract_metadata_safely(metadata_gz, dest_dir, is_windows)
-                
+
                 print("  ✓ Ruby gem extracted successfully")
                 return True
-                
+
             except Exception as e:
                 if attempt < max_retries - 1:
                     print(f"    [RETRY] Extraction failed, retrying in 1 second: {e}")
@@ -154,16 +149,16 @@ class CorporateDownloader:
                 print(f"    [ERROR] Final attempt failed: {e}")
                 # Try partial extraction as fallback
                 return self._fallback_gem_extraction(archive_path, dest_dir)
-        
+
         return False
-    
+
     def _extract_data_tar_with_retry(self, data_tar: Path, dest_dir: Path, is_windows: bool):
         """Extract data.tar.gz with Windows-specific retry logic"""
         max_attempts = 3 if is_windows else 1
-        
+
         for attempt in range(max_attempts):
             try:
-                with gzip.open(data_tar, 'rb') as gz:
+                with gzip.open(data_tar, "rb") as gz:
                     with tarfile.open(fileobj=gz) as tar:
                         if is_windows:
                             # Extract members individually on Windows
@@ -175,7 +170,7 @@ class CorporateDownloader:
                                     continue
                         else:
                             tar.extractall(dest_dir)
-                
+
                 # Try to remove the intermediate file with retry
                 for cleanup_attempt in range(3):
                     try:
@@ -190,9 +185,9 @@ class CorporateDownloader:
                         print(f"      [WARN] Could not remove {data_tar}: {e}")
                         print("      [INFO] This is normal on Windows and won't affect functionality")
                         break
-                
+
                 return  # Success
-                
+
             except Exception as e:
                 if attempt < max_attempts - 1:
                     print(f"      [RETRY] Data extraction failed, retrying: {e}")
@@ -201,7 +196,7 @@ class CorporateDownloader:
                 print(f"      [WARN] Could not extract gem data after {max_attempts} attempts: {e}")
                 print("      [INFO] Continuing with partial extraction")
                 return
-    
+
     def _extract_metadata_safely(self, metadata_gz: Path, dest_dir: Path, is_windows: bool):
         """Safely extract metadata.gz without failing the whole process"""
         try:
@@ -209,38 +204,38 @@ class CorporateDownloader:
             if is_windows:
                 try:
                     # Test file access
-                    with open(metadata_gz, 'rb') as test_file:
+                    with open(metadata_gz, "rb") as test_file:
                         test_file.read(1)
                 except (PermissionError, OSError) as e:
                     print(f"      [WARN] Metadata file not accessible: {e}")
                     return
-            
-            with gzip.open(metadata_gz, 'rb') as gz:
+
+            with gzip.open(metadata_gz, "rb") as gz:
                 metadata_content = gz.read()
                 # Save metadata as plain text for debugging
-                metadata_txt = dest_dir / 'metadata.yaml'
-                with open(metadata_txt, 'wb') as f:
+                metadata_txt = dest_dir / "metadata.yaml"
+                with open(metadata_txt, "wb") as f:
                     f.write(metadata_content)
                 print(f"      [INFO] Extracted metadata to {metadata_txt}")
-                
+
         except Exception as e:
             print(f"      [WARN] Could not extract metadata: {e}")
             print("      [INFO] This won't affect gem functionality")
-    
+
     def _fallback_gem_extraction(self, archive_path: Path, dest_dir: Path) -> bool:
         """Fallback extraction method for problematic gems"""
         print("  [FALLBACK] Attempting basic gem extraction...")
         try:
             # Just extract the basic tar without processing internals
-            with tarfile.open(archive_path, 'r') as tar:
+            with tarfile.open(archive_path, "r") as tar:
                 # Get list of members and extract only safe ones
                 safe_members = []
                 for member in tar.getmembers():
                     # Skip problematic files
-                    if member.name.endswith(('.gz', '.sig')):
+                    if member.name.endswith((".gz", ".sig")):
                         continue
                     safe_members.append(member)
-                
+
                 if safe_members:
                     tar.extractall(dest_dir, members=safe_members)
                     print(f"    [INFO] Extracted {len(safe_members)} safe files")
@@ -255,9 +250,9 @@ class CorporateDownloader:
 
 def create_gopls_installer(output_dir: Path):
     """Create installer script for gopls since it doesn't have pre-built binaries"""
-    gopls_dir = output_dir / 'gopls'
+    gopls_dir = output_dir / "gopls"
     gopls_dir.mkdir(exist_ok=True)
-    
+
     # Windows batch installer
     installer_bat = """@echo off
 echo Installing gopls (Go Language Server)...
@@ -300,10 +295,10 @@ if errorlevel 1 (
 
 pause
 """
-    
-    with open(gopls_dir / 'install-gopls.bat', 'w') as f:
+
+    with open(gopls_dir / "install-gopls.bat", "w") as f:
         f.write(installer_bat)
-    
+
     # Create README
     readme = """# gopls - Go Language Server
 
@@ -329,37 +324,37 @@ The gopls binary will be available at:
 - Windows: %USERPROFILE%\\go\\bin\\gopls.exe or %GOPATH%\\bin\\gopls.exe
 - Linux/Mac: ~/go/bin/gopls or $GOPATH/bin/gopls
 """
-    
-    with open(gopls_dir / 'README.md', 'w') as f:
+
+    with open(gopls_dir / "README.md", "w") as f:
         f.write(readme)
-    
+
     print(f"  ✓ Created gopls installer in {gopls_dir}")
 
 
 def get_language_servers() -> dict[str, dict[str, Any]]:
     """Define language servers to download"""
     return {
-        'pyright': {
-            'url': 'https://registry.npmjs.org/pyright/-/pyright-1.1.396.tgz',
-            'type': 'tgz',
-            'description': 'Python Language Server (Pyright)',
-            'post_extract': lambda d: (d / 'package').rename(d / 'pyright')
+        "pyright": {
+            "url": "https://registry.npmjs.org/pyright/-/pyright-1.1.396.tgz",
+            "type": "tgz",
+            "description": "Python Language Server (Pyright)",
+            "post_extract": lambda d: (d / "package").rename(d / "pyright"),
         },
-        'typescript': {
-            'url': 'https://registry.npmjs.org/typescript-language-server/-/typescript-language-server-4.3.3.tgz',
-            'type': 'tgz',
-            'description': 'TypeScript Language Server',
+        "typescript": {
+            "url": "https://registry.npmjs.org/typescript-language-server/-/typescript-language-server-4.3.3.tgz",
+            "type": "tgz",
+            "description": "TypeScript Language Server",
         },
-        'vscode-langservers-extracted': {
-            'url': 'https://registry.npmjs.org/vscode-langservers-extracted/-/vscode-langservers-extracted-4.10.0.tgz',
-            'type': 'tgz',
-            'description': 'VS Code Language Servers (HTML, CSS, JSON)',
+        "vscode-langservers-extracted": {
+            "url": "https://registry.npmjs.org/vscode-langservers-extracted/-/vscode-langservers-extracted-4.10.0.tgz",
+            "type": "tgz",
+            "description": "VS Code Language Servers (HTML, CSS, JSON)",
         },
         # NOTE: gopls does not provide pre-built binaries and must be installed via 'go install golang.org/x/tools/gopls@latest'
         # Uncomment the following when/if golang provides direct binary downloads
         # 'gopls': {
         #     'url': 'https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls_v0.20.0_windows_amd64.zip',
-        #     'type': 'zip', 
+        #     'type': 'zip',
         #     'description': 'Go Language Server (gopls) - REQUIRES GO TOOLCHAIN',
         #     'platform_specific': True,
         #     'note': 'gopls must be installed via: go install golang.org/x/tools/gopls@latest',
@@ -369,184 +364,180 @@ def get_language_servers() -> dict[str, dict[str, Any]]:
         #         'darwin': 'https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls_v0.20.0_darwin_amd64.tar.gz'
         #     }
         # },
-        'rust-analyzer': {
-            'url': 'https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-30/rust-analyzer-x86_64-pc-windows-msvc.zip',
-            'type': 'zip',
-            'description': 'Rust Language Server',
-            'platform_specific': True,
-            'platforms': {
-                'win32': 'https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-30/rust-analyzer-x86_64-pc-windows-msvc.zip',
-                'linux': 'https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-30/rust-analyzer-x86_64-unknown-linux-gnu.gz',
-                'darwin': 'https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-30/rust-analyzer-x86_64-apple-darwin.gz'
-            }
+        "rust-analyzer": {
+            "url": "https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-30/rust-analyzer-x86_64-pc-windows-msvc.zip",
+            "type": "zip",
+            "description": "Rust Language Server",
+            "platform_specific": True,
+            "platforms": {
+                "win32": "https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-30/rust-analyzer-x86_64-pc-windows-msvc.zip",
+                "linux": "https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-30/rust-analyzer-x86_64-unknown-linux-gnu.gz",
+                "darwin": "https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-30/rust-analyzer-x86_64-apple-darwin.gz",
+            },
         },
-        'jdtls': {
-            'url': 'https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz',
-            'type': 'tar.gz',
-            'description': 'Java Language Server (Eclipse JDT.LS)',
+        "jdtls": {
+            "url": "https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz",
+            "type": "tar.gz",
+            "description": "Java Language Server (Eclipse JDT.LS)",
         },
-        'omnisharp': {
-            'url': 'https://github.com/OmniSharp/omnisharp-roslyn/releases/download/v1.39.12/omnisharp-win-x64.zip',
-            'type': 'zip',
-            'description': 'C# Language Server (OmniSharp)',
-            'platform_specific': True,
-            'platforms': {
-                'win32': 'https://github.com/OmniSharp/omnisharp-roslyn/releases/download/v1.39.12/omnisharp-win-x64.zip',
-                'linux': 'https://github.com/OmniSharp/omnisharp-roslyn/releases/download/v1.39.12/omnisharp-linux-x64.tar.gz',
-                'darwin': 'https://github.com/OmniSharp/omnisharp-roslyn/releases/download/v1.39.12/omnisharp-osx-x64.tar.gz'
-            }
+        "omnisharp": {
+            "url": "https://github.com/OmniSharp/omnisharp-roslyn/releases/download/v1.39.12/omnisharp-win-x64.zip",
+            "type": "zip",
+            "description": "C# Language Server (OmniSharp)",
+            "platform_specific": True,
+            "platforms": {
+                "win32": "https://github.com/OmniSharp/omnisharp-roslyn/releases/download/v1.39.12/omnisharp-win-x64.zip",
+                "linux": "https://github.com/OmniSharp/omnisharp-roslyn/releases/download/v1.39.12/omnisharp-linux-x64.tar.gz",
+                "darwin": "https://github.com/OmniSharp/omnisharp-roslyn/releases/download/v1.39.12/omnisharp-osx-x64.tar.gz",
+            },
         },
-        'clangd': {
-            'url': 'https://github.com/clangd/clangd/releases/download/19.1.0/clangd-windows-19.1.0.zip',
-            'type': 'zip',
-            'description': 'C/C++ Language Server (clangd)',
-            'platform_specific': True,
-            'platforms': {
-                'win32': 'https://github.com/clangd/clangd/releases/download/19.1.0/clangd-windows-19.1.0.zip',
-                'linux': 'https://github.com/clangd/clangd/releases/download/19.1.0/clangd-linux-19.1.0.zip',
-                'darwin': 'https://github.com/clangd/clangd/releases/download/19.1.0/clangd-mac-19.1.0.zip'
-            }
+        "clangd": {
+            "url": "https://github.com/clangd/clangd/releases/download/19.1.0/clangd-windows-19.1.0.zip",
+            "type": "zip",
+            "description": "C/C++ Language Server (clangd)",
+            "platform_specific": True,
+            "platforms": {
+                "win32": "https://github.com/clangd/clangd/releases/download/19.1.0/clangd-windows-19.1.0.zip",
+                "linux": "https://github.com/clangd/clangd/releases/download/19.1.0/clangd-linux-19.1.0.zip",
+                "darwin": "https://github.com/clangd/clangd/releases/download/19.1.0/clangd-mac-19.1.0.zip",
+            },
         },
-        'bash-language-server': {
-            'url': 'https://registry.npmjs.org/bash-language-server/-/bash-language-server-5.6.0.tgz',
-            'type': 'tgz',
-            'description': 'Bash Language Server',
+        "bash-language-server": {
+            "url": "https://registry.npmjs.org/bash-language-server/-/bash-language-server-5.6.0.tgz",
+            "type": "tgz",
+            "description": "Bash Language Server",
         },
-        'solargraph': {
-            'url': 'https://rubygems.org/downloads/solargraph-0.50.0.gem',
-            'type': 'gem',
-            'description': 'Ruby Language Server (Solargraph)',
-            'note': 'Requires Ruby runtime'
+        "solargraph": {
+            "url": "https://rubygems.org/downloads/solargraph-0.50.0.gem",
+            "type": "gem",
+            "description": "Ruby Language Server (Solargraph)",
+            "note": "Requires Ruby runtime",
         },
-        'intelephense': {
-            'url': 'https://registry.npmjs.org/intelephense/-/intelephense-1.10.4.tgz',
-            'type': 'tgz',
-            'description': 'PHP Language Server (Intelephense)',
+        "intelephense": {
+            "url": "https://registry.npmjs.org/intelephense/-/intelephense-1.10.4.tgz",
+            "type": "tgz",
+            "description": "PHP Language Server (Intelephense)",
         },
-        'terraform-ls': {
-            'url': 'https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_windows_amd64.zip',
-            'type': 'zip',
-            'description': 'Terraform Language Server',
-            'platform_specific': True,
-            'platforms': {
-                'win32': 'https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_windows_amd64.zip',
-                'linux': 'https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_linux_amd64.zip',
-                'darwin': 'https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_darwin_amd64.zip'
-            }
+        "terraform-ls": {
+            "url": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_windows_amd64.zip",
+            "type": "zip",
+            "description": "Terraform Language Server",
+            "platform_specific": True,
+            "platforms": {
+                "win32": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_windows_amd64.zip",
+                "linux": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_linux_amd64.zip",
+                "darwin": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_darwin_amd64.zip",
+            },
         },
-        'elixir-ls': {
-            'url': 'https://github.com/elixir-lsp/elixir-ls/releases/download/v0.24.1/elixir-ls-v0.24.1.zip',
-            'type': 'zip',
-            'description': 'Elixir Language Server',
+        "elixir-ls": {
+            "url": "https://github.com/elixir-lsp/elixir-ls/releases/download/v0.24.1/elixir-ls-v0.24.1.zip",
+            "type": "zip",
+            "description": "Elixir Language Server",
         },
-        'clojure-lsp': {
-            'url': 'https://github.com/clojure-lsp/clojure-lsp/releases/download/2025.06.13-20.45.44/clojure-lsp-native-windows-amd64.zip',
-            'type': 'zip',
-            'description': 'Clojure Language Server',
-            'platform_specific': True,
-            'platforms': {
-                'win32': 'https://github.com/clojure-lsp/clojure-lsp/releases/download/2025.06.13-20.45.44/clojure-lsp-native-windows-amd64.zip',
-                'linux': 'https://github.com/clojure-lsp/clojure-lsp/releases/download/2025.06.13-20.45.44/clojure-lsp-native-linux-amd64.zip',
-                'darwin': 'https://github.com/clojure-lsp/clojure-lsp/releases/download/2025.06.13-20.45.44/clojure-lsp-native-macos-amd64.zip'
-            }
-        }
+        "clojure-lsp": {
+            "url": "https://github.com/clojure-lsp/clojure-lsp/releases/download/2025.06.13-20.45.44/clojure-lsp-native-windows-amd64.zip",
+            "type": "zip",
+            "description": "Clojure Language Server",
+            "platform_specific": True,
+            "platforms": {
+                "win32": "https://github.com/clojure-lsp/clojure-lsp/releases/download/2025.06.13-20.45.44/clojure-lsp-native-windows-amd64.zip",
+                "linux": "https://github.com/clojure-lsp/clojure-lsp/releases/download/2025.06.13-20.45.44/clojure-lsp-native-linux-amd64.zip",
+                "darwin": "https://github.com/clojure-lsp/clojure-lsp/releases/download/2025.06.13-20.45.44/clojure-lsp-native-macos-amd64.zip",
+            },
+        },
     }
 
 
 def main():
     # Parse arguments
     import argparse
-    parser = argparse.ArgumentParser(description='Download language servers for offline deployment')
-    parser.add_argument('--proxy', help='HTTP proxy URL')
-    parser.add_argument('--cert', help='CA certificate bundle path')
-    parser.add_argument('--output', default='language-servers', help='Output directory')
-    parser.add_argument('--servers', nargs='+', help='Specific servers to download')
+
+    parser = argparse.ArgumentParser(description="Download language servers for offline deployment")
+    parser.add_argument("--proxy", help="HTTP proxy URL")
+    parser.add_argument("--cert", help="CA certificate bundle path")
+    parser.add_argument("--output", default="language-servers", help="Output directory")
+    parser.add_argument("--servers", nargs="+", help="Specific servers to download")
     args = parser.parse_args()
-    
+
     # Initialize downloader
     downloader = CorporateDownloader(args.proxy, args.cert)
-    
+
     # Create output directory
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Get platform
     platform = sys.platform
-    
+
     # Get servers to download
     all_servers = get_language_servers()
     if args.servers:
         servers = {k: v for k, v in all_servers.items() if k in args.servers}
     else:
         servers = all_servers
-    
+
     print(f"\nDownloading {len(servers)} language servers to {output_dir}")
     print("=" * 60)
-    
+
     # Create gopls installer since it doesn't have pre-built binaries
     create_gopls_installer(output_dir)
-    
+
     print("NOTE: gopls (Go Language Server) is not included as it doesn't provide")
     print("      pre-built binaries. Install it via: go install golang.org/x/tools/gopls@latest")
     print("=" * 60)
-    
+
     success_count = 0
-    
+
     for name, info in servers.items():
         server_dir = output_dir / name
         server_dir.mkdir(exist_ok=True)
-        
+
         # Get platform-specific URL if needed
-        if info.get('platform_specific'):
-            url = info['platforms'].get(platform, info['url'])
-            archive_type = 'zip' if platform == 'win32' else info['type']
+        if info.get("platform_specific"):
+            url = info["platforms"].get(platform, info["url"])
+            archive_type = "zip" if platform == "win32" else info["type"]
         else:
-            url = info['url']
-            archive_type = info['type']
-        
+            url = info["url"]
+            archive_type = info["type"]
+
         # Download
         archive_name = f"{name}.{archive_type}"
         archive_path = server_dir / archive_name
-        
-        if downloader.download_file(url, archive_path, info['description']):
+
+        if downloader.download_file(url, archive_path, info["description"]):
             # Extract
             if downloader.extract_archive(archive_path, server_dir, archive_type):
                 # Run post-extract if defined
-                if 'post_extract' in info:
+                if "post_extract" in info:
                     try:
-                        info['post_extract'](server_dir)
+                        info["post_extract"](server_dir)
                     except:
                         pass
-                
+
                 # Clean up archive
                 archive_path.unlink()
                 success_count += 1
-            
+
         print()
-    
+
     print("=" * 60)
     print(f"Successfully downloaded {success_count}/{len(servers)} language servers")
-    
+
     if success_count < len(servers):
         print("\nFailed servers can be manually downloaded from:")
         for name, info in servers.items():
             if not (output_dir / name).exists():
                 print(f"  - {name}: {info['url']}")
-    
+
     # Create manifest
-    manifest = {
-        'version': '1.0',
-        'servers': list(servers.keys()),
-        'platform': platform,
-        'success_count': success_count
-    }
-    
-    with open(output_dir / 'manifest.json', 'w') as f:
+    manifest = {"version": "1.0", "servers": list(servers.keys()), "platform": platform, "success_count": success_count}
+
+    with open(output_dir / "manifest.json", "w") as f:
         json.dump(manifest, f, indent=2)
-    
+
     print(f"\nPackage ready at: {output_dir}")
     print("Copy this directory to target machines for offline deployment")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

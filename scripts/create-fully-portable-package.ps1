@@ -197,6 +197,33 @@ if (Test-Path "$OutputPath\dependencies\requirements.txt") {
         # FIXED: Use consistent target directory for both Python and dependencies
         $targetDir = "$OutputPath\Lib\site-packages"
         
+        # ENHANCED: Clear existing installations to avoid conflicts
+        if (Test-Path $targetDir) {
+            Write-Host "[INFO] Clearing existing site-packages to avoid conflicts..." -ForegroundColor Yellow
+            try {
+                # Remove only non-essential directories, keep core Python modules
+                $dirsToRemove = Get-ChildItem $targetDir -Directory | Where-Object { 
+                    $_.Name -notmatch "^(_|site|pip|setuptools|wheel)" 
+                }
+                foreach ($dir in $dirsToRemove) {
+                    Remove-Item $dir.FullName -Recurse -Force -ErrorAction SilentlyContinue
+                }
+                
+                # Remove .pth files and dist-info directories
+                Get-ChildItem $targetDir -Filter "*.pth" | Remove-Item -Force -ErrorAction SilentlyContinue
+                Get-ChildItem $targetDir -Filter "*dist-info" -Directory | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+                
+                Write-Host "[OK] Cleared existing packages" -ForegroundColor Green
+            } catch {
+                Write-Host "[WARN] Could not fully clear existing packages: $($_.Exception.Message)" -ForegroundColor Yellow
+            }
+        }
+        
+        # Ensure target directory exists
+        if (-not (Test-Path $targetDir)) {
+            New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+        }
+        
         # Install UV first (if available)
         $uvWheels = Get-ChildItem "$OutputPath\dependencies\uv-deps\*.whl" -ErrorAction SilentlyContinue
         if ($uvWheels) {
@@ -204,9 +231,11 @@ if (Test-Path "$OutputPath\dependencies\requirements.txt") {
             # FIXED: Use forward slashes in paths passed to Python for cross-platform compatibility
             $uvDepsPath = "$OutputPath\dependencies\uv-deps" -replace '\\', '/'
             $targetDirForward = $targetDir -replace '\\', '/'
-            & "$OutputPath\python\python.exe" -m pip install --no-index --find-links $uvDepsPath --target $targetDirForward uv
+            & "$OutputPath\python\python.exe" -m pip install --no-index --find-links $uvDepsPath --target $targetDirForward --force-reinstall uv
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "[WARN] UV installation failed, continuing without UV..." -ForegroundColor Yellow
+            } else {
+                Write-Host "[OK] UV installed successfully" -ForegroundColor Green
             }
         }
         
@@ -217,16 +246,50 @@ if (Test-Path "$OutputPath\dependencies\requirements.txt") {
         $reqPath = "$OutputPath\dependencies\requirements.txt" -replace '\\', '/'
         $targetDirForward = $targetDir -replace '\\', '/'
         
-        & "$OutputPath\python\python.exe" -m pip install --no-index --find-links $depsPath --target $targetDirForward --requirement $reqPath
+        # ENHANCED: Add --force-reinstall to handle existing files
+        $installCmd = @(
+            "$OutputPath\python\python.exe", "-m", "pip", "install",
+            "--no-index",
+            "--find-links", $depsPath,
+            "--target", $targetDirForward,
+            "--force-reinstall",
+            "--no-deps",  # Avoid dependency resolution issues
+            "--requirement", $reqPath
+        )
+        
+        Write-Host "[DEBUG] Running pip install command..." -ForegroundColor Gray
+        & $installCmd[0] $installCmd[1..$($installCmd.Length-1)]
     }
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host "[OK] Installed all dependencies offline" -ForegroundColor Green
         $OfflineMode = $true
     } else {
-        Write-Host "[WARN] Offline installation failed, will install online during first run" -ForegroundColor Yellow
-        Write-Host "[DEBUG] Last exit code: $LASTEXITCODE" -ForegroundColor Yellow
-        $OfflineMode = $false
+        Write-Host "[WARN] Offline installation failed (exit code: $LASTEXITCODE), will install online during first run" -ForegroundColor Yellow
+        
+        # Try individual package installation as fallback
+        Write-Host "[INFO] Attempting fallback individual package installation..." -ForegroundColor Yellow
+        $wheelFiles = Get-ChildItem "$OutputPath\dependencies\*.whl" -ErrorAction SilentlyContinue
+        if ($wheelFiles) {
+            $successCount = 0
+            foreach ($wheel in $wheelFiles) {
+                Write-Host "  Installing: $($wheel.Name)" -ForegroundColor Gray
+                & "$OutputPath\python\python.exe" -m pip install --no-index --target $targetDir --force-reinstall $wheel.FullName
+                if ($LASTEXITCODE -eq 0) {
+                    $successCount++
+                }
+            }
+            
+            if ($successCount -gt 0) {
+                Write-Host "[OK] Installed $successCount individual packages as fallback" -ForegroundColor Green
+                $OfflineMode = $true
+            } else {
+                Write-Host "[WARN] Fallback installation also failed" -ForegroundColor Yellow
+                $OfflineMode = $false
+            }
+        } else {
+            $OfflineMode = $false
+        }
     }
 } else {
     Write-Host "[WARN] No offline dependencies found, will install online during first run" -ForegroundColor Yellow
