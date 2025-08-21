@@ -12,10 +12,11 @@ from pathlib import Path
 
 
 class OfflineDependencyDownloader:
-    def __init__(self, proxy_url: str | None = None, ca_cert_path: str | None = None, python_exe: str | None = None):
+    def __init__(self, proxy_url: str | None = None, ca_cert_path: str | None = None, python_exe: str | None = None, platform_override: str | None = None):
         self.proxy_url = proxy_url or os.environ.get("HTTP_PROXY")
         self.ca_cert_path = ca_cert_path or os.environ.get("REQUESTS_CA_BUNDLE")
         self.python_exe = python_exe or sys.executable  # Allow override of Python executable
+        self.platform_override = platform_override
         self.pip_args = self._build_pip_args()
 
     def _build_pip_args(self) -> list[str]:
@@ -34,6 +35,38 @@ class OfflineDependencyDownloader:
         args.extend(["--trusted-host", "pypi.org", "--trusted-host", "pypi.python.org", "--trusted-host", "files.pythonhosted.org"])
 
         return args
+
+    def _get_platform_tag(self) -> str:
+        """Get the appropriate platform tag for pip downloads"""
+        if self.platform_override:
+            return self.platform_override
+            
+        import platform
+        import sys
+        
+        system = platform.system().lower()
+        machine = platform.machine().lower()
+        
+        if system == "windows":
+            if machine in ["amd64", "x86_64"]:
+                return "win_amd64"
+            elif machine in ["i386", "i686", "x86"]:
+                return "win32"
+            else:
+                return "win_amd64"  # Default for Windows
+        elif system == "darwin":  # macOS
+            if machine in ["arm64", "aarch64"]:
+                return "macosx_11_0_arm64"
+            else:
+                return "macosx_10_9_x86_64"
+        elif system == "linux":
+            if machine in ["aarch64", "arm64"]:
+                return "linux_aarch64"
+            else:
+                return "linux_x86_64"
+        else:
+            # Fallback - let pip determine automatically
+            return "any"
 
     def create_requirements_txt(self, pyproject_path: Path, output_path: Path):
         """Extract dependencies from pyproject.toml and create requirements.txt"""
@@ -248,7 +281,9 @@ class OfflineDependencyDownloader:
         uv_packages = ["uv", "packaging>=21.3", "platformdirs>=2.5.0"]  # UV and its core dependencies
 
         # FIXED: Proper argument construction - packages should be separate arguments
-        base_args = ["--dest", str(uv_dir_abs), "--platform", "win_amd64", "--only-binary=:all:"] + self.pip_args
+        # Detect platform dynamically instead of hardcoding win_amd64
+        platform_tag = self._get_platform_tag()
+        base_args = ["--dest", str(uv_dir_abs), "--platform", platform_tag, "--only-binary=:all:"] + self.pip_args
 
         # Try each method
         for i, pip_cmd in enumerate(pip_methods, 1):
@@ -295,7 +330,7 @@ class OfflineDependencyDownloader:
         for package in uv_packages:
             print(f"  Downloading: {package}")
             cmd = (
-                [self.python_exe, "-m", "pip", "download", "--dest", str(uv_dir_abs), "--platform", "win_amd64", "--only-binary=:all:"]
+                [self.python_exe, "-m", "pip", "download", "--dest", str(uv_dir_abs), "--platform", platform_tag, "--only-binary=:all:"]
                 + self.pip_args
                 + [package]
             )
@@ -315,7 +350,18 @@ class OfflineDependencyDownloader:
         return successful_uv_downloads > 0
 
     def create_offline_installer(self, output_dir: Path):
-        """Create offline installation script"""
+        """Create offline installation script for current platform"""
+        import platform
+        
+        system = platform.system().lower()
+        
+        if system == "windows":
+            self._create_windows_installer(output_dir)
+        else:
+            self._create_unix_installer(output_dir)
+    
+    def _create_windows_installer(self, output_dir: Path):
+        """Create Windows batch installer"""
         installer_script = output_dir / "install-dependencies-offline.bat"
 
         script_content = """@echo off
@@ -375,7 +421,88 @@ pause
         with open(installer_script, "w") as f:
             f.write(script_content)
 
-        print(f"✓ Created offline installer: {installer_script}")
+        print(f"✓ Created Windows offline installer: {installer_script}")
+    
+    def _create_unix_installer(self, output_dir: Path):
+        """Create Unix shell installer"""
+        installer_script = output_dir / "install-dependencies-offline.sh"
+
+        script_content = """#!/bin/bash
+echo "Installing Serena dependencies offline..."
+
+# Set paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SERENA_PORTABLE="$(dirname "$SCRIPT_DIR")"
+DEPENDENCIES="$SCRIPT_DIR"
+TARGET_DIR="$SERENA_PORTABLE/lib/python3.11/site-packages"
+
+# Find Python executable
+if command -v python3 &> /dev/null; then
+    PYTHON_EXE="python3"
+elif command -v python &> /dev/null; then
+    PYTHON_EXE="python"
+else
+    echo "❌ Error: No Python executable found"
+    exit 1
+fi
+
+echo "Using Python: $PYTHON_EXE"
+
+# Create target directory
+mkdir -p "$TARGET_DIR"
+
+# Check if pip module is available
+echo "Checking pip availability..."
+if ! "$PYTHON_EXE" -m pip --version &>/dev/null; then
+    echo "[WARN] pip module not available, trying alternative installation..."
+    alternative_install=true
+else
+    alternative_install=false
+fi
+
+if [ "$alternative_install" = false ]; then
+    # Install UV first (if available)
+    if [ -d "$DEPENDENCIES/uv-deps" ]; then
+        echo "Installing UV..."
+        "$PYTHON_EXE" -m pip install --no-index --find-links "$DEPENDENCIES/uv-deps" --target "$TARGET_DIR" uv
+    fi
+
+    # Install main dependencies
+    echo "Installing Serena dependencies..."
+    "$PYTHON_EXE" -m pip install --no-index --find-links "$DEPENDENCIES" --target "$TARGET_DIR" --requirement "$DEPENDENCIES/requirements.txt"
+else
+    echo "Attempting manual wheel installation..."
+    # Try to manually extract wheel files - fallback method
+    for wheel in "$DEPENDENCIES"/*.whl; do
+        if [ -f "$wheel" ]; then
+            echo "Installing $(basename "$wheel")..."
+            # Extract wheel using Python zipfile module
+            "$PYTHON_EXE" -m zipfile -e "$wheel" "$TARGET_DIR/" 2>/dev/null || true
+        fi
+    done
+fi
+
+# Verify installation
+echo "Verifying installation..."
+if "$PYTHON_EXE" -c "import serena; print('✓ Serena dependencies installed successfully')" 2>/dev/null; then
+    echo ""
+    echo "✓ All dependencies installed successfully!"
+    echo "You can now use serena-mcp-portable"
+else
+    echo "✗ Installation verification failed"
+    echo "[INFO] You may need internet access for first run"
+    exit 1
+fi
+"""
+
+        with open(installer_script, "w") as f:
+            f.write(script_content)
+        
+        # Make the script executable
+        import os
+        os.chmod(installer_script, 0o755)
+
+        print(f"✓ Created Unix offline installer: {installer_script}")
 
     def create_manifest(self, output_dir: Path, dependencies: list[str]):
         """Create manifest with dependency information"""
@@ -407,13 +534,13 @@ def main():
     parser.add_argument("--output", default="dependencies", help="Output directory for wheels")
     parser.add_argument("--pyproject", default="pyproject.toml", help="Path to pyproject.toml")
     parser.add_argument("--python-version", default="3.11", help="Target Python version")
-    parser.add_argument("--platform", default="win_amd64", help="Target platform")
+    parser.add_argument("--platform", help="Target platform (auto-detected if not specified)")
     parser.add_argument("--python-exe", help="Path to Python executable to use for pip commands")
 
     args = parser.parse_args()
 
-    # Initialize downloader with optional Python executable path
-    downloader = OfflineDependencyDownloader(args.proxy, args.cert, args.python_exe)
+    # Initialize downloader with optional Python executable path and platform override
+    downloader = OfflineDependencyDownloader(args.proxy, args.cert, args.python_exe, args.platform)
 
     # Setup paths
     pyproject_path = Path(args.pyproject)
