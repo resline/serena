@@ -104,6 +104,10 @@ class OfflineDependencyDownloader:
     def download_dependencies(self, requirements_path: Path, output_dir: Path, python_version: str = "3.11"):
         """Download all dependencies as wheels"""
         print(f"Downloading dependencies to {output_dir}...")
+        
+        # Get platform tag for downloads
+        platform_tag = self._get_platform_tag()
+        print(f"Target platform: {platform_tag}")
 
         # Create output directory
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -213,13 +217,22 @@ class OfflineDependencyDownloader:
     def _download_individual_packages(self, requirements: list[str], output_dir: Path) -> bool:
         """Fallback method to download packages individually"""
         print("Attempting individual package downloads...")
+        
+        # Get platform tag for downloads
+        platform_tag = self._get_platform_tag()
 
         successful_downloads = 0
 
         for requirement in requirements:
             print(f"  Downloading: {requirement}")
-            # Use the correct Python executable (embedded Python, not system Python)
-            cmd = [self.python_exe, "-m", "pip", "download", "--dest", str(output_dir), "--prefer-binary"] + self.pip_args + [requirement]
+            # Build command with platform-specific options
+            cmd = [self.python_exe, "-m", "pip", "download", "--dest", str(output_dir), "--prefer-binary"]
+            
+            # Add platform-specific options for Windows
+            if "win" in platform_tag.lower():
+                cmd.extend(["--platform", platform_tag, "--only-binary", ":all:"])
+            
+            cmd.extend(self.pip_args + [requirement])
 
             try:
                 # CRITICAL FIX: Do NOT use shell=True - it breaks on Windows
@@ -350,14 +363,18 @@ class OfflineDependencyDownloader:
         return successful_uv_downloads > 0
 
     def create_offline_installer(self, output_dir: Path):
-        """Create offline installation script for current platform"""
-        import platform
+        """Create offline installation script for target platform"""
+        # Determine target platform from platform tag or current system
+        platform_tag = self._get_platform_tag()
         
-        system = platform.system().lower()
-        
-        if system == "windows":
+        # Create installer based on target platform, not current OS
+        if "win" in platform_tag.lower():
             self._create_windows_installer(output_dir)
+        elif any(x in platform_tag.lower() for x in ["linux", "macos", "darwin"]):
+            self._create_unix_installer(output_dir)
         else:
+            # Create both installers if platform is unclear
+            self._create_windows_installer(output_dir)
             self._create_unix_installer(output_dir)
     
     def _create_windows_installer(self, output_dir: Path):

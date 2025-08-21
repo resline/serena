@@ -16,13 +16,14 @@ def test_language_server_urls():
     print("🔍 Testing Language Server URLs...")
 
     urls_to_test = [
-        ("Go (gopls)", "https://github.com/golang/tools/releases/download/gopls/v0.16.2/gopls_v0.16.2_windows_amd64.zip"),
+        # gopls doesn't provide pre-built binaries anymore, skip it
         ("Java (JDT.LS)", "https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz"),
-        ("Terraform", "https://github.com/hashicorp/terraform-ls/releases/download/v0.36.5/terraform-ls_0.36.5_windows_amd64.zip"),
+        ("Terraform", "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_windows_amd64.zip"),
         (
             "Clojure",
             "https://github.com/clojure-lsp/clojure-lsp/releases/download/2025.06.13-20.45.44/clojure-lsp-native-windows-amd64.zip",
         ),
+        ("Rust", "https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-30/rust-analyzer-x86_64-pc-windows-msvc.zip"),
     ]
 
     results = []
