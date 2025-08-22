@@ -32,13 +32,13 @@ class CorporateDownloader:
             proxy = urllib.request.ProxyHandler({"http": self.proxy_url, "https": self.proxy_url})
             opener = urllib.request.build_opener(proxy)
             urllib.request.install_opener(opener)
-            print(f"✓ Configured proxy: {self.proxy_url}")
+            print(f"[OK] Configured proxy: {self.proxy_url}")
 
         # Setup SSL context
         self.ssl_context = ssl.create_default_context()
         if self.ca_cert_path and os.path.exists(self.ca_cert_path):
             self.ssl_context.load_verify_locations(self.ca_cert_path)
-            print(f"✓ Loaded CA certificate: {self.ca_cert_path}")
+            print(f"[OK] Loaded CA certificate: {self.ca_cert_path}")
         else:
             # For testing/dev only - disable SSL verification
             # Remove this in production!
@@ -71,11 +71,11 @@ class CorporateDownloader:
                             percent = (downloaded / total_size) * 100
                             print(f"\r  Progress: {percent:.1f}%", end="", flush=True)
 
-                print(f"\r  ✓ Downloaded {description}")
+                print(f"\r  [OK] Downloaded {description}")
                 return True
 
         except Exception as e:
-            print(f"\r  ✗ Failed to download {description}: {e!s}")
+            print(f"\r  [ERROR] Failed to download {description}: {e!s}")
             return False
 
     def extract_archive(self, archive_path: Path, dest_dir: Path, archive_type: str):
@@ -94,11 +94,11 @@ class CorporateDownloader:
             elif archive_type == "gem":
                 return self._extract_gem_windows_safe(archive_path, dest_dir)
 
-            print(f"  ✓ Extracted to {dest_dir}")
+            print(f"  [OK] Extracted to {dest_dir}")
             return True
 
         except Exception as e:
-            print(f"  ✗ Failed to extract: {e!s}")
+            print(f"  [ERROR] Failed to extract: {e!s}")
             return False
 
     def _extract_gem_windows_safe(self, archive_path: Path, dest_dir: Path) -> bool:
@@ -138,7 +138,7 @@ class CorporateDownloader:
                 if metadata_gz.exists():
                     self._extract_metadata_safely(metadata_gz, dest_dir, is_windows)
 
-                print("  ✓ Ruby gem extracted successfully")
+                print("  [OK] Ruby gem extracted successfully")
                 return True
 
             except Exception as e:
@@ -328,7 +328,7 @@ The gopls binary will be available at:
     with open(gopls_dir / "README.md", "w") as f:
         f.write(readme)
 
-    print(f"  ✓ Created gopls installer in {gopls_dir}")
+    print(f"  [OK] Created gopls installer in {gopls_dir}")
 
 
 def get_language_servers() -> dict[str, dict[str, Any]]:
