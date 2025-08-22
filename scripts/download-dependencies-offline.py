@@ -10,6 +10,18 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Handle Windows console encoding issues
+if sys.platform == "win32":
+    try:
+        # Try to set UTF-8 encoding for better Unicode support
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        if hasattr(sys.stderr, 'reconfigure'):
+            sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        # If reconfigure fails, continue with default encoding
+        pass
+
 
 class OfflineDependencyDownloader:
     def __init__(self, proxy_url: str | None = None, ca_cert_path: str | None = None, python_exe: str | None = None, platform_override: str | None = None):
@@ -25,11 +37,11 @@ class OfflineDependencyDownloader:
 
         if self.proxy_url:
             args.extend(["--proxy", self.proxy_url])
-            print(f"✓ Using proxy: {self.proxy_url}")
+            print(f"[OK] Using proxy: {self.proxy_url}")
 
         if self.ca_cert_path and os.path.exists(self.ca_cert_path):
             args.extend(["--cert", self.ca_cert_path])
-            print(f"✓ Using CA certificate: {self.ca_cert_path}")
+            print(f"[OK] Using CA certificate: {self.ca_cert_path}")
 
         # Add trusted hosts for corporate environments
         args.extend(["--trusted-host", "pypi.org", "--trusted-host", "pypi.python.org", "--trusted-host", "files.pythonhosted.org"])
@@ -98,7 +110,7 @@ class OfflineDependencyDownloader:
             for dep in dependencies:
                 f.write(f"{dep}\n")
 
-        print(f"✓ Created requirements.txt with {len(dependencies)} dependencies")
+        print(f"[OK] Created requirements.txt with {len(dependencies)} dependencies")
         return requirements_path, dependencies
 
     def download_dependencies(self, requirements_path: Path, output_dir: Path, python_version: str = "3.11"):
@@ -137,7 +149,7 @@ class OfflineDependencyDownloader:
             return False
 
         req_count = len(valid_requirements)
-        print(f"✓ Found {req_count} requirements in {requirements_path}")
+        print(f"[OK] Found {req_count} requirements in {requirements_path}")
         print(f"[DEBUG] Requirements: {', '.join(valid_requirements[:5])}{'...' if len(valid_requirements) > 5 else ''}")
 
         # FIXED: Try multiple approaches for calling pip
@@ -152,7 +164,7 @@ class OfflineDependencyDownloader:
         requirements_path_abs = requirements_path.resolve()
         output_dir_abs = output_dir.resolve()
 
-        # Build base arguments - CRITICAL: ensure --requirement comes last with the file path
+        # Build base arguments - CRITICAL: ensure --requirement comes with absolute path
         base_args = (
             [
                 "--dest",
@@ -160,7 +172,10 @@ class OfflineDependencyDownloader:
                 "--prefer-binary",
             ]
             + self.pip_args
-            + ["--requirement", str(requirements_path_abs)]
+            + [
+                "--requirement", 
+                str(requirements_path_abs)
+            ]
         )
 
         # Try each method
@@ -184,7 +199,7 @@ class OfflineDependencyDownloader:
                 result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=300)
 
                 if result.returncode == 0:
-                    print("✓ Successfully downloaded all dependencies")
+                    print("[OK] Successfully downloaded all dependencies")
                     return True
                 else:
                     print(f"  Method {i} failed with exit code {result.returncode}")
@@ -238,7 +253,7 @@ class OfflineDependencyDownloader:
                 # CRITICAL FIX: Do NOT use shell=True - it breaks on Windows
                 result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=60)
                 if result.returncode == 0:
-                    print(f"    ✓ {requirement}")
+                    print(f"    [OK] {requirement}")
                     successful_downloads += 1
                 else:
                     print(f"    ✗ {requirement}: {result.stderr.strip()}")
@@ -317,7 +332,7 @@ class OfflineDependencyDownloader:
                 # CRITICAL FIX: Do NOT use shell=True
                 result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=120)
                 if result.returncode == 0:
-                    print("✓ Downloaded UV and dependencies")
+                    print("[OK] Downloaded UV and dependencies")
                     return True
                 else:
                     print(f"  UV method {i} failed with exit code {result.returncode}")
@@ -352,7 +367,7 @@ class OfflineDependencyDownloader:
                 # CRITICAL FIX: Do NOT use shell=True
                 result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=60)
                 if result.returncode == 0:
-                    print(f"    ✓ {package}")
+                    print(f"    [OK] {package}")
                     successful_uv_downloads += 1
                 else:
                     print(f"    ✗ {package}: {result.stderr.strip()}")
@@ -421,9 +436,9 @@ for %%f in ("%DEPENDENCIES%\\*.whl") do (
 :verify
 :: Verify installation
 echo Verifying installation...
-"%PYTHONHOME%\\python.exe" -c "import serena; print('✓ Serena dependencies installed successfully')" 2>nul
+"%PYTHONHOME%\\python.exe" -c "import serena; print('[OK] Serena dependencies installed successfully')" 2>nul
 if %ERRORLEVEL% neq 0 (
-    echo ✗ Installation verification failed
+    echo [ERROR] Installation verification failed
     echo [INFO] You may need internet access for first run
     pause
     exit /b 1
@@ -438,7 +453,7 @@ pause
         with open(installer_script, "w") as f:
             f.write(script_content)
 
-        print(f"✓ Created Windows offline installer: {installer_script}")
+        print(f"[OK] Created Windows offline installer: {installer_script}")
     
     def _create_unix_installer(self, output_dir: Path):
         """Create Unix shell installer"""
@@ -501,12 +516,12 @@ fi
 
 # Verify installation
 echo "Verifying installation..."
-if "$PYTHON_EXE" -c "import serena; print('✓ Serena dependencies installed successfully')" 2>/dev/null; then
+if "$PYTHON_EXE" -c "import serena; print('[OK] Serena dependencies installed successfully')" 2>/dev/null; then
     echo ""
-    echo "✓ All dependencies installed successfully!"
+    echo "[OK] All dependencies installed successfully!"
     echo "You can now use serena-mcp-portable"
 else
-    echo "✗ Installation verification failed"
+    echo "[ERROR] Installation verification failed"
     echo "[INFO] You may need internet access for first run"
     exit 1
 fi
@@ -519,7 +534,7 @@ fi
         import os
         os.chmod(installer_script, 0o755)
 
-        print(f"✓ Created Unix offline installer: {installer_script}")
+        print(f"[OK] Created Unix offline installer: {installer_script}")
 
     def create_manifest(self, output_dir: Path, dependencies: list[str]):
         """Create manifest with dependency information"""
@@ -541,7 +556,7 @@ fi
         with open(manifest_path, "w") as f:
             json.dump(manifest, f, indent=2)
 
-        print(f"✓ Created manifest: {manifest_path}")
+        print(f"[OK] Created manifest: {manifest_path}")
 
 
 def main():
@@ -594,7 +609,7 @@ def main():
         uv_wheels = list((output_dir / "uv-deps").glob("*.whl"))
 
         print("=" * 60)
-        print("✓ Download completed successfully!")
+        print("[OK] Download completed successfully!")
         print(f"Main dependencies: {len(wheel_files)} wheels")
         print(f"UV dependencies: {len(uv_wheels)} wheels")
         print(f"Total size: {sum(f.stat().st_size for f in wheel_files + uv_wheels) / 1024 / 1024:.1f} MB")

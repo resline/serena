@@ -150,8 +150,6 @@ $depDownloadScript = "$PSScriptRoot\download-dependencies-offline.py"
 if (Test-Path $depDownloadScript) {
     Write-Host "Downloading ALL Python dependencies offline..." -ForegroundColor Yellow
     $dependencyArgs = @(
-        "--proxy", $ProxyUrl,
-        "--cert", $CertPath,
         "--output", "$OutputPath\dependencies",
         "--pyproject", "$OutputPath\serena\pyproject.toml",
         "--python-version", "3.11",
@@ -159,8 +157,13 @@ if (Test-Path $depDownloadScript) {
         "--python-exe", "$OutputPath\python\python.exe"  # Pass embedded Python path
     )
     
-    # Filter out empty arguments
-    $dependencyArgs = $dependencyArgs | Where-Object { $_ -ne "" -and $_ -ne $null }
+    # Add proxy and cert only if they have values
+    if ($ProxyUrl -and $ProxyUrl -ne "") {
+        $dependencyArgs += "--proxy", $ProxyUrl
+    }
+    if ($CertPath -and $CertPath -ne "") {
+        $dependencyArgs += "--cert", $CertPath
+    }
     
     try {
         # FIXED: Use proper Python executable for dependency download
@@ -302,11 +305,15 @@ $lsDownloadScript = "$PSScriptRoot\download-language-servers-offline.py"
 if (Test-Path $lsDownloadScript) {
     Write-Host "Downloading language servers..." -ForegroundColor Yellow
     try {
-        & "$OutputPath\python\python.exe" $lsDownloadScript `
-            --output "$OutputPath\language-servers" `
-            --proxy $ProxyUrl `
-            --cert $CertPath `
-            --python-exe "$OutputPath\python\python.exe"
+        $lsArgs = @("--output", "$OutputPath\language-servers")
+        if ($ProxyUrl -and $ProxyUrl -ne "") {
+            $lsArgs += "--proxy", $ProxyUrl
+        }
+        if ($CertPath -and $CertPath -ne "") {
+            $lsArgs += "--cert", $CertPath
+        }
+        
+        & "$OutputPath\python\python.exe" $lsDownloadScript @lsArgs
         
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[OK] Downloaded language servers" -ForegroundColor Green
