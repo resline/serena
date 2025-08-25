@@ -523,6 +523,56 @@ class CorporateDownloader:
 
         return False
 
+    def _is_windows_10_or_later(self) -> bool:
+        """Detect if running on Windows 10 or later for enhanced security handling"""
+        try:
+            if platform.system().lower() != "windows":
+                return False
+            version = platform.version()
+            major_version = int(version.split('.')[0])
+            return major_version >= 10
+        except:
+            return True
+    
+    def _test_file_accessibility(self, file_path: Path, is_windows: bool) -> bool:
+        """Test if file is accessible before attempting extraction"""
+        try:
+            if not file_path.exists():
+                return False
+            with open(file_path, "rb") as f:
+                f.read(1024)
+            if is_windows:
+                try:
+                    file_stat = file_path.stat()
+                    if file_stat.st_size == 0:
+                        print("    [WARN] Archive file appears to be empty")
+                        return False
+                    with open(file_path, "rb") as f:
+                        pass
+                except (PermissionError, OSError) as e:
+                    print(f"    [WARN] File accessibility issue: {e}")
+                    return False
+            return True
+        except Exception as e:
+            print(f"    [WARN] File accessibility test failed: {e}")
+            return False
+    
+    def _create_windows_safe_temp_dir(self) -> Path | None:
+        """Create a Windows-safe temporary directory for extraction"""
+        try:
+            temp_base = Path(tempfile.gettempdir())
+            temp_dir = temp_base / f"serena_gem_extract_{os.getpid()}_{int(time.time())}"
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            test_file = temp_dir / "test.txt"
+            with open(test_file, "w") as f:
+                f.write("test")
+            test_file.unlink()
+            print(f"    [INFO] Using temp directory: {temp_dir}")
+            return temp_dir
+        except Exception as e:
+            print(f"    [WARN] Could not create temp directory: {e}")
+            return None
+
     def _extract_data_tar_with_retry(self, data_tar: Path, dest_dir: Path, is_windows: bool):
         """Extract data.tar.gz with Windows-specific retry logic"""
         max_attempts = 3 if is_windows else 1
