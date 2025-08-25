@@ -5,18 +5,372 @@ Handles proxy and certificate issues
 """
 
 import gzip
+import hashlib
 import json
 import os
 import platform
 import ssl
+import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
 from typing import Any
+
+# Handle Windows console encoding issues for Windows 10 compatibility
+if sys.platform == "win32":
+    try:
+        # Set console to UTF-8 for Unicode support
+        os.system('chcp 65001 >nul 2>&1')
+        
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        if hasattr(sys.stderr, 'reconfigure'):
+            sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        
+        # Set environment variable for subprocess calls
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
+    except Exception:
+        # If setup fails, continue with default encoding
+        pass
+
+# Define ASCII-safe output functions for Windows 10 legacy console compatibility
+def safe_print(message, use_ascii_fallback=True):
+    """Print message with fallback to ASCII characters for Windows 10 compatibility"""
+    try:
+        print(message)
+    except UnicodeEncodeError:
+        if use_ascii_fallback and sys.platform == "win32":
+            # Replace Unicode characters with ASCII equivalents
+            ascii_message = message.replace('\u2713', '[OK]').replace('\u2717', '[ERROR]').replace('\u274c', '[ERROR]')
+            print(ascii_message)
+        else:
+            # Fallback: encode with error replacement
+            encoded = message.encode('ascii', errors='replace').decode('ascii')
+            print(encoded)
+
+
+class ProgressTracker:
+    """Track download and operation progress with ETA"""
+    
+    def __init__(self, total_items: int, description: str = "Processing"):
+        self.total_items = total_items
+        self.description = description
+        self.current_item = 0
+        self.start_time = time.time()
+        self.last_update = 0
+        
+    def update(self, current_item: int, item_description: str = ""):
+        """Update progress and display progress bar with ETA"""
+        self.current_item = current_item
+        current_time = time.time()
+        
+        # Only update display every 0.5 seconds to avoid spam
+        if current_time - self.last_update < 0.5 and current_item < self.total_items:
+            return
+            
+        self.last_update = current_time
+        
+        # Calculate progress
+        progress = self.current_item / self.total_items if self.total_items > 0 else 0
+        elapsed = current_time - self.start_time
+        
+        # Calculate ETA
+        if progress > 0 and self.current_item < self.total_items:
+            eta_seconds = (elapsed / progress) - elapsed
+            eta_str = f"ETA: {int(eta_seconds // 60)}:{int(eta_seconds % 60):02d}"
+        else:
+            eta_str = "ETA: --:--"
+            
+        # Create progress bar
+        bar_width = 30
+        filled = int(bar_width * progress)
+        bar = "█" * filled + "░" * (bar_width - filled)
+        
+        # Format output
+        elapsed_str = f"{int(elapsed // 60)}:{int(elapsed % 60):02d}"
+        status = f"\r{self.description} [{bar}] {self.current_item}/{self.total_items} ({progress:.1%}) - {elapsed_str} - {eta_str}"
+        
+        if item_description:
+            status += f" - {item_description[:30]}"
+            
+        print(status, end="", flush=True)
+        
+        if self.current_item >= self.total_items:
+            print()  # New line when complete
+
+
+class LanguageServerValidator:
+    """Validate downloaded language servers for integrity and functionality"""
+    
+    def __init__(self):
+        self.validation_results = []
+        
+    def validate_server_binary(self, server_path: Path, server_name: str) -> dict:
+        """Validate a language server binary/archive"""
+        result = {
+            'server': server_name,
+            'path': server_path,
+            'valid': False,
+            'size': 0,
+            'sha256': '',
+            'errors': [],
+            'warnings': [],
+            'executable_found': False,
+            'version_info': None
+        }
+        
+        try:
+            if not server_path.exists():
+                result['errors'].append('Server directory/file does not exist')
+                return result
+                
+            # Get size (file or directory)
+            if server_path.is_file():
+                result['size'] = server_path.stat().st_size
+                
+                # Calculate checksum for single file
+                sha256_hash = hashlib.sha256()
+                with open(server_path, "rb") as f:
+                    for chunk in iter(lambda: f.read(4096), b""):
+                        sha256_hash.update(chunk)
+                result['sha256'] = sha256_hash.hexdigest()
+                
+                # Check if it's executable
+                if server_path.suffix.lower() in ['.exe', '']:
+                    result['executable_found'] = True
+            else:
+                # Directory - calculate total size and find executables
+                total_size = 0
+                executables = []
+                
+                for file_path in server_path.rglob("*"):
+                    if file_path.is_file():
+                        total_size += file_path.stat().st_size
+                        
+                        # Check for executable files
+                        if (file_path.suffix.lower() in ['.exe', '.sh', '.bat', '.cmd'] or 
+                            (file_path.suffix == '' and os.access(file_path, os.X_OK))):
+                            executables.append(file_path)
+                            
+                result['size'] = total_size
+                result['executable_found'] = len(executables) > 0
+                
+                if executables:
+                    result['executables'] = [str(exe.relative_to(server_path)) for exe in executables[:5]]  # First 5
+                    
+            # Size validation
+            if result['size'] == 0:
+                result['errors'].append('Empty file/directory')
+            elif result['size'] < 1024:  # Less than 1KB suspicious
+                result['warnings'].append('Very small size (< 1KB)')
+            elif result['size'] > 500 * 1024 * 1024:  # Over 500MB
+                result['warnings'].append('Very large size (> 500MB)')
+                
+            # Executable validation
+            if not result['executable_found']:
+                result['warnings'].append('No executable files found')
+                
+            # Try to get version info for some servers
+            result['version_info'] = self._get_server_version(server_path, server_name)
+            
+            # Archive integrity check
+            if server_path.is_file():
+                archive_valid = self._validate_archive_integrity(server_path)
+                if not archive_valid:
+                    result['errors'].append('Archive integrity check failed')
+                    
+            result['valid'] = len(result['errors']) == 0
+            
+        except Exception as e:
+            result['errors'].append(f'Validation failed: {str(e)}')
+            
+        return result
+    
+    def _validate_archive_integrity(self, archive_path: Path) -> bool:
+        """Validate archive file integrity"""
+        try:
+            if archive_path.suffix.lower() == '.zip':
+                with zipfile.ZipFile(archive_path, 'r') as zf:
+                    return zf.testzip() is None
+            elif archive_path.suffix.lower() in ['.tgz', '.gz']:
+                with gzip.open(archive_path, 'rb') as gz:
+                    # Try to read a small chunk
+                    gz.read(1024)
+                return True
+            elif archive_path.suffix.lower() == '.tar':
+                with tarfile.open(archive_path, 'r') as tar:
+                    # Basic validation - check if we can read the archive
+                    return len(tar.getnames()) > 0
+        except Exception:
+            return False
+        return True
+    
+    def _get_server_version(self, server_path: Path, server_name: str) -> str | None:
+        """Try to get version information from server"""
+        try:
+            # Common version commands to try
+            version_commands = [
+                ['--version'],
+                ['-version'],
+                ['version'],
+                ['--help']  # Sometimes contains version info
+            ]
+            
+            # Find executable
+            executable = None
+            if server_path.is_file() and server_path.suffix.lower() in ['.exe', '']:
+                executable = server_path
+            elif server_path.is_dir():
+                # Look for common executable names
+                common_names = [server_name, f"{server_name}.exe", "server", "server.exe", "bin/server"]
+                for name in common_names:
+                    candidate = server_path / name
+                    if candidate.exists() and (candidate.suffix.lower() in ['.exe', ''] or os.access(candidate, os.X_OK)):
+                        executable = candidate
+                        break
+            
+            if not executable:
+                return None
+                
+            # Try version commands
+            for cmd_args in version_commands:
+                try:
+                    result = subprocess.run(
+                        [str(executable)] + cmd_args,
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                        cwd=executable.parent if executable.is_file() else server_path
+                    )
+                    
+                    output = result.stdout + result.stderr
+                    if output and ('version' in output.lower() or 'v' in output[:20].lower()):
+                        # Extract version-like patterns
+                        import re
+                        version_pattern = r'(\d+\.\d+(?:\.\d+)*(?:[-\w]*)?)'
+                        matches = re.findall(version_pattern, output)
+                        if matches:
+                            return matches[0][:20]  # First version, limit length
+                            
+                except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+                    continue
+                    
+        except Exception:
+            pass
+            
+        return None
+    
+    def validate_all_servers(self, servers_dir: Path) -> dict:
+        """Validate all language servers in directory"""
+        results = {
+            'directory': servers_dir,
+            'total_servers': 0,
+            'valid_servers': 0,
+            'invalid_servers': 0,
+            'total_size': 0,
+            'servers': [],
+            'errors': []
+        }
+        
+        try:
+            if not servers_dir.exists():
+                results['errors'].append('Language servers directory does not exist')
+                return results
+                
+            # Find all server directories/files
+            server_items = [item for item in servers_dir.iterdir() if item.name not in ['manifest.json', '.DS_Store']]
+            results['total_servers'] = len(server_items)
+            
+            progress = ProgressTracker(len(server_items), f"Validating servers in {servers_dir.name}")
+            
+            for i, server_item in enumerate(server_items):
+                progress.update(i, server_item.name)
+                
+                server_result = self.validate_server_binary(server_item, server_item.name)
+                results['servers'].append(server_result)
+                results['total_size'] += server_result['size']
+                
+                if server_result['valid']:
+                    results['valid_servers'] += 1
+                else:
+                    results['invalid_servers'] += 1
+                    
+            progress.update(len(server_items), "Complete")
+            
+        except Exception as e:
+            results['errors'].append(f'Directory validation failed: {str(e)}')
+            
+        return results
+    
+    def generate_validation_report(self, results: dict, output_path: Path):
+        """Generate detailed validation report for language servers"""
+        report_lines = []
+        report_lines.append("# Language Server Validation Report")
+        report_lines.append(f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        report_lines.append("")
+        
+        # Summary
+        report_lines.append("## Summary")
+        report_lines.append(f"- Directory: {results['directory']}")
+        report_lines.append(f"- Total servers: {results['total_servers']}")
+        report_lines.append(f"- Valid servers: {results['valid_servers']}")
+        report_lines.append(f"- Invalid servers: {results['invalid_servers']}")
+        report_lines.append(f"- Total size: {results['total_size'] / 1024 / 1024:.1f} MB")
+        report_lines.append("")
+        
+        # Directory errors
+        if results['errors']:
+            report_lines.append("## Directory-level Issues")
+            for error in results['errors']:
+                report_lines.append(f"- ❌ {error}")
+            report_lines.append("")
+            
+        # Server details
+        if results['servers']:
+            report_lines.append("## Server Validation Results")
+            report_lines.append("")
+            
+            for server_result in results['servers']:
+                status = "✅" if server_result['valid'] else "❌"
+                name = server_result['server']
+                size_mb = server_result['size'] / 1024 / 1024
+                
+                report_lines.append(f"### {status} {name}")
+                report_lines.append(f"- Size: {size_mb:.2f} MB")
+                
+                if server_result['sha256']:
+                    report_lines.append(f"- SHA256: {server_result['sha256']}")
+                
+                if server_result['executable_found']:
+                    report_lines.append("- ✅ Executable files found")
+                    if 'executables' in server_result:
+                        report_lines.append(f"  - Files: {', '.join(server_result['executables'])}")
+                else:
+                    report_lines.append("- ⚠️  No executable files found")
+                
+                if server_result['version_info']:
+                    report_lines.append(f"- Version: {server_result['version_info']}")
+                
+                if server_result['warnings']:
+                    report_lines.append("- Warnings:")
+                    for warning in server_result['warnings']:
+                        report_lines.append(f"  - ⚠️  {warning}")
+                
+                if server_result['errors']:
+                    report_lines.append("- Issues:")
+                    for error in server_result['errors']:
+                        report_lines.append(f"  - ❌ {error}")
+                        
+                report_lines.append("")
+                
+        # Write report
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(report_lines))
 
 
 class CorporateDownloader:
@@ -32,13 +386,13 @@ class CorporateDownloader:
             proxy = urllib.request.ProxyHandler({"http": self.proxy_url, "https": self.proxy_url})
             opener = urllib.request.build_opener(proxy)
             urllib.request.install_opener(opener)
-            print(f"[OK] Configured proxy: {self.proxy_url}")
+            safe_print(f"[OK] Configured proxy: {self.proxy_url}")
 
         # Setup SSL context
         self.ssl_context = ssl.create_default_context()
         if self.ca_cert_path and os.path.exists(self.ca_cert_path):
             self.ssl_context.load_verify_locations(self.ca_cert_path)
-            print(f"[OK] Loaded CA certificate: {self.ca_cert_path}")
+            safe_print(f"[OK] Loaded CA certificate: {self.ca_cert_path}")
         else:
             # For testing/dev only - disable SSL verification
             # Remove this in production!
@@ -48,7 +402,7 @@ class CorporateDownloader:
 
     def download_file(self, url: str, dest_path: Path, description: str = ""):
         """Download file with progress indication"""
-        print(f"Downloading {description or url}...")
+        safe_print(f"Downloading {description or url}...")
 
         try:
             # Create request with headers
@@ -102,53 +456,70 @@ class CorporateDownloader:
             return False
 
     def _extract_gem_windows_safe(self, archive_path: Path, dest_dir: Path) -> bool:
-        """Windows-safe gem extraction with retry logic and permission handling"""
+        """Windows-safe gem extraction with enhanced retry logic and permission handling"""
         is_windows = platform.system().lower() == "windows"
-        max_retries = 3 if is_windows else 1
+        is_win10_plus = self._is_windows_10_or_later() if is_windows else False
+        max_retries = 5 if is_win10_plus else (3 if is_windows else 1)
+        
+        # Exponential backoff delays: 0.5s -> 2s -> 5s -> 10s -> 15s
+        retry_delays = [0.5, 2.0, 5.0, 10.0, 15.0]
+        
+        print(f"  [INFO] Detected Windows 10+ environment: {is_win10_plus}")
+        
+        # Pre-extraction testing
+        if not self._test_file_accessibility(archive_path, is_windows):
+            print("  [ERROR] Archive file is not accessible for extraction")
+            return False
+        
+        # Use Windows-safe temporary directory for intermediate files
+        temp_extract_dir = None
+        if is_windows:
+            temp_extract_dir = self._create_windows_safe_temp_dir()
+            if temp_extract_dir is None:
+                print("  [WARN] Could not create temp directory, using destination directly")
+                temp_extract_dir = dest_dir
+        else:
+            temp_extract_dir = dest_dir
 
         for attempt in range(max_retries):
             try:
                 print(f"  [INFO] Extracting Ruby gem (attempt {attempt + 1}/{max_retries})...")
+                
+                # Wait for antivirus if this is a retry
+                if attempt > 0 and is_win10_plus:
+                    antivirus_delay = min(retry_delays[attempt - 1], 5.0)
+                    print(f"    [INFO] Waiting {antivirus_delay}s for antivirus scan completion...")
+                    time.sleep(antivirus_delay)
 
-                # Step 1: Extract the gem tar archive
-                with tarfile.open(archive_path, "r") as tar:
-                    # Extract with more permissive permissions on Windows
-                    if is_windows:
-                        # Extract members individually with error handling
-                        for member in tar.getmembers():
-                            try:
-                                tar.extract(member, dest_dir)
-                            except (PermissionError, OSError) as e:
-                                print(f"    [WARN] Could not extract {member.name}: {e}")
-                                continue
+                # Step 1: Extract the gem tar archive using enhanced method
+                if self._extract_gem_tar_enhanced(archive_path, temp_extract_dir, is_windows, attempt):
+                    # Step 2: Process extracted contents with integrity checks
+                    if self._process_gem_contents_with_checks(temp_extract_dir, dest_dir, is_windows, attempt):
+                        # Clean up temp directory if different from dest
+                        if temp_extract_dir != dest_dir:
+                            self._cleanup_temp_directory(temp_extract_dir, is_windows)
+                        
+                        print("  [OK] Ruby gem extracted successfully")
+                        return True
                     else:
-                        tar.extractall(dest_dir)
-
-                # Step 2: Wait briefly for Windows file system to release locks
-                if is_windows:
-                    time.sleep(0.5)
-
-                # Step 3: Extract the data.tar.gz with retry logic
-                data_tar = dest_dir / "data.tar.gz"
-                if data_tar.exists():
-                    self._extract_data_tar_with_retry(data_tar, dest_dir, is_windows)
-
-                # Step 4: Extract metadata.gz if it exists (optional)
-                metadata_gz = dest_dir / "metadata.gz"
-                if metadata_gz.exists():
-                    self._extract_metadata_safely(metadata_gz, dest_dir, is_windows)
-
-                print("  [OK] Ruby gem extracted successfully")
-                return True
+                        print(f"    [WARN] Gem content processing failed on attempt {attempt + 1}")
+                else:
+                    print(f"    [WARN] Gem tar extraction failed on attempt {attempt + 1}")
 
             except Exception as e:
                 if attempt < max_retries - 1:
-                    print(f"    [RETRY] Extraction failed, retrying in 1 second: {e}")
-                    time.sleep(1)
+                    delay = retry_delays[attempt] if attempt < len(retry_delays) else retry_delays[-1]
+                    print(f"    [RETRY] Extraction failed, retrying in {delay}s: {e}")
+                    time.sleep(delay)
                     continue
                 print(f"    [ERROR] Final attempt failed: {e}")
-                # Try partial extraction as fallback
-                return self._fallback_gem_extraction(archive_path, dest_dir)
+                
+                # Clean up temp directory on failure
+                if temp_extract_dir != dest_dir:
+                    self._cleanup_temp_directory(temp_extract_dir, is_windows)
+                
+                # Try enhanced fallback extraction methods
+                return self._enhanced_fallback_gem_extraction(archive_path, dest_dir, is_windows)
 
         return False
 

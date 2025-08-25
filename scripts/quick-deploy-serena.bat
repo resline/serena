@@ -4,6 +4,9 @@
 :: Target: Under 15 minutes deployment
 :: Updated: 2025-01-08
 
+:: Fix console encoding for Windows 10 compatibility
+chcp 65001 >nul 2>&1
+
 setlocal enabledelayedexpansion
 
 echo ===============================================
@@ -15,12 +18,12 @@ echo.
 :: Auto-detect corporate proxy
 if defined HTTP_PROXY (
     set PROXY_URL=%HTTP_PROXY%
-    echo [✓] Detected proxy: %HTTP_PROXY%
+    echo [OK] Detected proxy: %HTTP_PROXY%
 ) else (
     :: Try to detect from registry
     for /f "tokens=3" %%a in ('reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyServer 2^>nul ^| findstr /i "proxyserver"') do (
         set PROXY_URL=http://%%a
-        echo [✓] Detected proxy from registry: http://%%a
+        echo [OK] Detected proxy from registry: http://%%a
     )
 )
 
@@ -28,13 +31,13 @@ if defined HTTP_PROXY (
 set CA_CERT_PATH=
 if exist "C:\Corporate\ca-bundle.crt" (
     set CA_CERT_PATH=C:\Corporate\ca-bundle.crt
-    echo [✓] Found corporate certificate: C:\Corporate\ca-bundle.crt
+    echo [OK] Found corporate certificate: C:\Corporate\ca-bundle.crt
 ) else if exist "C:\ProgramData\SSL\certs\ca-bundle.crt" (
     set CA_CERT_PATH=C:\ProgramData\SSL\certs\ca-bundle.crt
-    echo [✓] Found corporate certificate: C:\ProgramData\SSL\certs\ca-bundle.crt
+    echo [OK] Found corporate certificate: C:\ProgramData\SSL\certs\ca-bundle.crt
 ) else if defined REQUESTS_CA_BUNDLE (
     set CA_CERT_PATH=%REQUESTS_CA_BUNDLE%
-    echo [✓] Using certificate from environment: %REQUESTS_CA_BUNDLE%
+    echo [OK] Using certificate from environment: %REQUESTS_CA_BUNDLE%
 )
 
 :: Deployment options
@@ -112,7 +115,7 @@ echo @echo off > "%INSTALL_PATH%\run-serena.bat"
 echo call "%INSTALL_PATH%\set-corp-env.bat" >> "%INSTALL_PATH%\run-serena.bat"
 echo "%INSTALL_PATH%\serena\serena-mcp-server.exe" %%* >> "%INSTALL_PATH%\run-serena.bat"
 
-echo [✓] Portable package installed successfully!
+echo [OK] Portable package installed successfully!
 goto :eof
 
 :end

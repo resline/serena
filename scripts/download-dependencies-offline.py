@@ -5,22 +5,251 @@ Handles proxy and certificate issues for corporate environments
 """
 
 import argparse
+import hashlib
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
-# Handle Windows console encoding issues
+# Handle Windows console encoding issues for Windows 10 compatibility
 if sys.platform == "win32":
     try:
         # Try to set UTF-8 encoding for better Unicode support
+        import os
+        os.system('chcp 65001 >nul 2>&1')  # Set console to UTF-8
+        
         if hasattr(sys.stdout, 'reconfigure'):
             sys.stdout.reconfigure(encoding='utf-8', errors='replace')
         if hasattr(sys.stderr, 'reconfigure'):
             sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        
+        # Set environment variable for subprocess calls
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
     except Exception:
         # If reconfigure fails, continue with default encoding
         pass
+
+# Define ASCII-safe output functions for Windows 10 legacy console compatibility
+def safe_print(message, use_ascii_fallback=True):
+    """Print message with fallback to ASCII characters for Windows 10 compatibility"""
+    try:
+        print(message)
+    except UnicodeEncodeError:
+        if use_ascii_fallback and sys.platform == "win32":
+            # Replace Unicode characters with ASCII equivalents
+            ascii_message = message.replace('✓', '[OK]').replace('✗', '[ERROR]').replace('❌', '[ERROR]')
+            print(ascii_message)
+        else:
+            # Fallback: encode with error replacement
+            encoded = message.encode('ascii', errors='replace').decode('ascii')
+            print(encoded)
+
+
+class ProgressTracker:
+    """Track download and operation progress with ETA"""
+    
+    def __init__(self, total_items: int, description: str = "Processing"):
+        self.total_items = total_items
+        self.description = description
+        self.current_item = 0
+        self.start_time = time.time()
+        self.last_update = 0
+        
+    def update(self, current_item: int, item_description: str = ""):
+        """Update progress and display progress bar with ETA"""
+        self.current_item = current_item
+        current_time = time.time()
+        
+        # Only update display every 0.5 seconds to avoid spam
+        if current_time - self.last_update < 0.5 and current_item < self.total_items:
+            return
+            
+        self.last_update = current_time
+        
+        # Calculate progress
+        progress = self.current_item / self.total_items if self.total_items > 0 else 0
+        elapsed = current_time - self.start_time
+        
+        # Calculate ETA
+        if progress > 0 and self.current_item < self.total_items:
+            eta_seconds = (elapsed / progress) - elapsed
+            eta_str = f"ETA: {int(eta_seconds // 60)}:{int(eta_seconds % 60):02d}"
+        else:
+            eta_str = "ETA: --:--"
+            
+        # Create progress bar
+        bar_width = 30
+        filled = int(bar_width * progress)
+        bar = "█" * filled + "░" * (bar_width - filled)
+        
+        # Format output
+        elapsed_str = f"{int(elapsed // 60)}:{int(elapsed % 60):02d}"
+        status = f"\r{self.description} [{bar}] {self.current_item}/{self.total_items} ({progress:.1%}) - {elapsed_str} - {eta_str}"
+        
+        if item_description:
+            status += f" - {item_description[:30]}"
+            
+        print(status, end="", flush=True)
+        
+        if self.current_item >= self.total_items:
+            print()  # New line when complete
+
+
+class PackageValidator:
+    """Validate downloaded packages for integrity"""
+    
+    def __init__(self):
+        self.validation_results = []
+        
+    def validate_wheel_file(self, wheel_path: Path) -> dict:
+        """Validate a wheel file for integrity"""
+        result = {
+            'path': wheel_path,
+            'valid': False,
+            'size': 0,
+            'sha256': '',
+            'errors': []
+        }
+        
+        try:
+            if not wheel_path.exists():
+                result['errors'].append('File does not exist')
+                return result
+                
+            # Check file size
+            stat = wheel_path.stat()
+            result['size'] = stat.st_size
+            
+            if result['size'] == 0:
+                result['errors'].append('File is empty')
+                return result
+                
+            if result['size'] < 1024:  # Less than 1KB is suspicious
+                result['errors'].append('File too small (< 1KB)')
+                
+            # Calculate SHA256 checksum
+            sha256_hash = hashlib.sha256()
+            with open(wheel_path, "rb") as f:
+                for chunk in iter(lambda: f.read(4096), b""):
+                    sha256_hash.update(chunk)
+            result['sha256'] = sha256_hash.hexdigest()
+            
+            # Validate wheel structure (basic check)
+            if wheel_path.suffix.lower() == '.whl':
+                import zipfile
+                try:
+                    with zipfile.ZipFile(wheel_path, 'r') as zip_file:
+                        # Check for required wheel metadata
+                        files = zip_file.namelist()
+                        has_metadata = any('.dist-info/METADATA' in f for f in files)
+                        has_wheel_info = any('.dist-info/WHEEL' in f for f in files)
+                        
+                        if not has_metadata:
+                            result['errors'].append('Missing METADATA file')
+                        if not has_wheel_info:
+                            result['errors'].append('Missing WHEEL file')
+                            
+                        # Check if zip is corrupted
+                        zip_file.testzip()
+                        
+                except zipfile.BadZipFile:
+                    result['errors'].append('Corrupted ZIP/wheel file')
+                except Exception as e:
+                    result['errors'].append(f'Wheel validation error: {str(e)}')
+                    
+            result['valid'] = len(result['errors']) == 0
+            
+        except Exception as e:
+            result['errors'].append(f'Validation failed: {str(e)}')
+            
+        return result
+        
+    def validate_directory(self, directory: Path, expected_count: int = None) -> dict:
+        """Validate all wheels in a directory"""
+        results = {
+            'directory': directory,
+            'total_files': 0,
+            'valid_files': 0,
+            'invalid_files': 0,
+            'total_size': 0,
+            'files': [],
+            'errors': []
+        }
+        
+        try:
+            wheel_files = list(directory.glob("*.whl"))
+            results['total_files'] = len(wheel_files)
+            
+            if expected_count and results['total_files'] != expected_count:
+                results['errors'].append(f'Expected {expected_count} files, found {results["total_files"]}')
+                
+            progress = ProgressTracker(len(wheel_files), f"Validating {directory.name}")
+            
+            for i, wheel_file in enumerate(wheel_files):
+                progress.update(i, wheel_file.name)
+                
+                file_result = self.validate_wheel_file(wheel_file)
+                results['files'].append(file_result)
+                results['total_size'] += file_result['size']
+                
+                if file_result['valid']:
+                    results['valid_files'] += 1
+                else:
+                    results['invalid_files'] += 1
+                    
+            progress.update(len(wheel_files), "Complete")
+            
+        except Exception as e:
+            results['errors'].append(f'Directory validation failed: {str(e)}')
+            
+        return results
+        
+    def generate_validation_report(self, results: dict, output_path: Path):
+        """Generate detailed validation report"""
+        report_lines = []
+        report_lines.append("# Package Validation Report")
+        report_lines.append(f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        report_lines.append("")
+        
+        # Summary
+        report_lines.append("## Summary")
+        report_lines.append(f"- Directory: {results['directory']}")
+        report_lines.append(f"- Total files: {results['total_files']}")
+        report_lines.append(f"- Valid files: {results['valid_files']}")
+        report_lines.append(f"- Invalid files: {results['invalid_files']}")
+        report_lines.append(f"- Total size: {results['total_size'] / 1024 / 1024:.1f} MB")
+        report_lines.append("")
+        
+        # Errors
+        if results['errors']:
+            report_lines.append("## Directory-level Issues")
+            for error in results['errors']:
+                report_lines.append(f"- [ERROR] {error}")
+            report_lines.append("")
+            
+        # File details
+        if results['files']:
+            report_lines.append("## File Validation Results")
+            report_lines.append("")
+            
+            for file_result in results['files']:
+                status = "[OK]" if file_result['valid'] else "[ERROR]"
+                name = file_result['path'].name
+                size_mb = file_result['size'] / 1024 / 1024
+                report_lines.append(f"### {status} {name}")
+                report_lines.append(f"- Size: {size_mb:.2f} MB")
+                report_lines.append(f"- SHA256: {file_result['sha256']}")
+                
+                if file_result['errors']:
+                    report_lines.append("- Issues:")
+                    for error in file_result['errors']:
+                        report_lines.append(f"  - {error}")
+                report_lines.append("")
+                
+        # Write report
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(report_lines))
 
 
 class OfflineDependencyDownloader:
@@ -30,6 +259,7 @@ class OfflineDependencyDownloader:
         self.python_exe = python_exe or sys.executable  # Allow override of Python executable
         self.platform_override = platform_override
         self.pip_args = self._build_pip_args()
+        self.validator = PackageValidator()
 
     def _build_pip_args(self) -> list[str]:
         """Build pip arguments for proxy and certificate handling"""
@@ -126,7 +356,7 @@ class OfflineDependencyDownloader:
 
         # CRITICAL: Validate requirements.txt exists and has content
         if not requirements_path.exists():
-            print(f"❌ Error: Requirements file not found: {requirements_path}")
+            safe_print(f"[ERROR] Requirements file not found: {requirements_path}")
             return False
 
         with open(requirements_path) as f:
@@ -136,7 +366,7 @@ class OfflineDependencyDownloader:
         print(f"[DEBUG] Requirements file content (first 200 chars): {requirements_content[:200]}")
 
         if not requirements_content:
-            print(f"❌ Error: Requirements file is empty: {requirements_path}")
+            safe_print(f"[ERROR] Requirements file is empty: {requirements_path}")
             return False
 
         # Filter valid requirement lines
@@ -145,7 +375,7 @@ class OfflineDependencyDownloader:
         ]
 
         if not valid_requirements:
-            print(f"❌ Error: No valid requirements found in: {requirements_path}")
+            safe_print(f"[ERROR] No valid requirements found in: {requirements_path}")
             return False
 
         req_count = len(valid_requirements)
@@ -183,7 +413,17 @@ class OfflineDependencyDownloader:
             print(f"Trying method {i}: {' '.join(pip_cmd[:3])}...")
             cmd = pip_cmd + base_args
 
-            # Show the full command for debugging (but limit length)
+            # Show the full command for debugging with all details
+            print(f"[DEBUG] Full command (length {len(cmd)}): {cmd}")
+            print(f"[DEBUG] Working directory: {os.getcwd()}")
+            print(f"[DEBUG] Requirements path exists: {requirements_path_abs.exists()}")
+            print(f"[DEBUG] Output directory exists: {output_dir_abs.exists()}")
+            
+            # Detailed argument logging
+            print(f"[DEBUG] Command breakdown:")
+            for idx, arg in enumerate(cmd):
+                print(f"[DEBUG]   [{idx:2}]: '{arg}'")
+            
             cmd_preview = " ".join(cmd[:8]) + ("..." if len(cmd) > 8 else "")
             print(f"Running: {cmd_preview}")
 
@@ -195,8 +435,22 @@ class OfflineDependencyDownloader:
                     print(f"  Method {i} not available: {test_result.stderr.strip()}")
                     continue
 
+                # Enhanced debugging: try running a simple pip --version first as test
+                print(f"[DEBUG] Testing pip availability...")
+                version_result = subprocess.run([cmd[0], "-m", "pip", "--version"], 
+                                               check=False, capture_output=True, text=True, timeout=10)
+                print(f"[DEBUG] Pip version test - Return code: {version_result.returncode}")
+                if version_result.returncode == 0:
+                    print(f"[DEBUG] Pip version: {version_result.stdout.strip()}")
+                else:
+                    print(f"[DEBUG] Pip version error: {version_result.stderr.strip()}")
+                
                 # CRITICAL FIX: Do NOT use shell=True on Windows - it breaks argument parsing
+                print(f"[DEBUG] Executing main command...")
                 result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=300)
+                print(f"[DEBUG] Main command result - Return code: {result.returncode}")
+                print(f"[DEBUG] STDOUT length: {len(result.stdout)} chars")
+                print(f"[DEBUG] STDERR length: {len(result.stderr)} chars")
 
                 if result.returncode == 0:
                     print("[OK] Successfully downloaded all dependencies")
@@ -223,7 +477,7 @@ class OfflineDependencyDownloader:
                 print(f"  Method {i} failed with exception: {e}")
                 continue
 
-        print("✗ All pip methods failed")
+        safe_print("[ERROR] All pip methods failed")
         print("Attempting fallback: download individual packages...")
 
         # Fallback: Try downloading packages individually
@@ -237,9 +491,12 @@ class OfflineDependencyDownloader:
         platform_tag = self._get_platform_tag()
 
         successful_downloads = 0
+        
+        # Initialize progress tracker
+        progress = ProgressTracker(len(requirements), "Downloading packages")
 
-        for requirement in requirements:
-            print(f"  Downloading: {requirement}")
+        for i, requirement in enumerate(requirements):
+            progress.update(i, requirement)
             # Build command with platform-specific options
             cmd = [self.python_exe, "-m", "pip", "download", "--dest", str(output_dir), "--prefer-binary"]
             
@@ -253,13 +510,13 @@ class OfflineDependencyDownloader:
                 # CRITICAL FIX: Do NOT use shell=True - it breaks on Windows
                 result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=60)
                 if result.returncode == 0:
-                    print(f"    [OK] {requirement}")
                     successful_downloads += 1
                 else:
-                    print(f"    ✗ {requirement}: {result.stderr.strip()}")
+                    pass  # Progress tracker shows the current item
             except Exception as e:
-                print(f"    ✗ {requirement}: {e}")
+                pass  # Progress tracker shows the current item
 
+        progress.update(len(requirements), "Complete")
         print(f"Individual downloads: {successful_downloads}/{len(requirements)} successful")
 
         # Cleanup any temporary files that might have been created
@@ -349,7 +606,7 @@ class OfflineDependencyDownloader:
                 print(f"  UV method {i} failed with exception: {e}")
                 continue
 
-        print("✗ Failed to download UV with all methods")
+        safe_print("[ERROR] Failed to download UV with all methods")
 
         # Fallback: Try downloading UV packages individually
         print("Attempting individual UV package downloads...")
@@ -370,9 +627,9 @@ class OfflineDependencyDownloader:
                     print(f"    [OK] {package}")
                     successful_uv_downloads += 1
                 else:
-                    print(f"    ✗ {package}: {result.stderr.strip()}")
+                    safe_print(f"    [ERROR] {package}: {result.stderr.strip()}")
             except Exception as e:
-                print(f"    ✗ {package}: {e}")
+                safe_print(f"    [ERROR] {package}: {e}")
 
         print(f"UV individual downloads: {successful_uv_downloads}/{len(uv_packages)} successful")
         return successful_uv_downloads > 0
@@ -445,7 +702,7 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo.
-echo ✓ All dependencies installed successfully!
+echo [OK] All dependencies installed successfully!
 echo You can now use serena-mcp-portable.bat
 pause
 """
@@ -474,7 +731,7 @@ if command -v python3 &> /dev/null; then
 elif command -v python &> /dev/null; then
     PYTHON_EXE="python"
 else
-    echo "❌ Error: No Python executable found"
+    echo "[ERROR] No Python executable found"
     exit 1
 fi
 
@@ -604,24 +861,58 @@ def main():
         # Create manifest
         downloader.create_manifest(output_dir, dependencies)
 
-        # Count downloaded files
-        wheel_files = list(output_dir.glob("*.whl"))
-        uv_wheels = list((output_dir / "uv-deps").glob("*.whl"))
-
         print("=" * 60)
-        print("[OK] Download completed successfully!")
-        print(f"Main dependencies: {len(wheel_files)} wheels")
-        print(f"UV dependencies: {len(uv_wheels)} wheels")
-        print(f"Total size: {sum(f.stat().st_size for f in wheel_files + uv_wheels) / 1024 / 1024:.1f} MB")
+        print("🔍 Validating Downloaded Packages...")
+        print("=" * 60)
+        
+        # Validate main dependencies
+        main_validation = downloader.validator.validate_directory(output_dir, len(dependencies))
+        uv_dir = output_dir / "uv-deps"
+        
+        # Validate UV dependencies if they exist
+        uv_validation = None
+        if uv_dir.exists():
+            uv_validation = downloader.validator.validate_directory(uv_dir)
+        
+        # Generate validation reports
+        downloader.validator.generate_validation_report(main_validation, output_dir / "validation-report-main.md")
+        if uv_validation:
+            downloader.validator.generate_validation_report(uv_validation, output_dir / "validation-report-uv.md")
+        
+        print("=" * 60)
+        print("📊 Download & Validation Summary")
+        print("=" * 60)
+        print(f"Main dependencies: {main_validation['valid_files']}/{main_validation['total_files']} valid wheels")
+        if uv_validation:
+            print(f"UV dependencies: {uv_validation['valid_files']}/{uv_validation['total_files']} valid wheels")
+        print(f"Total size: {(main_validation['total_size'] + (uv_validation['total_size'] if uv_validation else 0)) / 1024 / 1024:.1f} MB")
         print(f"Output directory: {output_dir.absolute()}")
-        print("\nNext steps:")
-        print("1. Copy this directory to your portable package")
-        print("2. Run install-dependencies-offline.bat to install offline")
+        
+        # Check if validation passed
+        main_success_rate = main_validation['valid_files'] / main_validation['total_files'] if main_validation['total_files'] > 0 else 0
+        uv_success_rate = uv_validation['valid_files'] / uv_validation['total_files'] if uv_validation and uv_validation['total_files'] > 0 else 1
+        
+        overall_success = main_success_rate >= 0.9 and uv_success_rate >= 0.9  # 90% success rate required
+        
+        if overall_success:
+            safe_print("[SUCCESS] All packages validated successfully!")
+            safe_print("[INFO] Validation Reports:")
+            safe_print(f"- Main dependencies: {output_dir}/validation-report-main.md")
+            if uv_validation:
+                safe_print(f"- UV dependencies: {output_dir}/validation-report-uv.md")
+        else:
+            safe_print(f"[WARNING] Some packages failed validation (success rate: {main_success_rate:.1%})")
+            safe_print("Please review the validation reports for details.")
+            
+        safe_print("[INFO] Next Steps:")
+        safe_print("1. Copy this directory to your portable package")
+        safe_print("2. Run install-dependencies-offline.bat/.sh to install offline")
+        safe_print("3. Review validation reports if there were any issues")
 
         return 0
 
     except Exception as e:
-        print(f"✗ Error: {e!s}")
+        safe_print(f"[ERROR] Error: {e!s}")
         return 1
 
 

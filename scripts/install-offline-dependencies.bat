@@ -1,4 +1,7 @@
 @echo off
+:: Fix console encoding for Windows 10 compatibility
+chcp 65001 >nul 2>&1
+
 setlocal enabledelayedexpansion
 
 :: Offline Dependencies Installer for Serena MCP Portable
@@ -114,18 +117,18 @@ set TEST_PACKAGES=requests mcp flask pydantic pyyaml
 
 for %%p in (%TEST_PACKAGES%) do (
     echo Testing %%p...
-    "%PYTHONHOME%\python.exe" -c "import %%p; print('  ✓ %%p:', %%p.__version__ if hasattr(%%p, '__version__') else 'OK')" 2>nul
+    "%PYTHONHOME%\python.exe" -c "import %%p; print('  [OK] %%p:', %%p.__version__ if hasattr(%%p, '__version__') else 'OK')" 2>nul
     if !ERRORLEVEL! neq 0 (
-        echo   ✗ %%p: Import failed
+        echo   [ERROR] %%p: Import failed
         set VERIFICATION_FAILED=1
     )
 )
 
 :: Test Serena specifically
 echo Testing Serena...
-"%PYTHONHOME%\python.exe" -c "import serena; print('  ✓ Serena: Available')" 2>nul
+"%PYTHONHOME%\python.exe" -c "import serena; print('  [OK] Serena: Available')" 2>nul
 if %ERRORLEVEL% neq 0 (
-    echo   ✗ Serena: Import failed
+    echo   [ERROR] Serena: Import failed
     set VERIFICATION_FAILED=1
 )
 
@@ -151,9 +154,9 @@ echo ==========================================
 echo  Installation Complete!
 echo ==========================================
 echo.
-echo ✅ All dependencies installed offline
-echo ✅ Serena MCP is ready to use
-echo ✅ No internet connection required
+echo [OK] All dependencies installed offline
+echo [OK] Serena MCP is ready to use
+echo [OK] No internet connection required
 echo.
 echo Next steps:
 echo 1. Run serena-mcp-portable.bat to start
@@ -169,7 +172,7 @@ echo ==========================================
 echo  Installation Failed!
 echo ==========================================
 echo.
-echo ❌ Offline dependency installation failed
+echo [ERROR] Offline dependency installation failed
 echo.
 echo Possible solutions:
 echo 1. Ensure this is a complete offline package

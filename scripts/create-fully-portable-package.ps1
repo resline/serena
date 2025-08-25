@@ -1,6 +1,51 @@
 # Create Fully Portable Serena Package for Corporate Deployment
 # This script creates a 100% self-contained package with ALL dependencies offline
-# Version: 2.0 - Fully Portable Edition
+# Version: 2.1 - Windows 10 Enhanced Edition
+# Includes Windows 10-specific optimizations and compatibility enhancements
+
+# =============================================================================
+# WINDOWS 10 COMPATIBILITY INITIALIZATION
+# =============================================================================
+
+# Force English locale for consistent corporate deployment
+try {
+    [System.Threading.Thread]::CurrentThread.CurrentCulture = 'en-US'
+    [System.Threading.Thread]::CurrentThread.CurrentUICulture = 'en-US'
+} catch {
+    Write-Host "[WARN] Could not set English locale - continuing with system default" -ForegroundColor Yellow
+}
+
+# Fix Windows console encoding issues for Windows 10 compatibility
+try {
+    # Set console to UTF-8 for Unicode support
+    chcp 65001 | Out-Null
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    [Console]::InputEncoding = [System.Text.Encoding]::UTF8
+} catch {
+    # Fallback: continue with default encoding if UTF-8 setup fails
+    Write-Host "[INFO] Using default console encoding (UTF-8 setup failed)" -ForegroundColor Yellow
+}
+
+# Load Windows 10 compatibility modules
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$Win10CompatibilityLoaded = $false
+$Win10HelpersLoaded = $false
+
+try {
+    . "$ScriptDir\windows10-compatibility.ps1"
+    $Win10CompatibilityLoaded = $true
+    Write-Host "[OK] Windows 10 compatibility module loaded" -ForegroundColor Green
+} catch {
+    Write-Host "[WARN] Windows 10 compatibility module not found - using fallback methods" -ForegroundColor Yellow
+}
+
+try {
+    . "$ScriptDir\portable-package-windows10-helpers.ps1"
+    $Win10HelpersLoaded = $true
+    Write-Host "[OK] Windows 10 portable package helpers loaded" -ForegroundColor Green
+} catch {
+    Write-Host "[WARN] Windows 10 helpers not found - using standard methods" -ForegroundColor Yellow
+}
 
 param(
     [string]$OutputPath = ".\serena-fully-portable",
@@ -10,8 +55,40 @@ param(
     [string]$Platform = "win_amd64"
 )
 
-Write-Host "Creating FULLY PORTABLE Serena package..." -ForegroundColor Cyan
+# =============================================================================
+# WINDOWS 10 COMPATIBILITY ASSESSMENT
+# =============================================================================
+
+Write-Host "Creating FULLY PORTABLE Serena package with Windows 10 optimizations..." -ForegroundColor Cyan
 Write-Host "This package will be 100% offline-capable" -ForegroundColor Green
+
+# Run Windows 10 compatibility check if module is loaded
+$CompatibilityInfo = $null
+if ($Win10CompatibilityLoaded) {
+    Write-Host "`n" + "=" * 60
+    Write-Host "WINDOWS 10 COMPATIBILITY ASSESSMENT" -ForegroundColor Cyan
+    Write-Host "=" * 60
+    
+    $CompatibilityInfo = Test-Windows10Compatibility -InstallationPath (Resolve-Path $OutputPath -ErrorAction SilentlyContinue)
+    
+    # Display key findings
+    if ($CompatibilityInfo.WindowsInfo.IsWindows10) {
+        Write-Host "`n[WINDOWS 10 DETECTED] Optimizations active:" -ForegroundColor Green
+        foreach ($opt in $CompatibilityInfo.OptimizationStrategy.Optimizations) {
+            Write-Host "  • $opt" -ForegroundColor White
+        }
+        
+        # Show recommendations
+        if ($CompatibilityInfo.AntivirusInfo.PotentialInterference) {
+            Write-Host "`n[ANTIVIRUS RECOMMENDATIONS]:" -ForegroundColor Yellow
+            foreach ($rec in $CompatibilityInfo.AntivirusInfo.Recommendations) {
+                Write-Host "  • $rec" -ForegroundColor Gray
+            }
+        }
+    }
+    
+    Write-Host "`n" + "=" * 60 + "`n"
+}
 
 # Initialize variables
 $OfflineMode = $false
@@ -48,38 +125,94 @@ foreach ($item in $essentialDirs) {
 Remove-Item -Path "$OutputPath\serena-temp" -Recurse -Force
 Write-Host "[OK] Copied Serena source code" -ForegroundColor Green
 
-# Download Python embedded
-Write-Host "Downloading Python $PythonVersion embedded..." -ForegroundColor Yellow
-$pythonUrl = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-embed-amd64.zip"
-$pythonZip = "$OutputPath\python-embedded.zip"
+# =============================================================================
+# PYTHON INSTALLATION WITH WINDOWS 10 OPTIMIZATIONS
+# =============================================================================
 
-try {
-    Invoke-WebRequest -Uri $pythonUrl -OutFile $pythonZip -UseBasicParsing
-    Expand-Archive -Path $pythonZip -DestinationPath "$OutputPath\python" -Force
-    Remove-Item $pythonZip
-    Write-Host "[OK] Downloaded and extracted Python embedded" -ForegroundColor Green
-} catch {
-    Write-Host "[ERROR] Failed to download Python: $($_.Exception.Message)" -ForegroundColor Red
-    exit 1
+# Use Windows 10 optimized Python installation if available
+if ($Win10HelpersLoaded -and $CompatibilityInfo) {
+    Write-Host "Installing Python with Windows 10 optimizations..." -ForegroundColor Cyan
+    
+    $pythonInstallSuccess = Install-PythonEmbeddedWindows10 -OutputPath $OutputPath -PythonVersion $PythonVersion -CompatibilityInfo $CompatibilityInfo
+    if (-not $pythonInstallSuccess) {
+        Write-Host "[WARN] Windows 10 optimized installation failed, falling back to standard method" -ForegroundColor Yellow
+    }
+} else {
+    $pythonInstallSuccess = $false
 }
 
-# Download get-pip
-Write-Host "Setting up pip..." -ForegroundColor Yellow
-Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile "$OutputPath\python\get-pip.py"
+# Fallback to standard Python installation
+if (-not $pythonInstallSuccess) {
+    Write-Host "Downloading Python $PythonVersion embedded (standard method)..." -ForegroundColor Yellow
+    $pythonUrl = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-embed-amd64.zip"
+    $pythonZip = "$OutputPath\python-embedded.zip"
 
-# Create python._pth to enable pip and site-packages
-# FIXED: Include proper paths for pip module access
-$pthLines = @(
-    "python311.zip",
-    ".",
-    "Lib\site-packages",
-    "..\..\Lib\site-packages",
-    "..\..\serena\src",
-    "import site"
-)
-$pthContent = $pthLines -join "`n"
-Set-Content -Path "$OutputPath\python\python311._pth" -Value $pthContent
-Write-Host "[OK] Configured Python path" -ForegroundColor Green
+    try {
+        Invoke-WebRequest -Uri $pythonUrl -OutFile $pythonZip -UseBasicParsing -TimeoutSec 300
+        
+        # Use Windows 10 optimized extraction if available
+        if ($Win10HelpersLoaded) {
+            $extractSuccess = Expand-ArchiveWindows10 -Path $pythonZip -DestinationPath "$OutputPath\python" -Force
+        } else {
+            Expand-Archive -Path $pythonZip -DestinationPath "$OutputPath\python" -Force
+            $extractSuccess = $true
+        }
+        
+        if (-not $extractSuccess) {
+            throw "Archive extraction failed"
+        }
+        
+        # Clean up with Windows 10 compatibility
+        if ($Win10HelpersLoaded) {
+            Remove-FileWithRetry -Path $pythonZip
+        } else {
+            Remove-Item $pythonZip
+        }
+        
+        Write-Host "[OK] Downloaded and extracted Python embedded" -ForegroundColor Green
+    } catch {
+        if ($Win10CompatibilityLoaded) {
+            Write-StandardizedError -ErrorMessage "Failed to download Python: $($_.Exception.Message)" `
+                -Context "Python $PythonVersion embedded installation" `
+                -Solution "Check internet connection and try running as administrator" `
+                -TroubleshootingHint "Windows 10 may require elevated permissions or antivirus exclusions"
+        } else {
+            Write-Host "[ERROR] Failed to download Python: $($_.Exception.Message)" -ForegroundColor Red
+        }
+        exit 1
+    }
+
+    # Download get-pip with retry logic
+    Write-Host "Setting up pip..." -ForegroundColor Yellow
+    $maxPipRetries = if ($CompatibilityInfo.OptimizationStrategy.UseExtendedRetries) { 5 } else { 3 }
+    
+    for ($retry = 1; $retry -le $maxPipRetries; $retry++) {
+        try {
+            Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile "$OutputPath\python\get-pip.py" -UseBasicParsing -TimeoutSec 120
+            break
+        } catch {
+            if ($retry -eq $maxPipRetries) {
+                throw $_
+            }
+            Write-Host "  Retry $retry/$maxPipRetries for get-pip download..." -ForegroundColor Gray
+            Start-Sleep -Seconds ($retry * 2)
+        }
+    }
+
+    # Create python._pth to enable pip and site-packages
+    # ENHANCED: Include proper paths for pip module access with Windows 10 compatibility
+    $pthLines = @(
+        "python311.zip",
+        ".",
+        "Lib\site-packages",
+        "..\..\Lib\site-packages",
+        "..\..\serena\src",
+        "import site"
+    )
+    $pthContent = $pthLines -join "`n"
+    Set-Content -Path "$OutputPath\python\python311._pth" -Value $pthContent -Encoding UTF8
+    Write-Host "[OK] Configured Python path" -ForegroundColor Green
+}
 
 # Install pip in embedded Python
 Write-Host "Installing pip in embedded Python..." -ForegroundColor Yellow
