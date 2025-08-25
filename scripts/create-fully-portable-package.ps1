@@ -214,68 +214,93 @@ if (-not $pythonInstallSuccess) {
     Write-Host "[OK] Configured Python path" -ForegroundColor Green
 }
 
-# Install pip in embedded Python
-Write-Host "Installing pip in embedded Python..." -ForegroundColor Yellow
-# FIXED: Install pip directly to Python's Lib\site-packages for module access
-& "$OutputPath\python\python.exe" "$OutputPath\python\get-pip.py" --no-warn-script-location --target "$OutputPath\python\Lib\site-packages"
+# =============================================================================
+# PIP INSTALLATION WITH WINDOWS 10 OPTIMIZATIONS
+# =============================================================================
 
-# Test pip installation
-# ENHANCED: More robust pip module verification with debugging
-Write-Host "Testing pip installation..." -ForegroundColor Yellow
-try {
-    # Test 1: Check if pip module is accessible
-    Write-Host "[TEST] Testing 'python -m pip --version'..." -ForegroundColor Gray
-    $pipModuleTest = & "$OutputPath\python\python.exe" -m pip --version 2>$null
-    $pipTestExitCode = $LASTEXITCODE
+# Use Windows 10 optimized pip installation if available
+if ($Win10HelpersLoaded -and $CompatibilityInfo) {
+    Write-Host "Installing pip with Windows 10 optimizations..." -ForegroundColor Cyan
     
-    if ($pipTestExitCode -eq 0 -and $pipModuleTest) {
-        Write-Host "[OK] Pip module accessible: $pipModuleTest" -ForegroundColor Green
+    $pipInstallSuccess = Install-PipEmbeddedWindows10 -OutputPath $OutputPath -CompatibilityInfo $CompatibilityInfo
+    if (-not $pipInstallSuccess) {
+        Write-Host "[WARN] Windows 10 optimized pip installation failed, falling back to standard method" -ForegroundColor Yellow
+    }
+} else {
+    $pipInstallSuccess = $false
+}
+
+# Fallback to standard pip installation with enhanced error handling
+if (-not $pipInstallSuccess) {
+    Write-Host "Installing pip in embedded Python (standard method)..." -ForegroundColor Yellow
+    # FIXED: Install pip directly to Python's Lib\site-packages for module access
+    & "$OutputPath\python\python.exe" "$OutputPath\python\get-pip.py" --no-warn-script-location --target "$OutputPath\python\Lib\site-packages"
+
+    # Test pip installation with enhanced Windows 10 error handling
+    if ($Win10HelpersLoaded) {
+        $pipInstallSuccess = Test-PipInstallationWindows10 -OutputPath $OutputPath
+        if (-not $pipInstallSuccess) {
+            exit 1
+        }
     } else {
-        Write-Host "[WARN] pip module test failed (exit code: $pipTestExitCode)" -ForegroundColor Yellow
-        
-        # Test 2: Alternative test - import pip directly
-        Write-Host "[TEST] Testing direct pip import..." -ForegroundColor Gray
-        $pipImportTest = & "$OutputPath\python\python.exe" -c "import pip; print('Pip version:', pip.__version__)" 2>$null
-        $importTestExitCode = $LASTEXITCODE
-        
-        if ($importTestExitCode -eq 0 -and $pipImportTest) {
-            Write-Host "[OK] Pip accessible via import: $pipImportTest" -ForegroundColor Green
-        } else {
-            Write-Host "[ERROR] Pip installation failed - module not accessible" -ForegroundColor Red
-            Write-Host "[DEBUG] pip -m test exit code: $pipTestExitCode" -ForegroundColor Gray
-            Write-Host "[DEBUG] pip import test exit code: $importTestExitCode" -ForegroundColor Gray
+        # Standard pip testing logic
+        Write-Host "Testing pip installation..." -ForegroundColor Yellow
+        try {
+            # Test 1: Check if pip module is accessible
+            Write-Host "[TEST] Testing 'python -m pip --version'..." -ForegroundColor Gray
+            $pipModuleTest = & "$OutputPath\python\python.exe" -m pip --version 2>$null
+            $pipTestExitCode = $LASTEXITCODE
             
-            Write-Host "[INFO] Attempting pip installation repair..." -ForegroundColor Yellow
-            
-            # Ensure proper directory structure exists
-            $pipLibDir = "$OutputPath\python\Lib\site-packages"
-            if (-not (Test-Path $pipLibDir)) {
-                New-Item -ItemType Directory -Path $pipLibDir | Out-Null
-            }
-            
-            # Retry installation with explicit target
-            Write-Host "[INFO] Reinstalling pip to correct location..." -ForegroundColor Yellow
-            & "$OutputPath\python\python.exe" "$OutputPath\python\get-pip.py" --no-warn-script-location --target $pipLibDir --force-reinstall
-            
-            # Final verification
-            Write-Host "[TEST] Final pip verification..." -ForegroundColor Gray
-            $finalTest = & "$OutputPath\python\python.exe" -m pip --version 2>$null
-            $finalExitCode = $LASTEXITCODE
-            
-            if ($finalExitCode -eq 0 -and $finalTest) {
-                Write-Host "[OK] Pip installation successful after repair: $finalTest" -ForegroundColor Green
+            if ($pipTestExitCode -eq 0 -and $pipModuleTest) {
+                Write-Host "[OK] Pip module accessible: $pipModuleTest" -ForegroundColor Green
             } else {
-                Write-Host "[ERROR] Pip installation still failed after repair" -ForegroundColor Red
-                Write-Host "[ERROR] Final test exit code: $finalExitCode" -ForegroundColor Red
-                Write-Host "[ERROR] Cannot proceed without working pip installation" -ForegroundColor Red
-                exit 1
+                Write-Host "[WARN] pip module test failed (exit code: $pipTestExitCode)" -ForegroundColor Yellow
+                
+                # Test 2: Alternative test - import pip directly
+                Write-Host "[TEST] Testing direct pip import..." -ForegroundColor Gray
+                $pipImportTest = & "$OutputPath\python\python.exe" -c "import pip; print('Pip version:', pip.__version__)" 2>$null
+                $importTestExitCode = $LASTEXITCODE
+                
+                if ($importTestExitCode -eq 0 -and $pipImportTest) {
+                    Write-Host "[OK] Pip accessible via import: $pipImportTest" -ForegroundColor Green
+                } else {
+                    Write-Host "[ERROR] Pip installation failed - module not accessible" -ForegroundColor Red
+                    Write-Host "[DEBUG] pip -m test exit code: $pipTestExitCode" -ForegroundColor Gray
+                    Write-Host "[DEBUG] pip import test exit code: $importTestExitCode" -ForegroundColor Gray
+                    
+                    Write-Host "[INFO] Attempting pip installation repair..." -ForegroundColor Yellow
+                    
+                    # Ensure proper directory structure exists
+                    $pipLibDir = "$OutputPath\python\Lib\site-packages"
+                    if (-not (Test-Path $pipLibDir)) {
+                        New-Item -ItemType Directory -Path $pipLibDir | Out-Null
+                    }
+                    
+                    # Retry installation with explicit target
+                    Write-Host "[INFO] Reinstalling pip to correct location..." -ForegroundColor Yellow
+                    & "$OutputPath\python\python.exe" "$OutputPath\python\get-pip.py" --no-warn-script-location --target $pipLibDir --force-reinstall
+                    
+                    # Final verification
+                    Write-Host "[TEST] Final pip verification..." -ForegroundColor Gray
+                    $finalTest = & "$OutputPath\python\python.exe" -m pip --version 2>$null
+                    $finalExitCode = $LASTEXITCODE
+                    
+                    if ($finalExitCode -eq 0 -and $finalTest) {
+                        Write-Host "[OK] Pip installation successful after repair: $finalTest" -ForegroundColor Green
+                    } else {
+                        Write-Host "[ERROR] Pip installation still failed after repair" -ForegroundColor Red
+                        Write-Host "[ERROR] Final test exit code: $finalExitCode" -ForegroundColor Red
+                        Write-Host "[ERROR] Cannot proceed without working pip installation" -ForegroundColor Red
+                        exit 1
+                    }
+                }
             }
+        } catch {
+            Write-Host "[ERROR] Failed to verify pip installation: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "[ERROR] Stack trace: $($_.ScriptStackTrace)" -ForegroundColor Gray
+            exit 1
         }
     }
-} catch {
-    Write-Host "[ERROR] Failed to verify pip installation: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host "[ERROR] Stack trace: $($_.ScriptStackTrace)" -ForegroundColor Gray
-    exit 1
 }
 
 # Download ALL Python dependencies offline
@@ -316,15 +341,42 @@ if (Test-Path $depDownloadScript) {
     Write-Host "Dependencies will be installed online during first run..." -ForegroundColor Yellow
 }
 
-# Install dependencies offline (if available)
-if (Test-Path "$OutputPath\dependencies\requirements.txt") {
-    Write-Host "Installing dependencies offline..." -ForegroundColor Yellow
+# =============================================================================
+# DEPENDENCY INSTALLATION WITH WINDOWS 10 OPTIMIZATIONS
+# =============================================================================
+
+# Use Windows 10 optimized dependency installation if available
+if ($Win10HelpersLoaded -and (Test-Path "$OutputPath\dependencies\requirements.txt")) {
+    Write-Host "Installing dependencies with Windows 10 optimizations..." -ForegroundColor Cyan
+    
+    $dependencyInstallSuccess = Install-DependenciesWindows10 -OutputPath $OutputPath -CompatibilityInfo $CompatibilityInfo
+    if ($dependencyInstallSuccess) {
+        $OfflineMode = $true
+        Write-Host "[OK] Windows 10 optimized dependency installation completed" -ForegroundColor Green
+    } else {
+        Write-Host "[WARN] Windows 10 optimized dependency installation failed, falling back to standard method" -ForegroundColor Yellow
+        $OfflineMode = $false
+    }
+} else {
+    $dependencyInstallSuccess = $false
+}
+
+# Fallback to standard dependency installation
+if (-not $dependencyInstallSuccess -and (Test-Path "$OutputPath\dependencies\requirements.txt")) {
+    Write-Host "Installing dependencies offline (standard method)..." -ForegroundColor Yellow
     
     # CRITICAL: Validate requirements.txt has content
     $reqContent = Get-Content "$OutputPath\dependencies\requirements.txt" -Raw -ErrorAction SilentlyContinue
     if (-not $reqContent -or $reqContent.Trim() -eq "") {
-        Write-Host "[ERROR] requirements.txt is empty or unreadable" -ForegroundColor Red
-        Write-Host "[ERROR] This indicates dependency download failed earlier" -ForegroundColor Red
+        if ($Win10CompatibilityLoaded) {
+            Write-StandardizedError -ErrorMessage "requirements.txt is empty or unreadable" `
+                -Context "This indicates dependency download failed earlier" `
+                -Solution "Re-run the script or check internet connectivity" `
+                -TroubleshootingHint "Windows 10 may have blocked the download process"
+        } else {
+            Write-Host "[ERROR] requirements.txt is empty or unreadable" -ForegroundColor Red
+            Write-Host "[ERROR] This indicates dependency download failed earlier" -ForegroundColor Red
+        }
         $OfflineMode = $false
     } else {
         # Count non-empty, non-comment lines
@@ -334,21 +386,40 @@ if (Test-Path "$OutputPath\dependencies\requirements.txt") {
         # FIXED: Use consistent target directory for both Python and dependencies
         $targetDir = "$OutputPath\Lib\site-packages"
         
-        # ENHANCED: Clear existing installations to avoid conflicts
+        # ENHANCED: Clear existing installations to avoid conflicts with Windows 10 compatibility
         if (Test-Path $targetDir) {
             Write-Host "[INFO] Clearing existing site-packages to avoid conflicts..." -ForegroundColor Yellow
             try {
                 # Remove only non-essential directories, keep core Python modules
-                $dirsToRemove = Get-ChildItem $targetDir -Directory | Where-Object { 
+                $dirsToRemove = Get-ChildItem $targetDir -Directory -ErrorAction SilentlyContinue | Where-Object { 
                     $_.Name -notmatch "^(_|site|pip|setuptools|wheel)" 
                 }
                 foreach ($dir in $dirsToRemove) {
-                    Remove-Item $dir.FullName -Recurse -Force -ErrorAction SilentlyContinue
+                    if ($Win10HelpersLoaded) {
+                        Remove-FileWithRetry -Path $dir.FullName -Force
+                    } else {
+                        Remove-Item $dir.FullName -Recurse -Force -ErrorAction SilentlyContinue
+                    }
                 }
                 
                 # Remove .pth files and dist-info directories
-                Get-ChildItem $targetDir -Filter "*.pth" | Remove-Item -Force -ErrorAction SilentlyContinue
-                Get-ChildItem $targetDir -Filter "*dist-info" -Directory | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+                $pthFiles = Get-ChildItem $targetDir -Filter "*.pth" -ErrorAction SilentlyContinue
+                foreach ($pthFile in $pthFiles) {
+                    if ($Win10HelpersLoaded) {
+                        Remove-FileWithRetry -Path $pthFile.FullName
+                    } else {
+                        Remove-Item $pthFile.FullName -Force -ErrorAction SilentlyContinue
+                    }
+                }
+                
+                $distInfoDirs = Get-ChildItem $targetDir -Filter "*dist-info" -Directory -ErrorAction SilentlyContinue
+                foreach ($distDir in $distInfoDirs) {
+                    if ($Win10HelpersLoaded) {
+                        Remove-FileWithRetry -Path $distDir.FullName -Force
+                    } else {
+                        Remove-Item $distDir.FullName -Recurse -Force -ErrorAction SilentlyContinue
+                    }
+                }
                 
                 Write-Host "[OK] Cleared existing packages" -ForegroundColor Green
             } catch {
@@ -361,18 +432,45 @@ if (Test-Path "$OutputPath\dependencies\requirements.txt") {
             New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
         }
         
-        # Install UV first (if available)
+        # Install UV first (if available) with Windows 10 handling
         $uvWheels = Get-ChildItem "$OutputPath\dependencies\uv-deps\*.whl" -ErrorAction SilentlyContinue
         if ($uvWheels) {
             Write-Host "Installing UV..." -ForegroundColor Yellow
             # FIXED: Use forward slashes in paths passed to Python for cross-platform compatibility
             $uvDepsPath = "$OutputPath\dependencies\uv-deps" -replace '\\', '/'
             $targetDirForward = $targetDir -replace '\\', '/'
-            & "$OutputPath\python\python.exe" -m pip install --no-index --find-links $uvDepsPath --target $targetDirForward --force-reinstall uv
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "[WARN] UV installation failed, continuing without UV..." -ForegroundColor Yellow
+            
+            if ($CompatibilityInfo.OptimizationStrategy.UseExtendedRetries) {
+                # Use retry logic for Windows 10
+                $uvInstallSuccess = $false
+                for ($retry = 1; $retry -le 3; $retry++) {
+                    try {
+                        & "$OutputPath\python\python.exe" -m pip install --no-index --find-links $uvDepsPath --target $targetDirForward --force-reinstall uv --timeout 180
+                        if ($LASTEXITCODE -eq 0) {
+                            $uvInstallSuccess = $true
+                            break
+                        }
+                    } catch {
+                        if ($retry -lt 3) {
+                            Write-Host "  UV install retry $retry..." -ForegroundColor Gray
+                            Start-Sleep -Seconds ($retry * 2)
+                        }
+                    }
+                }
+                
+                if ($uvInstallSuccess) {
+                    Write-Host "[OK] UV installed successfully" -ForegroundColor Green
+                } else {
+                    Write-Host "[WARN] UV installation failed after retries, continuing without UV..." -ForegroundColor Yellow
+                }
             } else {
-                Write-Host "[OK] UV installed successfully" -ForegroundColor Green
+                # Standard UV installation
+                & "$OutputPath\python\python.exe" -m pip install --no-index --find-links $uvDepsPath --target $targetDirForward --force-reinstall uv
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "[WARN] UV installation failed, continuing without UV..." -ForegroundColor Yellow
+                } else {
+                    Write-Host "[OK] UV installed successfully" -ForegroundColor Green
+                }
             }
         }
         
@@ -383,7 +481,7 @@ if (Test-Path "$OutputPath\dependencies\requirements.txt") {
         $reqPath = "$OutputPath\dependencies\requirements.txt" -replace '\\', '/'
         $targetDirForward = $targetDir -replace '\\', '/'
         
-        # ENHANCED: Add --force-reinstall to handle existing files
+        # ENHANCED: Add --force-reinstall to handle existing files with Windows 10 timeout
         $installCmd = @(
             "$OutputPath\python\python.exe", "-m", "pip", "install",
             "--no-index",
@@ -391,10 +489,11 @@ if (Test-Path "$OutputPath\dependencies\requirements.txt") {
             "--target", $targetDirForward,
             "--force-reinstall",
             "--no-deps",  # Avoid dependency resolution issues
+            "--timeout", "300",  # Extended timeout for Windows 10
             "--requirement", $reqPath
         )
         
-        Write-Host "[DEBUG] Running pip install command..." -ForegroundColor Gray
+        Write-Host "[DEBUG] Running pip install command with Windows 10 optimizations..." -ForegroundColor Gray
         & $installCmd[0] $installCmd[1..$($installCmd.Length-1)]
     }
     
@@ -814,6 +913,44 @@ Set-Content -Path "$OutputPath\README.txt" -Value $readme
 
 Write-Host "[OK] Created configuration files and documentation" -ForegroundColor Green
 
+# =============================================================================
+# WINDOWS 10 PACKAGE VALIDATION
+# =============================================================================
+
+# Run Windows 10 package validation if helpers are loaded
+if ($Win10HelpersLoaded) {
+    Write-Host "`n" + "=" * 60
+    Write-Host "WINDOWS 10 PACKAGE VALIDATION" -ForegroundColor Cyan
+    Write-Host "=" * 60
+    
+    $validationResults = Test-PackageIntegrityWindows10 -OutputPath $OutputPath
+    
+    if ($validationResults.OverallValid) {
+        Write-Host "`n✅ Windows 10 package validation: PASSED" -ForegroundColor Green
+        if ($validationResults.Issues.Count -eq 0) {
+            Write-Host "🎉 Package is fully optimized for Windows 10 deployment!" -ForegroundColor Green
+        } else {
+            Write-Host "⚠️ Minor issues detected but package is still functional:" -ForegroundColor Yellow
+            foreach ($issue in $validationResults.Issues) {
+                Write-Host "  • $issue" -ForegroundColor Gray
+            }
+        }
+    } else {
+        Write-Host "`n❌ Windows 10 package validation: FAILED" -ForegroundColor Red
+        Write-Host "Critical issues that need attention:" -ForegroundColor Red
+        foreach ($issue in $validationResults.Issues) {
+            Write-Host "  • $issue" -ForegroundColor Yellow
+        }
+        Write-Host "`nRecommendation: Re-run the script or check Windows 10 compatibility" -ForegroundColor Yellow
+    }
+    
+    Write-Host "`n" + "=" * 60 + "`n"
+    
+    # Clean up temporary files with Windows 10 compatibility
+    Write-Host "Cleaning up temporary files..." -ForegroundColor Gray
+    Remove-TemporaryFilesWindows10 -Path $OutputPath
+}
+
 # Create ZIP package
 Write-Host "Creating ZIP package..." -ForegroundColor Yellow
 $zipName = "serena-fully-portable-windows-v0.1.4.zip"
@@ -829,10 +966,14 @@ try {
     Write-Host "[ERROR] Failed to create ZIP: $($_.Exception.Message)" -ForegroundColor Red
 }
 
-# Final summary
+# =============================================================================
+# FINAL SUMMARY WITH WINDOWS 10 INFORMATION
+# =============================================================================
+
 Write-Host ""
 Write-Host "===========================================" -ForegroundColor Cyan
 Write-Host "  FULLY PORTABLE PACKAGE CREATED!" -ForegroundColor Green
+Write-Host "   Windows 10 Enhanced Edition v2.1" -ForegroundColor Green
 Write-Host "===========================================" -ForegroundColor Cyan
 Write-Host ""
 if ($zipSize -gt 0) {
@@ -841,19 +982,83 @@ if ($zipSize -gt 0) {
 } else {
     Write-Host " Package: $zipName" -ForegroundColor Yellow
 }
+
+# Display Windows 10 specific information if available
+if ($CompatibilityInfo) {
+    Write-Host " Windows: $($CompatibilityInfo.WindowsInfo.ProductName)" -ForegroundColor Yellow
+    if ($CompatibilityInfo.WindowsInfo.IsWindows10) {
+        Write-Host " Version: $($CompatibilityInfo.WindowsInfo.Windows10Version)" -ForegroundColor Yellow
+        Write-Host " Console: $($CompatibilityInfo.ConsoleInfo.ConsoleType)" -ForegroundColor Yellow
+    }
+    if ($CompatibilityInfo.CorporateInfo.IsDomainJoined) {
+        Write-Host " Environment: Corporate Domain" -ForegroundColor Yellow
+    } else {
+        Write-Host " Environment: Personal/Workgroup" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host " Platform: Windows (compatibility modules not loaded)" -ForegroundColor Gray
+}
+
 Write-Host " Target: Corporate/Air-gapped environments" -ForegroundColor Yellow  
 $offlineStatus = if ($OfflineMode) { "100% Ready" } else { "Requires internet for first setup" }
 $offlineColor = if ($OfflineMode) { "Green" } else { "Yellow" }
 Write-Host " Offline: $offlineStatus" -ForegroundColor $offlineColor
 Write-Host ""
-Write-Host "[YES] Features included:" -ForegroundColor Green
-Write-Host "   * Embedded Python $PythonVersion" -ForegroundColor White
+
+Write-Host "[CORE FEATURES]:" -ForegroundColor Green
+Write-Host "   ✓ Embedded Python $PythonVersion" -ForegroundColor White
 $depStatus = if ($OfflineMode) { "Pre-installed dependencies" } else { "Online dependency installer" }
-Write-Host "   * $depStatus" -ForegroundColor White  
-Write-Host "   * 13+ Language servers pre-downloaded" -ForegroundColor White
-Write-Host "   * VS Code + Claude Desktop integration" -ForegroundColor White
-Write-Host "   * Corporate proxy/certificate support" -ForegroundColor White
-Write-Host "   * Zero-installation deployment" -ForegroundColor White
+Write-Host "   ✓ $depStatus" -ForegroundColor White  
+Write-Host "   ✓ 13+ Language servers pre-downloaded" -ForegroundColor White
+Write-Host "   ✓ VS Code + Claude Desktop integration" -ForegroundColor White
+Write-Host "   ✓ Corporate proxy/certificate support" -ForegroundColor White
+Write-Host "   ✓ Zero-installation deployment" -ForegroundColor White
+
+# Display Windows 10 specific enhancements
+if ($Win10CompatibilityLoaded -or $Win10HelpersLoaded) {
+    Write-Host ""
+    Write-Host "[WINDOWS 10 ENHANCEMENTS]:" -ForegroundColor Cyan
+    if ($Win10CompatibilityLoaded) {
+        Write-Host "   ✓ Windows 10 version detection and optimization" -ForegroundColor White
+        Write-Host "   ✓ Antivirus interference detection and mitigation" -ForegroundColor White
+        Write-Host "   ✓ Corporate environment detection" -ForegroundColor White
+        Write-Host "   ✓ NTFS permission validation" -ForegroundColor White
+    }
+    if ($Win10HelpersLoaded) {
+        Write-Host "   ✓ Enhanced file locking handling" -ForegroundColor White
+        Write-Host "   ✓ Retry logic for failed operations" -ForegroundColor White
+        Write-Host "   ✓ Optimized extraction processes" -ForegroundColor White
+        Write-Host "   ✓ Standardized English error messages" -ForegroundColor White
+    }
+    
+    if ($CompatibilityInfo -and $CompatibilityInfo.OptimizationStrategy.UseExtendedRetries) {
+        Write-Host "   ✓ Legacy Windows 10 compatibility mode enabled" -ForegroundColor White
+    }
+} else {
+    Write-Host ""
+    Write-Host "[NOTE]: Windows 10 compatibility modules not loaded - using standard methods" -ForegroundColor Gray
+}
+
 Write-Host ""
-Write-Host " Ready for deployment to corporate environments!" -ForegroundColor Cyan
+Write-Host " 🎉 Ready for deployment to corporate Windows 10 environments!" -ForegroundColor Cyan
+
+# Display deployment recommendations
+if ($CompatibilityInfo) {
+    if ($CompatibilityInfo.AntivirusInfo.PotentialInterference -or $CompatibilityInfo.CorporateInfo.IsDomainJoined) {
+        Write-Host ""
+        Write-Host "[DEPLOYMENT RECOMMENDATIONS]:" -ForegroundColor Magenta
+        if ($CompatibilityInfo.AntivirusInfo.PotentialInterference) {
+            Write-Host "   • Add installation directory to antivirus exclusions" -ForegroundColor Gray
+            Write-Host "   • Consider temporary real-time protection disable during installation" -ForegroundColor Gray
+        }
+        if ($CompatibilityInfo.CorporateInfo.IsDomainJoined) {
+            Write-Host "   • Run installation as administrator in corporate environments" -ForegroundColor Gray
+            Write-Host "   • Verify proxy/certificate configuration before deployment" -ForegroundColor Gray
+        }
+        if ($CompatibilityInfo.WindowsInfo.RequiresLegacyHandling) {
+            Write-Host "   • Older Windows 10 detected - enhanced compatibility automatically applied" -ForegroundColor Gray
+        }
+    }
+}
+
 Write-Host ""

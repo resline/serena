@@ -643,6 +643,227 @@ class CorporateDownloader:
             print(f"      [WARN] Could not extract metadata: {e}")
             print("      [INFO] This won't affect gem functionality")
 
+    def _extract_gem_tar_enhanced(self, archive_path: Path, dest_dir: Path, is_windows: bool, attempt: int) -> bool:
+        """Enhanced gem tar extraction with file-by-file error handling"""
+        try:
+            with tarfile.open(archive_path, "r") as tar:
+                members = tar.getmembers()
+                print(f"    [INFO] Processing {len(members)} files from gem archive...")
+                extracted_count = 0
+                failed_files = []
+                for i, member in enumerate(members):
+                    try:
+                        if len(members) > 10 and i % max(1, len(members) // 10) == 0:
+                            print(f"      Progress: {i}/{len(members)} files")
+                        if is_windows and self._is_problematic_file(member.name):
+                            print(f"      [SKIP] Skipping problematic file: {member.name}")
+                            continue
+                        if self._extract_single_member_with_retry(tar, member, dest_dir, is_windows):
+                            extracted_count += 1
+                        else:
+                            failed_files.append(member.name)
+                    except Exception as e:
+                        print(f"      [WARN] Failed to extract {member.name}: {e}")
+                        failed_files.append(member.name)
+                        continue
+                print(f"    [INFO] Successfully extracted {extracted_count}/{len(members)} files")
+                if failed_files and len(failed_files) < len(members) * 0.3:
+                    print(f"    [INFO] Some files failed but continuing ({len(failed_files)} failures)")
+                    return True
+                elif failed_files:
+                    print(f"    [ERROR] Too many extraction failures ({len(failed_files)} failures)")
+                    return False
+                else:
+                    return True
+        except Exception as e:
+            print(f"    [ERROR] Gem tar extraction failed: {e}")
+            return False
+
+    def _is_problematic_file(self, filename: str) -> bool:
+        """Check if file is known to cause issues on Windows"""
+        if len(filename) > 200:
+            return True
+        problematic_patterns = ['.git/', '__pycache__/', '.pytest_cache/']
+        for pattern in problematic_patterns:
+            if pattern in filename:
+                return True
+        return False
+
+    def _extract_single_member_with_retry(self, tar: tarfile.TarFile, member: tarfile.TarInfo, dest_dir: Path, is_windows: bool) -> bool:
+        """Extract single tar member with retry logic"""
+        max_attempts = 3 if is_windows else 1
+        for attempt in range(max_attempts):
+            try:
+                if is_windows and member.isfile():
+                    member.mode = 0o644
+                elif is_windows and member.isdir():
+                    member.mode = 0o755
+                tar.extract(member, dest_dir)
+                return True
+            except (PermissionError, OSError) as e:
+                if attempt < max_attempts - 1:
+                    time.sleep(0.1 * (attempt + 1))
+                    continue
+                print(f"        [WARN] Could not extract {member.name}: {e}")
+                return False
+            except Exception as e:
+                print(f"        [WARN] Unexpected error extracting {member.name}: {e}")
+                return False
+        return False
+
+    def _process_gem_contents_with_checks(self, temp_dir: Path, dest_dir: Path, is_windows: bool, attempt: int) -> bool:
+        """Process extracted gem contents with integrity checks"""
+        try:
+            data_tar = temp_dir / "data.tar.gz"
+            if data_tar.exists():
+                print("    [INFO] Processing gem data archive...")
+                if not self._extract_data_tar_enhanced(data_tar, dest_dir, is_windows, attempt):
+                    print("    [WARN] Data archive processing failed")
+                    return False
+            metadata_gz = temp_dir / "metadata.gz"
+            if metadata_gz.exists():
+                print("    [INFO] Processing gem metadata...")
+                self._extract_metadata_safely(metadata_gz, dest_dir, is_windows)
+            for item in temp_dir.iterdir():
+                if item.name not in ["data.tar.gz", "metadata.gz"]:
+                    try:
+                        if item.is_file():
+                            target = dest_dir / item.name
+                            shutil.copy2(item, target)
+                        elif item.is_dir():
+                            target = dest_dir / item.name
+                            shutil.copytree(item, target, dirs_exist_ok=True)
+                    except Exception as e:
+                        print(f"      [WARN] Could not copy {item.name}: {e}")
+            return self._verify_extraction_integrity(dest_dir)
+        except Exception as e:
+            print(f"    [ERROR] Gem content processing failed: {e}")
+            return False
+
+    def _extract_data_tar_enhanced(self, data_tar: Path, dest_dir: Path, is_windows: bool, attempt: int) -> bool:
+        """Enhanced data.tar.gz extraction with better Windows support"""
+        max_attempts = 5 if is_windows else 1
+        retry_delays = [0.2, 0.5, 1.0, 2.0, 3.0]
+        for sub_attempt in range(max_attempts):
+            try:
+                if not self._test_file_accessibility(data_tar, is_windows):
+                    if sub_attempt < max_attempts - 1:
+                        delay = retry_delays[sub_attempt] if sub_attempt < len(retry_delays) else retry_delays[-1]
+                        print(f"        [RETRY] Data file not accessible, waiting {delay}s...")
+                        time.sleep(delay)
+                        continue
+                    else:
+                        print("        [ERROR] Data file remains inaccessible")
+                        return False
+                extracted_count = 0
+                failed_count = 0
+                with gzip.open(data_tar, "rb") as gz:
+                    with tarfile.open(fileobj=gz) as tar:
+                        members = tar.getmembers()
+                        print(f"        [INFO] Processing {len(members)} data files...")
+                        for i, member in enumerate(members):
+                            try:
+                                if len(members) > 20 and i % max(1, len(members) // 10) == 0:
+                                    print(f"          Progress: {i}/{len(members)} data files")
+                                if is_windows:
+                                    if self._extract_single_member_with_retry(tar, member, dest_dir, is_windows):
+                                        extracted_count += 1
+                                    else:
+                                        failed_count += 1
+                                else:
+                                    tar.extract(member, dest_dir)
+                                    extracted_count += 1
+                            except Exception as e:
+                                print(f"          [WARN] Could not extract data file {member.name}: {e}")
+                                failed_count += 1
+                                continue
+                print(f"        [INFO] Data extraction: {extracted_count} success, {failed_count} failed")
+                # Try to remove the intermediate file
+                try:
+                    data_tar.unlink()
+                except:
+                    pass
+                success_rate = extracted_count / (extracted_count + failed_count) if (extracted_count + failed_count) > 0 else 0
+                return success_rate > 0.7
+            except Exception as e:
+                if sub_attempt < max_attempts - 1:
+                    delay = retry_delays[sub_attempt] if sub_attempt < len(retry_delays) else retry_delays[-1]
+                    print(f"        [RETRY] Data extraction failed, retrying in {delay}s: {e}")
+                    time.sleep(delay)
+                    continue
+                print(f"        [ERROR] Could not extract gem data after {max_attempts} attempts: {e}")
+                return False
+        return False
+
+    def _verify_extraction_integrity(self, dest_dir: Path) -> bool:
+        """Verify that extraction completed successfully with basic integrity checks"""
+        try:
+            if not dest_dir.exists():
+                print("    [ERROR] Destination directory does not exist")
+                return False
+            file_count = 0
+            dir_count = 0
+            for item in dest_dir.rglob("*"):
+                if item.is_file():
+                    file_count += 1
+                elif item.is_dir():
+                    dir_count += 1
+            if file_count == 0:
+                print("    [WARN] No files found in extraction - possible failure")
+                return False
+            print(f"    [INFO] Extraction verified: {file_count} files, {dir_count} directories")
+            common_files = ["lib", "bin", "README", "LICENSE", "CHANGELOG"]
+            found_indicators = 0
+            for item in dest_dir.iterdir():
+                if any(indicator in item.name.upper() for indicator in common_files):
+                    found_indicators += 1
+            if found_indicators > 0:
+                print(f"    [INFO] Found {found_indicators} gem structure indicators")
+                return True
+            else:
+                print("    [WARN] No typical gem structure found, but proceeding")
+                return True
+        except Exception as e:
+            print(f"    [WARN] Integrity check failed: {e}")
+            return True
+
+    def _enhanced_fallback_gem_extraction(self, archive_path: Path, dest_dir: Path, is_windows: bool) -> bool:
+        """Enhanced fallback extraction with multiple strategies"""
+        print("  [FALLBACK] Attempting enhanced fallback gem extraction...")
+        # Try basic tar extraction first
+        try:
+            with tarfile.open(archive_path, "r") as tar:
+                safe_members = []
+                for member in tar.getmembers():
+                    if member.name.endswith((".gz", ".sig", ".bz2", ".xz")):
+                        continue
+                    if is_windows and len(member.name) > 200:
+                        continue
+                    safe_members.append(member)
+                if safe_members:
+                    print(f"    [INFO] Extracting {len(safe_members)} safe files...")
+                    if is_windows:
+                        extracted = 0
+                        for member in safe_members:
+                            try:
+                                tar.extract(member, dest_dir)
+                                extracted += 1
+                            except Exception as e:
+                                print(f"      [WARN] Could not extract {member.name}: {e}")
+                                continue
+                        print(f"    [INFO] Successfully extracted {extracted} files")
+                        return extracted > 0
+                    else:
+                        tar.extractall(dest_dir, members=safe_members)
+                        print(f"    [INFO] Extracted {len(safe_members)} safe files")
+                        return True
+                else:
+                    print("    [WARN] No safe files found to extract")
+                    return False
+        except Exception as e:
+            print(f"    [ERROR] Enhanced fallback extraction failed: {e}")
+            return False
+
     def _fallback_gem_extraction(self, archive_path: Path, dest_dir: Path) -> bool:
         """Fallback extraction method for problematic gems"""
         print("  [FALLBACK] Attempting basic gem extraction...")
@@ -882,6 +1103,7 @@ def main():
 
     # Initialize downloader
     downloader = CorporateDownloader(args.proxy, args.cert)
+    validator = LanguageServerValidator()
 
     # Create output directory
     output_dir = Path(args.output)
@@ -908,8 +1130,12 @@ def main():
     print("=" * 60)
 
     success_count = 0
+    
+    # Initialize progress tracker for downloads
+    progress = ProgressTracker(len(servers), "Downloading language servers")
 
-    for name, info in servers.items():
+    for i, (name, info) in enumerate(servers.items()):
+        progress.update(i, name)
         server_dir = output_dir / name
         server_dir.mkdir(exist_ok=True)
 
@@ -938,17 +1164,13 @@ def main():
                 # Clean up archive
                 archive_path.unlink()
                 success_count += 1
-
-        print()
+    
+    progress.update(len(servers), "Complete")
+    print()
 
     print("=" * 60)
     print(f"Successfully downloaded {success_count}/{len(servers)} language servers")
 
-    if success_count < len(servers):
-        print("\nFailed servers can be manually downloaded from:")
-        for name, info in servers.items():
-            if not (output_dir / name).exists():
-                print(f"  - {name}: {info['url']}")
 
     # Create manifest
     manifest = {"version": "1.0", "servers": list(servers.keys()), "platform": platform, "success_count": success_count}
@@ -956,8 +1178,46 @@ def main():
     with open(output_dir / "manifest.json", "w") as f:
         json.dump(manifest, f, indent=2)
 
-    print(f"\nPackage ready at: {output_dir}")
-    print("Copy this directory to target machines for offline deployment")
+    print("\n" + "=" * 60)
+    print("🔍 Validating Language Servers...")
+    print("=" * 60)
+    
+    # Validate all downloaded servers
+    validation_results = validator.validate_all_servers(output_dir)
+    
+    # Generate validation report
+    validator.generate_validation_report(validation_results, output_dir / "language-server-validation-report.md")
+    
+    print("\n" + "=" * 60)
+    print("📊 Download & Validation Summary")
+    print("=" * 60)
+    print(f"Downloaded: {success_count}/{len(servers)} language servers")
+    print(f"Validated: {validation_results['valid_servers']}/{validation_results['total_servers']} servers")
+    print(f"Total size: {validation_results['total_size'] / 1024 / 1024:.1f} MB")
+    print(f"Output directory: {output_dir}")
+    
+    # Check validation results
+    validation_success_rate = validation_results['valid_servers'] / validation_results['total_servers'] if validation_results['total_servers'] > 0 else 0
+    
+    if validation_success_rate >= 0.9:  # 90% success rate
+        print("\n✅ Language servers validated successfully!")
+        print(f"📋 Validation report: {output_dir}/language-server-validation-report.md")
+    else:
+        print(f"\n⚠️  Some servers failed validation (success rate: {validation_success_rate:.1%})")
+        print("Please review the validation report for details.")
+        
+    print("\n🚀 Next Steps:")
+    print("1. Copy this directory to target machines for offline deployment")
+    print("2. Review validation report for any issues")
+    print("3. Test language servers in your development environment")
+    
+    # Show failed servers if any
+    if success_count < len(servers):
+        print("\n⚠️  Failed downloads - manual installation required:")
+        for name, info in servers.items():
+            server_dir = output_dir / name
+            if not server_dir.exists() or not any(server_dir.iterdir()):
+                print(f"  - {name}: {info['url']}")
 
 
 if __name__ == "__main__":

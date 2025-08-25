@@ -362,8 +362,8 @@ class OfflineDependencyDownloader:
         with open(requirements_path) as f:
             requirements_content = f.read().strip()
 
-        # Debug: Show the actual requirements content
-        print(f"[DEBUG] Requirements file content (first 200 chars): {requirements_content[:200]}")
+        # Show a preview of the requirements
+        print(f"Requirements preview: {requirements_content[:100]}{'...' if len(requirements_content) > 100 else ''}")
 
         if not requirements_content:
             safe_print(f"[ERROR] Requirements file is empty: {requirements_path}")
@@ -380,14 +380,14 @@ class OfflineDependencyDownloader:
 
         req_count = len(valid_requirements)
         print(f"[OK] Found {req_count} requirements in {requirements_path}")
-        print(f"[DEBUG] Requirements: {', '.join(valid_requirements[:5])}{'...' if len(valid_requirements) > 5 else ''}")
+        print(f"Key requirements: {', '.join(valid_requirements[:5])}{'...' if len(valid_requirements) > 5 else ''}")
 
-        # FIXED: Try multiple approaches for calling pip
+        # FIXED: Try multiple approaches for calling pip - SEPARATE base command from download subcommand
         pip_methods = [
             # Method 1: python -m pip (preferred)
-            [self.python_exe, "-m", "pip", "download"],
+            ([self.python_exe, "-m", "pip"], "download"),
             # Method 2: Direct pip call (fallback)
-            ["pip", "download"],
+            (["pip"], "download"),
         ]
 
         # FIXED: Use absolute paths and proper Windows handling
@@ -409,51 +409,37 @@ class OfflineDependencyDownloader:
         )
 
         # Try each method
-        for i, pip_cmd in enumerate(pip_methods, 1):
-            print(f"Trying method {i}: {' '.join(pip_cmd[:3])}...")
-            cmd = pip_cmd + base_args
+        for i, (pip_base, pip_subcommand) in enumerate(pip_methods, 1):
+            print(f"Trying method {i}: {' '.join(pip_base)} {pip_subcommand}...")
+            cmd = pip_base + [pip_subcommand] + base_args
 
-            # Show the full command for debugging with all details
-            print(f"[DEBUG] Full command (length {len(cmd)}): {cmd}")
-            print(f"[DEBUG] Working directory: {os.getcwd()}")
-            print(f"[DEBUG] Requirements path exists: {requirements_path_abs.exists()}")
-            print(f"[DEBUG] Output directory exists: {output_dir_abs.exists()}")
-            
-            # Detailed argument logging
-            print(f"[DEBUG] Command breakdown:")
-            for idx, arg in enumerate(cmd):
-                print(f"[DEBUG]   [{idx:2}]: '{arg}'")
-            
+            # Show the command for debugging (concise)
             cmd_preview = " ".join(cmd[:8]) + ("..." if len(cmd) > 8 else "")
             print(f"Running: {cmd_preview}")
 
             try:
-                # Test if pip is available first
-                test_cmd = pip_cmd + ["--version"]
+                # Test if pip is available first - CRITICAL FIX: Use pip_base for version test, not pip_cmd
+                test_cmd = pip_base + ["--version"]
                 test_result = subprocess.run(test_cmd, check=False, capture_output=True, text=True, timeout=10)
+                
                 if test_result.returncode != 0:
                     print(f"  Method {i} not available: {test_result.stderr.strip()}")
                     continue
 
-                # Enhanced debugging: try running a simple pip --version first as test
-                print(f"[DEBUG] Testing pip availability...")
-                version_result = subprocess.run([cmd[0], "-m", "pip", "--version"], 
-                                               check=False, capture_output=True, text=True, timeout=10)
-                print(f"[DEBUG] Pip version test - Return code: {version_result.returncode}")
-                if version_result.returncode == 0:
-                    print(f"[DEBUG] Pip version: {version_result.stdout.strip()}")
-                else:
-                    print(f"[DEBUG] Pip version error: {version_result.stderr.strip()}")
+                # Simple availability test
+                print(f"  Testing {' '.join(pip_base)} availability...")
                 
-                # CRITICAL FIX: Do NOT use shell=True on Windows - it breaks argument parsing
-                print(f"[DEBUG] Executing main command...")
-                result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=300)
-                print(f"[DEBUG] Main command result - Return code: {result.returncode}")
-                print(f"[DEBUG] STDOUT length: {len(result.stdout)} chars")
-                print(f"[DEBUG] STDERR length: {len(result.stderr)} chars")
+                # CRITICAL FIX: Use correct working directory for pip download
+                # Try with explicit working directory set to output directory first (this often fixes path issues)
+                result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=300, cwd=str(output_dir_abs))
+                
+                # If that fails, try without specific cwd as fallback
+                if result.returncode != 0:
+                    print(f"  Retrying without specific working directory...")
+                    result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=300)
 
                 if result.returncode == 0:
-                    print("[OK] Successfully downloaded all dependencies")
+                    print("[OK] Successfully downloaded all dependencies using bulk download")
                     return True
                 else:
                     print(f"  Method {i} failed with exit code {result.returncode}")
@@ -477,8 +463,8 @@ class OfflineDependencyDownloader:
                 print(f"  Method {i} failed with exception: {e}")
                 continue
 
-        safe_print("[ERROR] All pip methods failed")
-        print("Attempting fallback: download individual packages...")
+        safe_print("[WARN] Bulk download failed, falling back to individual package downloads...")
+        print("Attempting individual package downloads...")
 
         # Fallback: Try downloading packages individually
         return self._download_individual_packages(valid_requirements, output_dir_abs)
@@ -555,8 +541,8 @@ class OfflineDependencyDownloader:
 
         # FIXED: Try multiple approaches for calling pip (same as main dependencies)
         pip_methods = [
-            [self.python_exe, "-m", "pip", "download"],
-            ["pip", "download"],
+            ([self.python_exe, "-m", "pip"], "download"),
+            (["pip"], "download"),
         ]
 
         # FIXED: Use absolute paths for Windows compatibility
@@ -571,16 +557,16 @@ class OfflineDependencyDownloader:
         base_args = ["--dest", str(uv_dir_abs), "--platform", platform_tag, "--only-binary=:all:"] + self.pip_args
 
         # Try each method
-        for i, pip_cmd in enumerate(pip_methods, 1):
-            print(f"Trying UV download method {i}: {' '.join(pip_cmd[:3])}...")
+        for i, (pip_base, pip_subcommand) in enumerate(pip_methods, 1):
+            print(f"Trying UV download method {i}: {' '.join(pip_base)} {pip_subcommand}...")
             # CRITICAL FIX: Add packages as separate arguments at the end
-            cmd = pip_cmd + base_args + uv_packages
+            cmd = pip_base + [pip_subcommand] + base_args + uv_packages
 
             print(f"Running: {' '.join(cmd[:6])}... {' '.join(uv_packages)}")
 
             try:
                 # Test if pip is available first
-                test_cmd = pip_cmd + ["--version"]
+                test_cmd = pip_base + ["--version"]
                 test_result = subprocess.run(test_cmd, check=False, capture_output=True, text=True, timeout=10)
                 if test_result.returncode != 0:
                     print(f"  UV method {i} not available: {test_result.stderr.strip()}")
@@ -606,7 +592,7 @@ class OfflineDependencyDownloader:
                 print(f"  UV method {i} failed with exception: {e}")
                 continue
 
-        safe_print("[ERROR] Failed to download UV with all methods")
+        safe_print("[WARN] UV bulk download failed, trying individual packages...")
 
         # Fallback: Try downloading UV packages individually
         print("Attempting individual UV package downloads...")

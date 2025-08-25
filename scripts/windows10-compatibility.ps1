@@ -1,0 +1,664 @@
+# Windows 10 Compatibility and Detection Module
+# Provides Windows 10-specific enhancements and compatibility functions
+# Addresses file locking, console differences, antivirus issues, and NTFS permissions
+
+param()
+
+# Set error preference for consistent behavior
+$ErrorActionPreference = "SilentlyContinue"
+
+# Force English output for consistency in corporate environments
+[System.Threading.Thread]::CurrentThread.CurrentCulture = 'en-US'
+[System.Threading.Thread]::CurrentThread.CurrentUICulture = 'en-US'
+
+# =============================================================================
+# WINDOWS VERSION DETECTION
+# =============================================================================
+
+function Get-WindowsVersionInfo {
+    <#
+    .SYNOPSIS
+        Detects Windows version and build information with Windows 10 focus
+    .DESCRIPTION  
+        Provides detailed Windows version detection optimized for Windows 10
+        compatibility checks, including build numbers and edition detection
+    #>
+    
+    try {
+        $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+        $version = [System.Environment]::OSVersion.Version
+        
+        $versionInfo = @{
+            MajorVersion = $version.Major
+            MinorVersion = $version.Minor
+            BuildNumber = $version.Build
+            ProductName = $osInfo.Caption
+            IsWindows10 = ($version.Major -eq 10 -and $version.Build -lt 22000)
+            IsWindows11 = ($version.Major -eq 10 -and $version.Build -ge 22000)
+            IsServer = $osInfo.ProductType -ne 1
+            Edition = $osInfo.OperatingSystemSKU
+            Architecture = $osInfo.OSArchitecture
+        }
+        
+        # Add specific Windows 10 build information
+        if ($versionInfo.IsWindows10) {
+            $versionInfo.Windows10Version = switch ($version.Build) {
+                10240 { "1507 (RTM)" }
+                10586 { "1511 (November Update)" }
+                14393 { "1607 (Anniversary Update)" }
+                15063 { "1703 (Creators Update)" }
+                16299 { "1709 (Fall Creators Update)" }
+                17134 { "1803 (April 2018 Update)" }
+                17763 { "1809 (October 2018 Update)" }
+                18362 { "1903 (May 2019 Update)" }
+                18363 { "1909 (November 2019 Update)" }
+                19041 { "2004 (May 2020 Update)" }
+                19042 { "20H2 (October 2020 Update)" }
+                19043 { "21H1 (May 2021 Update)" }
+                19044 { "21H2 (November 2021 Update)" }
+                19045 { "22H2 (October 2022 Update)" }
+                default { "Build $($version.Build)" }
+            }
+            
+            # Determine if this is an older Windows 10 build that needs special handling
+            $versionInfo.RequiresLegacyHandling = $version.Build -lt 17763  # Earlier than 1809
+        }
+        
+        return $versionInfo
+    }
+    catch {
+        Write-Warning "[WARN] Could not detect Windows version: $($_.Exception.Message)"
+        # Fallback detection
+        return @{
+            MajorVersion = 10
+            MinorVersion = 0
+            BuildNumber = 0
+            ProductName = "Windows 10 (Unknown)"
+            IsWindows10 = $true
+            IsWindows11 = $false
+            IsServer = $false
+            RequiresLegacyHandling = $true
+        }
+    }
+}
+
+function Test-IsWindowsTerminalAvailable {
+    <#
+    .SYNOPSIS
+        Detects if Windows Terminal is available vs legacy console
+    .DESCRIPTION
+        Windows 10 started with legacy console and later got Windows Terminal.
+        Different handling may be needed for console operations.
+    #>
+    
+    # Check if Windows Terminal is installed
+    $wtInstalled = $false
+    
+    # Method 1: Check for Windows Terminal executable
+    if (Get-Command wt -ErrorAction SilentlyContinue) {
+        $wtInstalled = $true
+    }
+    
+    # Method 2: Check Windows Store installation
+    if (-not $wtInstalled) {
+        try {
+            $wtPackage = Get-AppxPackage -Name "Microsoft.WindowsTerminal" -ErrorAction Stop
+            if ($wtPackage) {
+                $wtInstalled = $true
+            }
+        }
+        catch {
+            # Windows Terminal not installed via Store
+        }
+    }
+    
+    # Method 3: Check environment variable that Windows Terminal sets
+    if (-not $wtInstalled) {
+        if ($env:WT_SESSION) {
+            $wtInstalled = $true
+        }
+    }
+    
+    return @{
+        WindowsTerminalAvailable = $wtInstalled
+        IsLegacyConsole = -not $wtInstalled
+        ConsoleType = if ($wtInstalled) { "Windows Terminal" } else { "Legacy Console" }
+    }
+}
+
+# =============================================================================
+# ANTIVIRUS AND SECURITY DETECTION
+# =============================================================================
+
+function Test-AntivirusInterference {
+    <#
+    .SYNOPSIS
+        Detects potential antivirus interference that's common on Windows 10
+    .DESCRIPTION
+        Windows 10 often has more active antivirus scanning that can interfere
+        with file operations, especially for executable downloads and extractions
+    #>
+    
+    $antivirusInfo = @{
+        WindowsDefenderActive = $false
+        ThirdPartyAVDetected = $false
+        RealTimeProtectionEnabled = $false
+        PotentialInterference = $false
+        Recommendations = @()
+    }
+    
+    try {
+        # Check Windows Defender status
+        $defenderStatus = Get-MpComputerStatus -ErrorAction Stop
+        if ($defenderStatus) {
+            $antivirusInfo.WindowsDefenderActive = $defenderStatus.AntivirusEnabled
+            $antivirusInfo.RealTimeProtectionEnabled = $defenderStatus.RealTimeProtectionEnabled
+            
+            if ($defenderStatus.RealTimeProtectionEnabled) {
+                $antivirusInfo.PotentialInterference = $true
+                $antivirusInfo.Recommendations += "Consider temporarily disabling real-time protection during installation"
+                $antivirusInfo.Recommendations += "Add installation directory to Windows Defender exclusions"
+            }
+        }
+    }
+    catch {
+        # Windows Defender cmdlets not available (older Windows 10 or disabled)
+        $antivirusInfo.Recommendations += "Unable to check Windows Defender status"
+    }
+    
+    # Check for third-party antivirus (basic detection)
+    $commonAVProcesses = @(
+        'avgui', 'avguard', 'avgcsrvx',  # AVG
+        'avastui', 'avastsvc', 'avastservice',  # Avast  
+        'mcshield', 'mcafeetray',  # McAfee
+        'nortonsecurity', 'ns',  # Norton
+        'bdagent', 'vsserv',  # Bitdefender
+        'kav', 'kavstart',  # Kaspersky
+        'fsav', 'fsgk32'  # F-Secure
+    )
+    
+    foreach ($process in $commonAVProcesses) {
+        if (Get-Process -Name $process -ErrorAction SilentlyContinue) {
+            $antivirusInfo.ThirdPartyAVDetected = $true
+            $antivirusInfo.PotentialInterference = $true
+            $antivirusInfo.Recommendations += "Third-party antivirus detected - may need exclusions"
+            break
+        }
+    }
+    
+    return $antivirusInfo
+}
+
+# =============================================================================
+# CORPORATE ENVIRONMENT DETECTION
+# =============================================================================
+
+function Test-CorporateEnvironment {
+    <#
+    .SYNOPSIS
+        Detects corporate environment indicators and restrictions
+    .DESCRIPTION
+        Corporate Windows 10 environments often have additional restrictions
+        that affect software installation and file operations
+    #>
+    
+    $corpInfo = @{
+        IsDomainJoined = $false
+        HasGroupPolicies = $false
+        RestrictedExecutionPolicy = $false
+        ProxyDetected = $false
+        CertificateAuthority = $false
+        UACEnabled = $true
+        Recommendations = @()
+    }
+    
+    try {
+        # Check domain membership
+        $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+        $corpInfo.IsDomainJoined = $computerSystem.PartOfDomain
+        
+        if ($corpInfo.IsDomainJoined) {
+            $corpInfo.Recommendations += "Corporate domain environment detected"
+        }
+    }
+    catch {
+        $corpInfo.Recommendations += "Unable to check domain status"
+    }
+    
+    # Check execution policy
+    try {
+        $execPolicy = Get-ExecutionPolicy
+        $corpInfo.RestrictedExecutionPolicy = $execPolicy -eq 'Restricted' -or $execPolicy -eq 'AllSigned'
+        
+        if ($corpInfo.RestrictedExecutionPolicy) {
+            $corpInfo.Recommendations += "Restricted PowerShell execution policy detected"
+            $corpInfo.Recommendations += "May need to run: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser"
+        }
+    }
+    catch {
+        $corpInfo.Recommendations += "Unable to check execution policy"
+    }
+    
+    # Check for proxy settings
+    $proxyDetected = $false
+    if ($env:HTTP_PROXY -or $env:HTTPS_PROXY) {
+        $proxyDetected = $true
+    }
+    
+    # Check system proxy settings
+    try {
+        $proxySettings = Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -ErrorAction Stop
+        if ($proxySettings.ProxyEnable -eq 1) {
+            $proxyDetected = $true
+        }
+    }
+    catch {
+        # Unable to check registry
+    }
+    
+    $corpInfo.ProxyDetected = $proxyDetected
+    if ($proxyDetected) {
+        $corpInfo.Recommendations += "Corporate proxy detected - ensure proxy settings are configured"
+    }
+    
+    # Check for corporate certificates
+    try {
+        $certs = Get-ChildItem -Path Cert:\LocalMachine\Root | Where-Object { 
+            $_.Subject -like "*Corp*" -or $_.Subject -like "*Enterprise*" -or $_.Issuer -like "*Corp*" 
+        }
+        $corpInfo.CertificateAuthority = ($certs.Count -gt 0)
+        
+        if ($corpInfo.CertificateAuthority) {
+            $corpInfo.Recommendations += "Corporate certificates detected - SSL/TLS handling configured"
+        }
+    }
+    catch {
+        $corpInfo.Recommendations += "Unable to check certificate store"
+    }
+    
+    return $corpInfo
+}
+
+# =============================================================================
+# NTFS PERMISSIONS AND FILE SYSTEM CHECKS
+# =============================================================================
+
+function Test-NTFSPermissions {
+    <#
+    .SYNOPSIS
+        Tests NTFS permissions and file system compatibility
+    .DESCRIPTION
+        Windows 10 NTFS permissions can be more restrictive in corporate environments
+        and may affect file operations during installation
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+    
+    $permInfo = @{
+        PathExists = $false
+        HasWriteAccess = $false
+        HasFullControl = $false
+        CanCreateDirectories = $false
+        CanCreateFiles = $false
+        Recommendations = @()
+    }
+    
+    # Check if path exists or can be created
+    if (Test-Path $Path) {
+        $permInfo.PathExists = $true
+    } else {
+        try {
+            New-Item -ItemType Directory -Path $Path -Force -ErrorAction Stop | Out-Null
+            $permInfo.PathExists = $true
+            $permInfo.CanCreateDirectories = $true
+        }
+        catch {
+            $permInfo.Recommendations += "Cannot create directory: $Path"
+            return $permInfo
+        }
+    }
+    
+    # Test write access by creating a temporary file
+    $testFile = Join-Path $Path "serena_perm_test_$(Get-Random).tmp"
+    try {
+        "test" | Out-File -FilePath $testFile -ErrorAction Stop
+        $permInfo.HasWriteAccess = $true
+        $permInfo.CanCreateFiles = $true
+        
+        # Try to delete the test file
+        Remove-Item $testFile -ErrorAction Stop
+        $permInfo.HasFullControl = $true
+    }
+    catch {
+        $permInfo.Recommendations += "Limited write access to: $Path"
+        try {
+            if (Test-Path $testFile) {
+                Remove-Item $testFile -ErrorAction SilentlyContinue
+            }
+        }
+        catch {
+            $permInfo.Recommendations += "Cannot clean up test files - potential permission issue"
+        }
+    }
+    
+    # Test directory creation
+    if ($permInfo.HasWriteAccess) {
+        $testDir = Join-Path $Path "serena_dir_test_$(Get-Random)"
+        try {
+            New-Item -ItemType Directory -Path $testDir -ErrorAction Stop | Out-Null
+            Remove-Item $testDir -ErrorAction Stop
+            $permInfo.CanCreateDirectories = $true
+        }
+        catch {
+            $permInfo.Recommendations += "Cannot create subdirectories in: $Path"
+        }
+    }
+    
+    return $permInfo
+}
+
+# =============================================================================
+# ENHANCED FILE OPERATIONS FOR WINDOWS 10
+# =============================================================================
+
+function Invoke-SafeFileOperation {
+    <#
+    .SYNOPSIS
+        Performs file operations with Windows 10 compatibility and retry logic
+    .DESCRIPTION
+        Windows 10 has more aggressive file locking, so file operations
+        need retry logic and better error handling
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [scriptblock]$Operation,
+        
+        [int]$MaxRetries = 3,
+        [int]$RetryDelayMs = 500
+    )
+    
+    $attempt = 1
+    while ($attempt -le $MaxRetries) {
+        try {
+            return & $Operation
+        }
+        catch {
+            if ($attempt -eq $MaxRetries) {
+                throw $_
+            }
+            
+            Write-Verbose "[RETRY] File operation failed (attempt $attempt/$MaxRetries): $($_.Exception.Message)"
+            Start-Sleep -Milliseconds ($RetryDelayMs * $attempt)  # Exponential backoff
+            $attempt++
+        }
+    }
+}
+
+function Copy-FileWithRetry {
+    <#
+    .SYNOPSIS
+        Copies files with retry logic for Windows 10 file locking issues
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Source,
+        
+        [Parameter(Mandatory = $true)]
+        [string]$Destination,
+        
+        [switch]$Force
+    )
+    
+    Invoke-SafeFileOperation {
+        if ($Force) {
+            Copy-Item -Path $Source -Destination $Destination -Force -ErrorAction Stop
+        } else {
+            Copy-Item -Path $Source -Destination $Destination -ErrorAction Stop
+        }
+    }
+}
+
+function Remove-FileWithRetry {
+    <#
+    .SYNOPSIS
+        Removes files with retry logic for Windows 10 file locking issues
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        
+        [switch]$Force
+    )
+    
+    Invoke-SafeFileOperation {
+        if ($Force) {
+            Remove-Item -Path $Path -Force -Recurse -ErrorAction Stop
+        } else {
+            Remove-Item -Path $Path -ErrorAction Stop
+        }
+    }
+}
+
+# =============================================================================
+# WINDOWS 10 OPTIMIZATION STRATEGIES
+# =============================================================================
+
+function Get-Windows10OptimizationStrategy {
+    <#
+    .SYNOPSIS
+        Returns optimization strategies specific to Windows 10 version and build
+    .DESCRIPTION
+        Different Windows 10 versions and builds have different characteristics
+        that may require specific handling approaches
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$WindowsVersion
+    )
+    
+    $strategy = @{
+        UseExtendedRetries = $false
+        DisableIndexing = $false
+        UseAlternativeExtractionMethod = $false
+        RequireAntivirusExclusions = $false
+        UseLegacyConsoleHandling = $false
+        RequireElevatedPermissions = $false
+        Optimizations = @()
+    }
+    
+    # Windows 10 builds earlier than 1809 need more careful handling
+    if ($WindowsVersion.RequiresLegacyHandling) {
+        $strategy.UseExtendedRetries = $true
+        $strategy.UseLegacyConsoleHandling = $true
+        $strategy.Optimizations += "Using extended retry logic for older Windows 10"
+        $strategy.Optimizations += "Using legacy console handling"
+    }
+    
+    # All Windows 10 versions benefit from antivirus exclusions
+    $strategy.RequireAntivirusExclusions = $true
+    $strategy.Optimizations += "Recommend antivirus exclusions for installation directory"
+    
+    # Windows 10 often has more aggressive indexing
+    if ($WindowsVersion.BuildNumber -lt 19041) {  # Earlier than 2004
+        $strategy.DisableIndexing = $true
+        $strategy.Optimizations += "Consider disabling Windows Search indexing during installation"
+    }
+    
+    return $strategy
+}
+
+# =============================================================================
+# ERROR MESSAGE STANDARDIZATION
+# =============================================================================
+
+function Write-StandardizedError {
+    <#
+    .SYNOPSIS
+        Writes standardized English error messages for consistent corporate deployment
+    .DESCRIPTION
+        Ensures all error messages are in English regardless of system locale,
+        with Windows 10-specific troubleshooting hints
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ErrorMessage,
+        
+        [string]$Context = "",
+        [string]$Solution = "",
+        [string]$TroubleshootingHint = ""
+    )
+    
+    # Force English locale for this function
+    $currentCulture = [System.Threading.Thread]::CurrentThread.CurrentCulture
+    $currentUICulture = [System.Threading.Thread]::CurrentThread.CurrentUICulture
+    
+    [System.Threading.Thread]::CurrentThread.CurrentCulture = [System.Globalization.CultureInfo]::InvariantCulture
+    [System.Threading.Thread]::CurrentThread.CurrentUICulture = [System.Globalization.CultureInfo]::InvariantCulture
+    
+    try {
+        Write-Host "[ERROR] $ErrorMessage" -ForegroundColor Red
+        
+        if ($Context) {
+            Write-Host "[CONTEXT] $Context" -ForegroundColor Yellow
+        }
+        
+        if ($Solution) {
+            Write-Host "[SOLUTION] $Solution" -ForegroundColor Cyan
+        }
+        
+        if ($TroubleshootingHint) {
+            Write-Host "[WINDOWS 10 TIP] $TroubleshootingHint" -ForegroundColor Magenta
+        }
+        
+        # Add common Windows 10 troubleshooting hints
+        $windowsVersion = Get-WindowsVersionInfo
+        if ($windowsVersion.IsWindows10) {
+            Write-Host "[WINDOWS 10 HELP] Common solutions:" -ForegroundColor Gray
+            Write-Host "  • Run PowerShell as Administrator" -ForegroundColor Gray
+            Write-Host "  • Temporarily disable antivirus real-time protection" -ForegroundColor Gray
+            Write-Host "  • Add installation directory to Windows Defender exclusions" -ForegroundColor Gray
+            Write-Host "  • Check corporate proxy/firewall settings" -ForegroundColor Gray
+        }
+    }
+    finally {
+        # Restore original culture settings
+        [System.Threading.Thread]::CurrentThread.CurrentCulture = $currentCulture
+        [System.Threading.Thread]::CurrentThread.CurrentUICulture = $currentUICulture
+    }
+}
+
+# =============================================================================
+# COMPREHENSIVE COMPATIBILITY CHECK
+# =============================================================================
+
+function Test-Windows10Compatibility {
+    <#
+    .SYNOPSIS
+        Runs a comprehensive Windows 10 compatibility check
+    .DESCRIPTION
+        Performs all compatibility checks and returns recommendations
+        for optimal Windows 10 deployment
+    #>
+    param(
+        [string]$InstallationPath = $null
+    )
+    
+    Write-Host "🔍 Running Windows 10 Compatibility Assessment..." -ForegroundColor Cyan
+    Write-Host "=" * 60
+    
+    # Get Windows version info
+    $winInfo = Get-WindowsVersionInfo
+    Write-Host "Windows Version: $($winInfo.ProductName) Build $($winInfo.BuildNumber)" -ForegroundColor Green
+    
+    if ($winInfo.IsWindows10) {
+        Write-Host "Windows 10 Version: $($winInfo.Windows10Version)" -ForegroundColor Green
+        if ($winInfo.RequiresLegacyHandling) {
+            Write-Host "[NOTICE] Older Windows 10 detected - using enhanced compatibility mode" -ForegroundColor Yellow
+        }
+    }
+    
+    # Check console type
+    $consoleInfo = Test-IsWindowsTerminalAvailable
+    Write-Host "Console Type: $($consoleInfo.ConsoleType)" -ForegroundColor Green
+    
+    # Check antivirus
+    $avInfo = Test-AntivirusInterference
+    if ($avInfo.PotentialInterference) {
+        Write-Host "[WARNING] Antivirus interference possible" -ForegroundColor Yellow
+        foreach ($rec in $avInfo.Recommendations) {
+            Write-Host "  • $rec" -ForegroundColor Gray
+        }
+    } else {
+        Write-Host "Antivirus: No interference detected" -ForegroundColor Green
+    }
+    
+    # Check corporate environment
+    $corpInfo = Test-CorporateEnvironment
+    if ($corpInfo.IsDomainJoined) {
+        Write-Host "Environment: Corporate Domain" -ForegroundColor Yellow
+        foreach ($rec in $corpInfo.Recommendations) {
+            Write-Host "  • $rec" -ForegroundColor Gray
+        }
+    } else {
+        Write-Host "Environment: Personal/Workgroup" -ForegroundColor Green
+    }
+    
+    # Check file system permissions if path provided
+    if ($InstallationPath) {
+        Write-Host "`nTesting permissions for: $InstallationPath" -ForegroundColor Cyan
+        $permInfo = Test-NTFSPermissions -Path $InstallationPath
+        
+        if ($permInfo.HasFullControl) {
+            Write-Host "Permissions: Full access available" -ForegroundColor Green
+        } else {
+            Write-Host "[WARNING] Limited file system access" -ForegroundColor Yellow
+            foreach ($rec in $permInfo.Recommendations) {
+                Write-Host "  • $rec" -ForegroundColor Gray
+            }
+        }
+    }
+    
+    # Get optimization strategy
+    $strategy = Get-Windows10OptimizationStrategy -WindowsVersion $winInfo
+    Write-Host "`n💡 Recommended Optimizations:" -ForegroundColor Cyan
+    foreach ($opt in $strategy.Optimizations) {
+        Write-Host "  • $opt" -ForegroundColor White
+    }
+    
+    Write-Host "`n✅ Compatibility assessment complete!" -ForegroundColor Green
+    
+    return @{
+        WindowsInfo = $winInfo
+        ConsoleInfo = $consoleInfo
+        AntivirusInfo = $avInfo
+        CorporateInfo = $corpInfo
+        PermissionInfo = if ($InstallationPath) { $permInfo } else { $null }
+        OptimizationStrategy = $strategy
+    }
+}
+
+# =============================================================================
+# MODULE EXPORTS
+# =============================================================================
+
+# Export all functions for use in other scripts
+Export-ModuleMember -Function @(
+    'Get-WindowsVersionInfo',
+    'Test-IsWindowsTerminalAvailable', 
+    'Test-AntivirusInterference',
+    'Test-CorporateEnvironment',
+    'Test-NTFSPermissions',
+    'Invoke-SafeFileOperation',
+    'Copy-FileWithRetry',
+    'Remove-FileWithRetry',
+    'Get-Windows10OptimizationStrategy',
+    'Write-StandardizedError',
+    'Test-Windows10Compatibility'
+)
+
+# If script is run directly, run compatibility check
+if ($MyInvocation.InvocationName -eq $MyInvocation.MyCommand.Name) {
+    Test-Windows10Compatibility -InstallationPath ".\serena-fully-portable"
+}
