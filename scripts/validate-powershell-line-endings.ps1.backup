@@ -1,0 +1,254 @@
+# PowerShell Line Ending Validation Script
+# This script validates that PowerShell files have correct CRLF line endings
+# and can be executed properly on Windows systems
+
+param(
+    [string]$ScriptsPath = $PSScriptRoot,
+    [switch]$Verbose
+)
+
+Write-Host "PowerShell Line Ending Validation Script" -ForegroundColor Green
+Write-Host "=======================================" -ForegroundColor Green
+
+function Test-LineEndings {
+    param(
+        [string]$FilePath
+    )
+    
+    try {
+        $bytes = [System.IO.File]::ReadAllBytes($FilePath)
+        $crlfCount = 0
+        $lfOnlyCount = 0
+        $crOnlyCount = 0
+        
+        for ($i = 0; $i -lt $bytes.Length - 1; $i++) {
+            if ($bytes[$i] -eq 13 -and $bytes[$i + 1] -eq 10) {
+                # Found CRLF
+                $crlfCount++
+                $i++ # Skip the LF part
+            }
+            elseif ($bytes[$i] -eq 10) {
+                # Found LF only
+                $lfOnlyCount++
+            }
+            elseif ($bytes[$i] -eq 13) {
+                # Found CR only
+                $crOnlyCount++
+            }
+        }
+        
+        # Check last byte for standalone LF
+        if ($bytes.Length -gt 0 -and $bytes[$bytes.Length - 1] -eq 10 -and 
+            ($bytes.Length -eq 1 -or $bytes[$bytes.Length - 2] -ne 13)) {
+            $lfOnlyCount++
+        }
+        
+        return @{
+            CRLFCount = $crlfCount
+            LFOnlyCount = $lfOnlyCount
+            CROnlyCount = $crOnlyCount
+            HasCorrectEndings = ($crlfCount -gt 0 -and $lfOnlyCount -eq 0)
+            HasMixedEndings = ($crlfCount -gt 0 -and $lfOnlyCount -gt 0)
+        }
+    }
+    catch {
+        Write-Warning "Failed to analyze line endings for $FilePath : $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function Test-PowerShellSyntax {
+    param(
+        [string]$FilePath
+    )
+    
+    try {
+        $errors = $null
+        $tokens = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($FilePath, [ref]$tokens, [ref]$errors)
+        
+        return @{
+            HasSyntaxErrors = ($errors.Count -gt 0)
+            ErrorCount = $errors.Count
+            Errors = $errors
+            AST = $ast
+        }
+    }
+    catch {
+        Write-Warning "Failed to parse PowerShell syntax for $FilePath : $($_.Exception.Message)"
+        return @{
+            HasSyntaxErrors = $true
+            ErrorCount = 1
+            Errors = @($_.Exception.Message)
+            AST = $null
+        }
+    }
+}
+
+function Test-FileEncoding {
+    param(
+        [string]$FilePath
+    )
+    
+    try {
+        $bytes = [System.IO.File]::ReadAllBytes($FilePath)
+        
+        # Check for BOM
+        $hasBOM = $false
+        $encoding = "Unknown"
+        
+        if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+            $hasBOM = $true
+            $encoding = "UTF-8 with BOM"
+        }
+        elseif ($bytes.Length -ge 2) {
+            if ($bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE) {
+                $hasBOM = $true
+                $encoding = "UTF-16 LE with BOM"
+            }
+            elseif ($bytes[0] -eq 0xFE -and $bytes[1] -eq 0xFF) {
+                $hasBOM = $true
+                $encoding = "UTF-16 BE with BOM"
+            }
+        }
+        
+        # Try to read as UTF-8
+        try {
+            $content = [System.IO.File]::ReadAllText($FilePath, [System.Text.Encoding]::UTF8)
+            if (-not $hasBOM) {
+                $encoding = "UTF-8"
+            }
+        }
+        catch {
+            $encoding = "Non-UTF-8"
+        }
+        
+        return @{
+            Encoding = $encoding
+            HasBOM = $hasBOM
+            IsUTF8Compatible = ($encoding -like "*UTF-8*")
+        }
+    }
+    catch {
+        Write-Warning "Failed to analyze encoding for $FilePath : $($_.Exception.Message)"
+        return $null
+    }
+}
+
+# Get all PowerShell files
+$powershellFiles = Get-ChildItem -Path $ScriptsPath -Filter "*.ps1" -File
+
+if ($powershellFiles.Count -eq 0) {
+    Write-Warning "No PowerShell files found in $ScriptsPath"
+    exit 1
+}
+
+Write-Host "`nFound $($powershellFiles.Count) PowerShell files to validate..." -ForegroundColor Yellow
+
+$allValid = $true
+$results = @()
+
+foreach ($file in $powershellFiles) {
+    Write-Host "`nValidating: $($file.Name)" -ForegroundColor Cyan
+    
+    # Test line endings
+    $lineEndingResult = Test-LineEndings -FilePath $file.FullName
+    
+    # Test encoding
+    $encodingResult = Test-FileEncoding -FilePath $file.FullName
+    
+    # Test PowerShell syntax
+    $syntaxResult = Test-PowerShellSyntax -FilePath $file.FullName
+    
+    $fileValid = $true
+    
+    if ($lineEndingResult) {
+        if ($lineEndingResult.HasCorrectEndings) {
+            Write-Host "  ✓ Line endings: CRLF ($($lineEndingResult.CRLFCount) lines)" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  ✗ Line endings: PROBLEMATIC" -ForegroundColor Red
+            if ($lineEndingResult.LFOnlyCount -gt 0) {
+                Write-Host "    - LF-only lines: $($lineEndingResult.LFOnlyCount)" -ForegroundColor Red
+            }
+            if ($lineEndingResult.CROnlyCount -gt 0) {
+                Write-Host "    - CR-only lines: $($lineEndingResult.CROnlyCount)" -ForegroundColor Red
+            }
+            if ($lineEndingResult.HasMixedEndings) {
+                Write-Host "    - Mixed line endings detected!" -ForegroundColor Red
+            }
+            $fileValid = $false
+        }
+    }
+    else {
+        Write-Host "  ✗ Line endings: Could not analyze" -ForegroundColor Red
+        $fileValid = $false
+    }
+    
+    if ($encodingResult) {
+        if ($encodingResult.IsUTF8Compatible) {
+            Write-Host "  ✓ Encoding: $($encodingResult.Encoding)" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  ✗ Encoding: $($encodingResult.Encoding)" -ForegroundColor Red
+            $fileValid = $false
+        }
+    }
+    else {
+        Write-Host "  ✗ Encoding: Could not analyze" -ForegroundColor Red
+        $fileValid = $false
+    }
+    
+    if ($syntaxResult) {
+        if (-not $syntaxResult.HasSyntaxErrors) {
+            Write-Host "  ✓ PowerShell syntax: Valid" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  ✗ PowerShell syntax: $($syntaxResult.ErrorCount) error(s)" -ForegroundColor Red
+            if ($Verbose) {
+                foreach ($error in $syntaxResult.Errors) {
+                    Write-Host "    - $($error.ToString())" -ForegroundColor Red
+                }
+            }
+            $fileValid = $false
+        }
+    }
+    else {
+        Write-Host "  ✗ PowerShell syntax: Could not analyze" -ForegroundColor Red
+        $fileValid = $false
+    }
+    
+    $results += @{
+        FileName = $file.Name
+        FilePath = $file.FullName
+        Valid = $fileValid
+        LineEndings = $lineEndingResult
+        Encoding = $encodingResult
+        Syntax = $syntaxResult
+    }
+    
+    if (-not $fileValid) {
+        $allValid = $false
+    }
+}
+
+# Summary
+Write-Host "`n" + ("=" * 50) -ForegroundColor Yellow
+Write-Host "VALIDATION SUMMARY" -ForegroundColor Yellow
+Write-Host ("=" * 50) -ForegroundColor Yellow
+
+$validCount = ($results | Where-Object { $_.Valid }).Count
+$invalidCount = $results.Count - $validCount
+
+Write-Host "Total files: $($results.Count)"
+Write-Host "Valid files: $validCount" -ForegroundColor Green
+Write-Host "Invalid files: $invalidCount" -ForegroundColor $(if ($invalidCount -eq 0) { "Green" } else { "Red" })
+
+if ($allValid) {
+    Write-Host "`nAll PowerShell files are properly formatted for Windows!" -ForegroundColor Green
+    exit 0
+}
+else {
+    Write-Host "`nSome files need attention. Run with -Verbose for detailed error information." -ForegroundColor Red
+    exit 1
+}

@@ -1,0 +1,140 @@
+PowerShell Validation Report Generator
+Analyzing: /root/repo/scripts
+============================================================
+Validating: /root/repo/scripts/corporate-setup-windows.ps1
+Validating: /root/repo/scripts/create-fully-portable-package.ps1
+Validating: /root/repo/scripts/create-portable-package.ps1
+Validating: /root/repo/scripts/portable-package-windows10-helpers.ps1
+Validating: /root/repo/scripts/test-powershell-syntax.ps1
+Validating: /root/repo/scripts/windows10-compatibility.ps1
+Validating: /root/repo/scripts/validate-powershell-line-endings.ps1
+Found 10 script files to test
+PowerShell Validation Report
+================================================================================
+Generated: 2025-08-26 12:53:45
+Directory: /root/repo/scripts
+Report Version: 1.0
+
+📁 File Discovery
+----------------------------------------
+Total script files found: 10
+
+Files to be validated:
+  📄 corporate-setup-windows.ps1 (17626 bytes)
+  📄 create-fully-portable-package.ps1 (45169 bytes)
+  📄 create-portable-package.ps1 (8370 bytes)
+  📄 install-offline-dependencies.bat (5433 bytes)
+  📄 portable-package-windows10-helpers.ps1 (25646 bytes)
+  📄 quick-deploy-serena.bat (4470 bytes)
+  📄 test-powershell-syntax.ps1 (1389 bytes)
+  📄 validate-line-endings.bat (516 bytes)
+  📄 validate-powershell-line-endings.ps1 (8069 bytes)
+  📄 windows10-compatibility.ps1 (23966 bytes)
+
+🔍 Syntax Validation Results
+----------------------------------------
+Files analyzed: 7
+Files with syntax issues: 2
+Total syntax issues: 4
+
+❌ Syntax Issues Found:
+
+  📄 create-fully-portable-package.ps1:
+    🔸 Unterminated String (1 issues):
+      • Line 1064: Unterminated single-quoted string
+        Context: Write-Host ""...
+
+    🔸 Unmatched Brace (1 issues):
+      • Line 234: Unmatched opening '{'
+
+  📄 windows10-compatibility.ps1:
+    🔸 Unterminated String (1 issues):
+      • Line 664: Unterminated single-quoted string
+        Context: }...
+
+    🔸 Unmatched Brace (1 issues):
+      • Line 133: Unmatched opening '{'
+
+
+🧪 Test Suite Results
+----------------------------------------
+Total tests run: 6
+Passed: 4 ✅
+Failed: 1 ❌
+Warnings: 1 ⚠️
+
+Test Details:
+  ✅ Unicode Character Detection
+     Result: PASS
+     No Unicode characters found in any files
+
+  ✅ Line Ending Validation
+     Result: PASS
+     All PowerShell files have correct CRLF line endings
+
+  ✅ Here-String Formatting
+     Result: PASS
+     All here-strings are properly formatted
+
+  ❌ Syntax Error Detection
+     Result: FAIL
+     Syntax errors found in 2 files
+     Details:
+       /root/repo/scripts/create-fully-portable-package.ps1:  - Line 1064: Unterminated single-quoted string  - Line 234: Unmatched opening '{'
+       /root/repo/scripts/windows10-compatibility.ps1:  - Line 664: Unterminated single-quoted string  - Line 133: Unmatched opening '{'
+
+  ✅ File Encoding Validation
+     Result: PASS
+     All files have valid UTF-8 encoding
+
+  ⚠️ PowerShell Syntax Patterns
+     Result: WARNING
+     PowerShell syntax warnings in 3 files
+     Details:
+       /root/repo/scripts/create-fully-portable-package.ps1:  - Line 440: Double backslashes found (potential UNC path issue)  - Line 441: Double backslashes found (potential UNC path issue)  - Line 480: Double backslashes found (potential UNC path issue)  - Line 481: Double backslashes found (potential UNC path issue)  - Line 482: Double backslashes found (potential UNC path issue)  - Line 719: Double backslashes found (potential UNC path issue)  - Line 730: Double backslashes found (potential UNC path issue)
+       /root/repo/scripts/create-portable-package.ps1:  - Line 128: Double backslashes found (potential UNC path issue)
+       /root/repo/scripts/portable-package-windows10-helpers.ps1:  - Line 347: Double backslashes found (potential UNC path issue)  - Line 348: Double backslashes found (potential UNC path issue)  - Line 364: Double backslashes found (potential UNC path issue)  - Line 365: Double backslashes found (potential UNC path issue)  - Line 366: Double backslashes found (potential UNC path issue)
+
+📊 Validation Summary
+----------------------------------------
+Directory: /root/repo/scripts
+Validation completed at: 2025-08-26T12:53:45.428504
+
+File Statistics:
+  • Total files analyzed: 10
+  • Files passed validation: 8
+  • Files with issues: 2
+  • Total issues found: 4
+
+Test Statistics:
+  • Total tests run: 6
+  • Tests passed: 4 ✅
+  • Tests failed: 1 ❌
+  • Warnings: 1 ⚠️
+
+🎯 Recommendations:
+  1. Fix syntax errors found in PowerShell files. Check for unmatched brackets, quotes, and proper here-string formatting.
+  2. Address test failures identified in the validation suite. These may indicate potential compatibility or functionality issues.
+
+================================================================================
+Report generated by PowerShell Validation Suite
+For questions or issues, check the validation scripts in /root/repo/scripts
+
+
+📝 Full report saved to: /root/repo/scripts/powershell_validation_report_20250826_125345.txt
+Validating: /root/repo/scripts/corporate-setup-windows.ps1
+Validating: /root/repo/scripts/create-fully-portable-package.ps1
+Validating: /root/repo/scripts/create-portable-package.ps1
+Validating: /root/repo/scripts/portable-package-windows10-helpers.ps1
+Validating: /root/repo/scripts/test-powershell-syntax.ps1
+Validating: /root/repo/scripts/windows10-compatibility.ps1
+Validating: /root/repo/scripts/validate-powershell-line-endings.ps1
+Found 10 script files to test
+📊 JSON summary saved to: /root/repo/scripts/validation_summary_20250826_125345.json
+Validating: /root/repo/scripts/corporate-setup-windows.ps1
+Validating: /root/repo/scripts/create-fully-portable-package.ps1
+Validating: /root/repo/scripts/create-portable-package.ps1
+Validating: /root/repo/scripts/portable-package-windows10-helpers.ps1
+Validating: /root/repo/scripts/test-powershell-syntax.ps1
+Validating: /root/repo/scripts/windows10-compatibility.ps1
+Validating: /root/repo/scripts/validate-powershell-line-endings.ps1
