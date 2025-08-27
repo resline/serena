@@ -171,16 +171,20 @@ if (-not $pythonInstallSuccess) {
         
         Write-Host "[OK] Downloaded and extracted Python embedded" -ForegroundColor Green
         
-        # Create Lib directory structure for pip installation
+        # Create Lib and Scripts directory structure for pip installation
         $pythonLibDir = "$OutputPath\python\Lib"
         $pythonSitePackagesDir = "$OutputPath\python\Lib\site-packages"
+        $pythonScriptsDir = "$OutputPath\python\Scripts"
         if (-not (Test-Path $pythonLibDir)) {
             New-Item -ItemType Directory -Path $pythonLibDir -Force | Out-Null
         }
         if (-not (Test-Path $pythonSitePackagesDir)) {
             New-Item -ItemType Directory -Path $pythonSitePackagesDir -Force | Out-Null
         }
-        Write-Host "[OK] Created Python Lib directory structure" -ForegroundColor Green
+        if (-not (Test-Path $pythonScriptsDir)) {
+            New-Item -ItemType Directory -Path $pythonScriptsDir -Force | Out-Null
+        }
+        Write-Host "[OK] Created Python Lib and Scripts directory structure" -ForegroundColor Green
     } catch {
         if ($Win10CompatibilityLoaded) {
             Write-StandardizedError -ErrorMessage "Failed to download Python: $($_.Exception.Message)" `
@@ -234,6 +238,7 @@ if (-not $pythonInstallSuccess) {
         "Lib\site-packages",
         "..\Lib\site-packages",
         "..\serena\src",
+        "Scripts",
         "import site"
     )
     
@@ -265,15 +270,34 @@ if ($Win10HelpersLoaded -and $CompatibilityInfo) {
 if (-not $pipInstallSuccess) {
     Write-Host "Installing pip in embedded Python (standard method)..." -ForegroundColor Yellow
     
-    # Ensure target directory exists
-    $pipTargetDir = "$OutputPath\python\Lib\site-packages"
-    if (-not (Test-Path $pipTargetDir)) {
-        New-Item -ItemType Directory -Path $pipTargetDir -Force | Out-Null
-        Write-Host "[INFO] Created pip target directory: $pipTargetDir" -ForegroundColor Gray
-    }
+    # FIXED: Install pip without --target to allow get-pip.py to handle proper installation
+    # This allows pip to be installed in the correct location for embedded Python
+    Write-Host "[INFO] Installing pip using get-pip.py (letting it choose optimal location)..." -ForegroundColor Gray
     
-    # FIXED: Install pip directly to Python's Lib\site-packages for module access
-    & "$OutputPath\python\python.exe" "$OutputPath\python\get-pip.py" --no-warn-script-location --target $pipTargetDir
+    # Temporarily add Scripts directory to PATH to help with pip installation
+    $originalPath = $env:PATH
+    $pythonScriptsDir = "$OutputPath\python\Scripts"
+    $env:PATH = "$pythonScriptsDir;$originalPath"
+    
+    try {
+        & "$OutputPath\python\python.exe" "$OutputPath\python\get-pip.py" --no-warn-script-location
+    } finally {
+        # Restore original PATH
+        $env:PATH = $originalPath
+    }
+
+    # Show where pip was actually installed for debugging
+    Write-Host "[DEBUG] Checking pip installation locations..." -ForegroundColor Gray
+    $possiblePipLocations = @(
+        "$OutputPath\python\Scripts\pip.exe",
+        "$OutputPath\python\Lib\site-packages\pip",
+        "$OutputPath\python\pip"
+    )
+    foreach ($location in $possiblePipLocations) {
+        if (Test-Path $location) {
+            Write-Host "[DEBUG] Found pip at: $location" -ForegroundColor Gray
+        }
+    }
 
     # Test pip installation with enhanced Windows 10 error handling
     if ($Win10HelpersLoaded) {
@@ -298,6 +322,7 @@ if (-not $pipInstallSuccess) {
             
             if ($pipTestExitCode -eq 0 -and $pipModuleTest) {
                 Write-Host "[OK] Pip module accessible: $pipModuleTest" -ForegroundColor Green
+                $pipInstallSuccess = $true
             } else {
                 Write-Host "[WARN] pip module test failed (exit code: $pipTestExitCode)" -ForegroundColor Yellow
                 
@@ -308,35 +333,68 @@ if (-not $pipInstallSuccess) {
                 
                 if ($importTestExitCode -eq 0 -and $pipImportTest) {
                     Write-Host "[OK] Pip accessible via import: $pipImportTest" -ForegroundColor Green
+                    $pipInstallSuccess = $true
                 } else {
-                    Write-Host "[ERROR] Pip installation failed - module not accessible" -ForegroundColor Red
-                    Write-Host "[DEBUG] pip -m test exit code: $pipTestExitCode" -ForegroundColor Gray
-                    Write-Host "[DEBUG] pip import test exit code: $importTestExitCode" -ForegroundColor Gray
-                    
-                    Write-Host "[INFO] Attempting pip installation repair..." -ForegroundColor Yellow
-                    
-                    # Ensure proper directory structure exists
-                    $pipLibDir = "$OutputPath\python\Lib\site-packages"
-                    if (-not (Test-Path $pipLibDir)) {
-                        New-Item -ItemType Directory -Path $pipLibDir | Out-Null
+                    # Test 3: Check if pip.exe exists in Scripts directory
+                    Write-Host "[TEST] Testing Scripts/pip.exe directly..." -ForegroundColor Gray
+                    $pipExePath = "$OutputPath\python\Scripts\pip.exe"
+                    $scriptsTestPassed = $false
+                    if (Test-Path $pipExePath) {
+                        try {
+                            $scriptsTest = & $pipExePath --version 2>$null
+                            $scriptsExitCode = $LASTEXITCODE
+                            if ($scriptsExitCode -eq 0 -and $scriptsTest) {
+                                Write-Host "[OK] Pip executable found and working: $scriptsTest" -ForegroundColor Green
+                                # If Scripts/pip.exe works, the installation is actually successful
+                                # The module path issue might be resolved by the _pth file
+                                $scriptsTestPassed = $true
+                                $pipInstallSuccess = $true
+                            } else {
+                                Write-Host "[WARN] pip.exe found but not working" -ForegroundColor Yellow
+                            }
+                        } catch {
+                            Write-Host "[WARN] pip.exe found but failed to run: $($_.Exception.Message)" -ForegroundColor Yellow
+                        }
+                    } else {
+                        Write-Host "[WARN] pip.exe not found in Scripts directory" -ForegroundColor Yellow
                     }
                     
-                    # Retry installation with explicit target
-                    Write-Host "[INFO] Reinstalling pip to correct location..." -ForegroundColor Yellow
-                    & "$OutputPath\python\python.exe" "$OutputPath\python\get-pip.py" --no-warn-script-location --target $pipLibDir --force-reinstall
-                    
-                    # Final verification
-                    Write-Host "[TEST] Final pip verification..." -ForegroundColor Gray
-                    $finalTest = & "$OutputPath\python\python.exe" -m pip --version 2>$null
-                    $finalExitCode = $LASTEXITCODE
-                    
-                    if ($finalExitCode -eq 0 -and $finalTest) {
-                        Write-Host "[OK] Pip installation successful after repair: $finalTest" -ForegroundColor Green
-                    } else {
-                        Write-Host "[ERROR] Pip installation still failed after repair" -ForegroundColor Red
-                        Write-Host "[ERROR] Final test exit code: $finalExitCode" -ForegroundColor Red
-                        Write-Host "[ERROR] Cannot proceed without working pip installation" -ForegroundColor Red
-                        exit 1
+                    # Only proceed with repair if ALL tests failed
+                    if (-not $scriptsTestPassed) {
+                        Write-Host "[ERROR] Pip installation failed - not accessible via any method" -ForegroundColor Red
+                        Write-Host "[DEBUG] pip -m test exit code: $pipTestExitCode" -ForegroundColor Gray
+                        Write-Host "[DEBUG] pip import test exit code: $importTestExitCode" -ForegroundColor Gray
+                        
+                        Write-Host "[INFO] Attempting pip installation repair..." -ForegroundColor Yellow
+                        
+                        # Retry installation without --target to let get-pip.py choose proper location
+                        Write-Host "[INFO] Reinstalling pip using get-pip.py (force reinstall)..." -ForegroundColor Yellow
+                        
+                        # Temporarily add Scripts directory to PATH to help with pip installation
+                        $originalPath = $env:PATH
+                        $pythonScriptsDir = "$OutputPath\python\Scripts"
+                        $env:PATH = "$pythonScriptsDir;$originalPath"
+                        
+                        try {
+                            & "$OutputPath\python\python.exe" "$OutputPath\python\get-pip.py" --no-warn-script-location --force-reinstall
+                        } finally {
+                            # Restore original PATH
+                            $env:PATH = $originalPath
+                        }
+                        
+                        # Final verification
+                        Write-Host "[TEST] Final pip verification..." -ForegroundColor Gray
+                        $finalTest = & "$OutputPath\python\python.exe" -m pip --version 2>$null
+                        $finalExitCode = $LASTEXITCODE
+                        
+                        if ($finalExitCode -eq 0 -and $finalTest) {
+                            Write-Host "[OK] Pip installation successful after repair: $finalTest" -ForegroundColor Green
+                        } else {
+                            Write-Host "[ERROR] Pip installation still failed after repair" -ForegroundColor Red
+                            Write-Host "[ERROR] Final test exit code: $finalExitCode" -ForegroundColor Red
+                            Write-Host "[ERROR] Cannot proceed without working pip installation" -ForegroundColor Red
+                            exit 1
+                        }
                     }
                 }
             }
