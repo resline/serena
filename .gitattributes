@@ -1,0 +1,34 @@
+# PowerShell scripts should use CRLF line endings on all platforms
+*.ps1 text eol=crlf
+
+# Python files should use LF line endings
+*.py text eol=lf
+
+# Batch files should use CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Shell scripts should use LF
+*.sh text eol=lf
+
+# Text files should use LF by default
+*.txt text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+
+# Binary files
+*.exe binary
+*.dll binary
+*.zip binary
+*.tar.gz binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+
+# Ensure consistent line endings across platforms
+* text=auto
