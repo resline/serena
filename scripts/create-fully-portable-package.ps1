@@ -3,6 +3,14 @@
 # Version: 2.1 - Windows 10 Enhanced Edition
 # Includes Windows 10-specific optimizations and compatibility enhancements
 
+param(
+    [string]$OutputPath = ".\serena-fully-portable",
+    [string]$ProxyUrl = $env:HTTP_PROXY,
+    [string]$CertPath = $env:REQUESTS_CA_BUNDLE,
+    [string]$PythonVersion = "3.11.9",
+    [string]$Platform = "win_amd64"
+)
+
 # =============================================================================
 # WINDOWS 10 COMPATIBILITY INITIALIZATION
 # =============================================================================
@@ -46,14 +54,6 @@ try {
 } catch {
     Write-Host "[WARN] Windows 10 helpers not found - using standard methods" -ForegroundColor Yellow
 }
-
-param(
-    [string]$OutputPath = ".\serena-fully-portable",
-    [string]$ProxyUrl = $env:HTTP_PROXY,
-    [string]$CertPath = $env:REQUESTS_CA_BUNDLE,
-    [string]$PythonVersion = "3.11.9",
-    [string]$Platform = "win_amd64"
-)
 
 # =============================================================================
 # WINDOWS 10 COMPATIBILITY ASSESSMENT
