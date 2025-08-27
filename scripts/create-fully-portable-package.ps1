@@ -184,7 +184,7 @@ if (-not $pythonInstallSuccess) {
 
     # Download get-pip with retry logic
     Write-Host "Setting up pip..." -ForegroundColor Yellow
-    $maxPipRetries = if ($CompatibilityInfo.OptimizationStrategy.UseExtendedRetries) { 5 } else { 3 }
+    $maxPipRetries = if ($CompatibilityInfo -and $CompatibilityInfo.OptimizationStrategy.UseExtendedRetries) { 5 } else { 3 }
     
     for ($retry = 1; $retry -le $maxPipRetries; $retry++) {
         try {
@@ -200,7 +200,22 @@ if (-not $pythonInstallSuccess) {
     }
 
     # Create python._pth to enable pip and site-packages
-    # ENHANCED: Include proper paths for pip module access with Windows 10 compatibility
+    # FIXED: Ensure python311.zip exists and create proper paths without BOM
+    $python311ZipPath = "$OutputPath\python\python311.zip"
+    if (-not (Test-Path $python311ZipPath)) {
+        Write-Host "[WARN] python311.zip not found, checking for embedded zip files..." -ForegroundColor Yellow
+        $embeddedZips = Get-ChildItem "$OutputPath\python" -Filter "python*.zip" -ErrorAction SilentlyContinue
+        if ($embeddedZips) {
+            $sourceZip = $embeddedZips[0].FullName
+            Copy-Item $sourceZip $python311ZipPath -Force
+            Write-Host "[OK] Created python311.zip from $($embeddedZips[0].Name)" -ForegroundColor Green
+        } else {
+            Write-Host "[ERROR] No Python zip file found in embedded distribution" -ForegroundColor Red
+            exit 1
+        }
+    }
+    
+    # Create proper python._pth content without BOM characters
     $pthLines = @(
         "python311.zip",
         ".",
@@ -209,8 +224,12 @@ if (-not $pythonInstallSuccess) {
         "..\..\serena\src",
         "import site"
     )
-    $pthContent = $pthLines -join "`n"
-    Set-Content -Path "$OutputPath\python\python311._pth" -Value $pthContent -Encoding UTF8
+    
+    # Write file with explicit UTF8 encoding without BOM
+    $pthContent = $pthLines -join "`r`n"
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText("$OutputPath\python\python311._pth", $pthContent, $utf8NoBom)
+    Write-Host "[OK] Created python311._pth without BOM characters" -ForegroundColor Green
     Write-Host "[OK] Configured Python path" -ForegroundColor Green
 }
 
@@ -440,7 +459,7 @@ if (-not $dependencyInstallSuccess -and (Test-Path "$OutputPath\dependencies\req
             $uvDepsPath = "$OutputPath\dependencies\uv-deps" -replace '\\', '/'
             $targetDirForward = $targetDir -replace '\\', '/'
             
-            if ($CompatibilityInfo.OptimizationStrategy.UseExtendedRetries) {
+            if ($CompatibilityInfo -and $CompatibilityInfo.OptimizationStrategy.UseExtendedRetries) {
                 # Use retry logic for Windows 10
                 $uvInstallSuccess = $false
                 for ($retry = 1; $retry -le 3; $retry++) {
