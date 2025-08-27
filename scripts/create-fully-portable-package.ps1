@@ -170,6 +170,17 @@ if (-not $pythonInstallSuccess) {
         }
         
         Write-Host "[OK] Downloaded and extracted Python embedded" -ForegroundColor Green
+        
+        # Create Lib directory structure for pip installation
+        $pythonLibDir = "$OutputPath\python\Lib"
+        $pythonSitePackagesDir = "$OutputPath\python\Lib\site-packages"
+        if (-not (Test-Path $pythonLibDir)) {
+            New-Item -ItemType Directory -Path $pythonLibDir -Force | Out-Null
+        }
+        if (-not (Test-Path $pythonSitePackagesDir)) {
+            New-Item -ItemType Directory -Path $pythonSitePackagesDir -Force | Out-Null
+        }
+        Write-Host "[OK] Created Python Lib directory structure" -ForegroundColor Green
     } catch {
         if ($Win10CompatibilityLoaded) {
             Write-StandardizedError -ErrorMessage "Failed to download Python: $($_.Exception.Message)" `
@@ -219,9 +230,10 @@ if (-not $pythonInstallSuccess) {
     $pthLines = @(
         "python311.zip",
         ".",
+        "Lib",
         "Lib\site-packages",
-        "..\..\Lib\site-packages",
-        "..\..\serena\src",
+        "..\Lib\site-packages",
+        "..\serena\src",
         "import site"
     )
     
@@ -252,8 +264,16 @@ if ($Win10HelpersLoaded -and $CompatibilityInfo) {
 # Fallback to standard pip installation with enhanced error handling
 if (-not $pipInstallSuccess) {
     Write-Host "Installing pip in embedded Python (standard method)..." -ForegroundColor Yellow
+    
+    # Ensure target directory exists
+    $pipTargetDir = "$OutputPath\python\Lib\site-packages"
+    if (-not (Test-Path $pipTargetDir)) {
+        New-Item -ItemType Directory -Path $pipTargetDir -Force | Out-Null
+        Write-Host "[INFO] Created pip target directory: $pipTargetDir" -ForegroundColor Gray
+    }
+    
     # FIXED: Install pip directly to Python's Lib\site-packages for module access
-    & "$OutputPath\python\python.exe" "$OutputPath\python\get-pip.py" --no-warn-script-location --target "$OutputPath\python\Lib\site-packages"
+    & "$OutputPath\python\python.exe" "$OutputPath\python\get-pip.py" --no-warn-script-location --target $pipTargetDir
 
     # Test pip installation with enhanced Windows 10 error handling
     if ($Win10HelpersLoaded) {
@@ -267,8 +287,14 @@ if (-not $pipInstallSuccess) {
         try {
             # Test 1: Check if pip module is accessible
             Write-Host "[TEST] Testing 'python -m pip --version'..." -ForegroundColor Gray
-            $pipModuleTest = & "$OutputPath\python\python.exe" -m pip --version 2>$null
+            $pipModuleTest = & "$OutputPath\python\python.exe" -m pip --version 2>&1
             $pipTestExitCode = $LASTEXITCODE
+            
+            if ($pipTestExitCode -ne 0) {
+                Write-Host "[DEBUG] Pip test error output: $pipModuleTest" -ForegroundColor Red
+                Write-Host "[DEBUG] Python path check..." -ForegroundColor Gray
+                & "$OutputPath\python\python.exe" -c "import sys; print('Python paths:'); [print('  ' + p) for p in sys.path]" 2>&1 | Write-Host -ForegroundColor Gray
+            }
             
             if ($pipTestExitCode -eq 0 -and $pipModuleTest) {
                 Write-Host "[OK] Pip module accessible: $pipModuleTest" -ForegroundColor Green
@@ -403,7 +429,7 @@ if (-not $dependencyInstallSuccess -and (Test-Path "$OutputPath\dependencies\req
         Write-Host "[INFO] Found $reqLines requirements to install" -ForegroundColor Green
         
         # FIXED: Use consistent target directory for both Python and dependencies
-        $targetDir = "$OutputPath\Lib\site-packages"
+        $targetDir = "$OutputPath\python\Lib\site-packages"
         
         # ENHANCED: Clear existing installations to avoid conflicts with Windows 10 compatibility
         if (Test-Path $targetDir) {
