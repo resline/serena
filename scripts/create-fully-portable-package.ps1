@@ -185,6 +185,20 @@ if (-not $pythonInstallSuccess) {
             New-Item -ItemType Directory -Path $pythonScriptsDir -Force | Out-Null
         }
         Write-Host "[OK] Created Python Lib and Scripts directory structure" -ForegroundColor Green
+        
+        # Ensure all required directories exist for embedded Python
+        $requiredDirs = @(
+            "$OutputPath\python\DLLs",
+            "$OutputPath\python\Lib",
+            "$OutputPath\python\Lib\site-packages",
+            "$OutputPath\python\Scripts"
+        )
+        foreach ($dir in $requiredDirs) {
+            if (-not (Test-Path $dir)) {
+                New-Item -ItemType Directory -Path $dir -Force | Out-Null
+                Write-Host "[OK] Created directory: $dir" -ForegroundColor Green
+            }
+        }
     } catch {
         if ($Win10CompatibilityLoaded) {
             Write-StandardizedError -ErrorMessage "Failed to download Python: $($_.Exception.Message)" `
@@ -230,15 +244,40 @@ if (-not $pythonInstallSuccess) {
         }
     }
     
+    # Validate Python embedded files
+    $pythonZip = "$OutputPath\python\python311.zip"
+    if (Test-Path $pythonZip) {
+        $zipSize = (Get-Item $pythonZip).Length
+        if ($zipSize -lt 1MB) {
+            Write-Host "[WARN] python311.zip seems too small ($zipSize bytes), may need extraction" -ForegroundColor Yellow
+        } else {
+            Write-Host "[OK] python311.zip present ($([math]::Round($zipSize/1MB, 2)) MB)" -ForegroundColor Green
+        }
+    } else {
+        Write-Host "[WARN] python311.zip not found - may affect standard library imports" -ForegroundColor Yellow
+    }
+    
+    # Validate paths before adding to _pth file
+    Write-Host "[INFO] Validating Python paths..." -ForegroundColor Gray
+    $pthPaths = @(".", "DLLs", "Lib", "Lib\site-packages")
+    foreach ($path in $pthPaths) {
+        $fullPath = "$OutputPath\python\$path"
+        if ($path -eq ".") {
+            continue  # Current directory always valid
+        }
+        if (-not (Test-Path $fullPath)) {
+            Write-Host "[WARN] Creating missing path: $path" -ForegroundColor Yellow
+            New-Item -ItemType Directory -Path $fullPath -Force | Out-Null
+        }
+    }
+    
     # Create proper python._pth content without BOM characters
     $pthLines = @(
         "python311.zip",
         ".",
+        "DLLs",
         "Lib",
         "Lib\site-packages",
-        "..\Lib\site-packages",
-        "..\serena\src",
-        "Scripts",
         "import site"
     )
     
@@ -270,20 +309,30 @@ if ($Win10HelpersLoaded -and $CompatibilityInfo) {
 if (-not $pipInstallSuccess) {
     Write-Host "Installing pip in embedded Python (standard method)..." -ForegroundColor Yellow
     
-    # FIXED: Install pip without --target to allow get-pip.py to handle proper installation
-    # This allows pip to be installed in the correct location for embedded Python
-    Write-Host "[INFO] Installing pip using get-pip.py (letting it choose optimal location)..." -ForegroundColor Gray
+    Write-Host "[INFO] Installing pip using get-pip.py for embedded Python..." -ForegroundColor Gray
+
+    # Install pip WITHOUT --target for embedded Python compatibility
+    # Run pip installation with timeout protection
+    $pipProcess = Start-Process -FilePath "$OutputPath\python\python.exe" `
+        -ArgumentList "$OutputPath\python\get-pip.py", "--no-warn-script-location", "--no-cache-dir" `
+        -NoNewWindow -PassThru -Wait -RedirectStandardOutput "$OutputPath\pip_install.log" `
+        -RedirectStandardError "$OutputPath\pip_error.log"
+
+    # Wait up to 5 minutes
+    $timeout = 300
+    if (-not $pipProcess.WaitForExit($timeout * 1000)) {
+        $pipProcess.Kill()
+        Write-Host "[ERROR] Pip installation timed out after $timeout seconds" -ForegroundColor Red
+        Write-Host "[INFO] Check $OutputPath\pip_error.log for details" -ForegroundColor Yellow
+        exit 1
+    }
     
-    # Temporarily add Scripts directory to PATH to help with pip installation
-    $originalPath = $env:PATH
-    $pythonScriptsDir = "$OutputPath\python\Scripts"
-    $env:PATH = "$pythonScriptsDir;$originalPath"
-    
-    try {
-        & "$OutputPath\python\python.exe" "$OutputPath\python\get-pip.py" --no-warn-script-location
-    } finally {
-        # Restore original PATH
-        $env:PATH = $originalPath
+    $pipExitCode = $pipProcess.ExitCode
+
+    if ($pipExitCode -ne 0) {
+        Write-Host "[WARN] Pip installation had issues: $pipInstallResult" -ForegroundColor Yellow
+    } else {
+        Write-Host "[OK] Pip installation completed" -ForegroundColor Green
     }
 
     # Show where pip was actually installed for debugging
@@ -298,6 +347,33 @@ if (-not $pipInstallSuccess) {
             Write-Host "[DEBUG] Found pip at: $location" -ForegroundColor Gray
         }
     }
+
+    # Create sitecustomize.py to ensure proper path configuration
+    Write-Host "[INFO] Creating sitecustomize.py for path configuration..." -ForegroundColor Gray
+    $siteCustomize = @"
+import sys
+import os
+
+# Add current directory to path if not present
+if '' not in sys.path:
+    sys.path.insert(0, '')
+
+# Ensure site-packages is in path
+python_dir = os.path.dirname(sys.executable)
+site_packages = os.path.join(python_dir, 'Lib', 'site-packages')
+if site_packages not in sys.path and os.path.exists(site_packages):
+    sys.path.append(site_packages)
+
+# Add the parent serena/src directory if it exists
+serena_src = os.path.abspath(os.path.join(python_dir, '..', 'serena', 'src'))
+if os.path.exists(serena_src) and serena_src not in sys.path:
+    sys.path.append(serena_src)
+"@
+
+    $siteCustomizePath = "$OutputPath\python\sitecustomize.py"
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($siteCustomizePath, $siteCustomize, $utf8NoBom)
+    Write-Host "[OK] Created sitecustomize.py" -ForegroundColor Green
 
     # Test pip installation with enhanced Windows 10 error handling
     if ($Win10HelpersLoaded) {
@@ -316,8 +392,25 @@ if (-not $pipInstallSuccess) {
             
             if ($pipTestExitCode -ne 0) {
                 Write-Host "[DEBUG] Pip test error output: $pipModuleTest" -ForegroundColor Red
-                Write-Host "[DEBUG] Python path check..." -ForegroundColor Gray
-                & "$OutputPath\python\python.exe" -c "import sys; print('Python paths:'); [print('  ' + p) for p in sys.path]" 2>&1 | Write-Host -ForegroundColor Gray
+                Write-Host "[DEBUG] Python sys.path analysis:" -ForegroundColor Gray
+                & "$OutputPath\python\python.exe" -c @"
+import sys
+import os
+print('Python executable:', sys.executable)
+print('Python version:', sys.version)
+print('Python paths:')
+for i, p in enumerate(sys.path):
+    exists = ' [EXISTS]' if os.path.exists(p) else ' [MISSING]'
+    print(f'  {i}: {p}{exists}')
+
+# Check site-packages
+site_packages = os.path.join(os.path.dirname(sys.executable), 'Lib', 'site-packages')
+print(f'\nsite-packages path: {site_packages}')
+print(f'site-packages exists: {os.path.exists(site_packages)}')
+if os.path.exists(site_packages):
+    dirs = [d for d in os.listdir(site_packages) if os.path.isdir(os.path.join(site_packages, d))]
+    print(f'Installed packages: {dirs[:5]}...' if len(dirs) > 5 else f'Installed packages: {dirs}')
+"@ 2>&1 | Write-Host -ForegroundColor Gray
             }
             
             if ($pipTestExitCode -eq 0 -and $pipModuleTest) {
@@ -405,6 +498,32 @@ if (-not $pipInstallSuccess) {
         }
     }
 }
+
+# Final validation before completing
+Write-Host "`n[INFO] Performing final validation..." -ForegroundColor Cyan
+$validationErrors = @()
+
+# Check critical files exist
+$criticalFiles = @(
+    "$OutputPath\python\python.exe",
+    "$OutputPath\python\python311._pth",
+    "$OutputPath\python\Lib\site-packages\pip",
+    "$OutputPath\python\Scripts\pip.exe"
+)
+
+foreach ($file in $criticalFiles) {
+    if (-not (Test-Path $file)) {
+        $validationErrors += "Missing: $file"
+    }
+}
+
+if ($validationErrors.Count -gt 0) {
+    Write-Host "[ERROR] Validation failed:" -ForegroundColor Red
+    $validationErrors | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
+    exit 1
+}
+
+Write-Host "[OK] All critical components validated" -ForegroundColor Green
 
 # Download ALL Python dependencies offline
 $depDownloadScript = "$PSScriptRoot\download-dependencies-offline.py"

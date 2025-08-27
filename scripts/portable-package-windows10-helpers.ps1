@@ -148,9 +148,9 @@ function Install-PipEmbeddedWindows10 {
         $pthLines = @(
             "python311.zip",
             ".",
+            "DLLs", 
+            "Lib",
             "Lib\site-packages",
-            "..\..\Lib\site-packages",
-            "..\..\serena\src",
             "import site"
         )
         $pthContent = $pthLines -join "`n"
@@ -161,8 +161,8 @@ function Install-PipEmbeddedWindows10 {
         $pipInstallArgs = @(
             $getPipPath,
             "--no-warn-script-location",
-            "--target", $targetDir,
-            "--force-reinstall"
+            "--force-reinstall",
+            "--no-cache-dir"
         )
         
         # Add timeout for Windows 10 (sometimes hangs)
@@ -247,8 +247,8 @@ function Test-PipInstallationWindows10 {
         $repairArgs = @(
             "$OutputPath\python\get-pip.py",
             "--no-warn-script-location",
-            "--target", "$OutputPath\python\Lib\site-packages",
             "--force-reinstall",
+            "--no-cache-dir",
             "--no-deps"
         )
         
