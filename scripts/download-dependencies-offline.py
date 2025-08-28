@@ -261,6 +261,22 @@ class OfflineDependencyDownloader:
         self.pip_args = self._build_pip_args()
         self.validator = PackageValidator()
 
+    def _runpip_path(self) -> str | None:
+        try:
+            if not self.python_exe:
+                return None
+            py_dir = os.path.dirname(self.python_exe)
+            candidate = os.path.join(py_dir, "runpip.py")
+            return candidate if os.path.exists(candidate) else None
+        except Exception:
+            return None
+
+    def _pip_base(self) -> list[str]:
+        rp = self._runpip_path()
+        if rp:
+            return [self.python_exe, rp]
+        return [self.python_exe, "-m", "pip"]
+
     def _build_pip_args(self) -> list[str]:
         """Build pip arguments for proxy and certificate handling"""
         args = []
@@ -382,11 +398,11 @@ class OfflineDependencyDownloader:
         print(f"[OK] Found {req_count} requirements in {requirements_path}")
         print(f"Key requirements: {', '.join(valid_requirements[:5])}{'...' if len(valid_requirements) > 5 else ''}")
 
-        # FIXED: Try multiple approaches for calling pip - SEPARATE base command from download subcommand
+        # FIXED: Try multiple approaches for calling pip - prefer embedded runpip shim when present
         pip_methods = [
-            # Method 1: python -m pip (preferred)
-            ([self.python_exe, "-m", "pip"], "download"),
-            # Method 2: Direct pip call (fallback)
+            # Method 1: embedded runpip.py (if available next to python.exe)
+            (self._pip_base(), "download"),
+            # Method 2: Direct system pip (fallback)
             (["pip"], "download"),
         ]
 
@@ -484,7 +500,7 @@ class OfflineDependencyDownloader:
         for i, requirement in enumerate(requirements):
             progress.update(i, requirement)
             # Build command with platform-specific options
-            cmd = [self.python_exe, "-m", "pip", "download", "--dest", str(output_dir), "--prefer-binary"]
+            cmd = self._pip_base() + ["download", "--dest", str(output_dir), "--prefer-binary"]
             
             # Add platform-specific options for Windows
             if "win" in platform_tag.lower():
@@ -541,7 +557,7 @@ class OfflineDependencyDownloader:
 
         # FIXED: Try multiple approaches for calling pip (same as main dependencies)
         pip_methods = [
-            ([self.python_exe, "-m", "pip"], "download"),
+            (self._pip_base(), "download"),
             (["pip"], "download"),
         ]
 
@@ -600,11 +616,9 @@ class OfflineDependencyDownloader:
 
         for package in uv_packages:
             print(f"  Downloading: {package}")
-            cmd = (
-                [self.python_exe, "-m", "pip", "download", "--dest", str(uv_dir_abs), "--platform", platform_tag, "--only-binary=:all:"]
-                + self.pip_args
-                + [package]
-            )
+            cmd = self._pip_base() + [
+                "download", "--dest", str(uv_dir_abs), "--platform", platform_tag, "--only-binary=:all:"
+            ] + self.pip_args + [package]
 
             try:
                 # CRITICAL FIX: Do NOT use shell=True
@@ -647,7 +661,7 @@ setlocal
 set SERENA_PORTABLE=%~dp0..
 set PYTHONHOME=%SERENA_PORTABLE%\\python
 set DEPENDENCIES=%~dp0
-set TARGET_DIR=%SERENA_PORTABLE%\\Lib\\site-packages
+set TARGET_DIR=%SERENA_PORTABLE%\\python\\Lib\\site-packages
 
 :: Check if pip module is available (try module, then shim)
 echo Checking pip availability...
