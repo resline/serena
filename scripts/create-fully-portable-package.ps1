@@ -271,6 +271,19 @@ if (-not $pythonInstallSuccess) {
         }
     }
     
+    # Remove any conflicting ._pth files and create fresh ones
+    $existingPth = Get-ChildItem -Path "$OutputPath\python" -Filter "*.?_pth" -ErrorAction SilentlyContinue
+    if ($existingPth) {
+        foreach ($f in $existingPth) {
+            try {
+                Remove-Item -Path $f.FullName -Force -ErrorAction Stop
+                Write-Host "[INFO] Removed pre-existing _pth file: $($f.Name)" -ForegroundColor Gray
+            } catch {
+                Write-Host "[WARN] Could not remove _pth file $($f.Name): $($_.Exception.Message)" -ForegroundColor Yellow
+            }
+        }
+    }
+
     # Create proper python._pth content without BOM characters
     $pthLines = @(
         "python311.zip",
@@ -285,7 +298,9 @@ if (-not $pythonInstallSuccess) {
     $pthContent = $pthLines -join "`r`n"
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
     [System.IO.File]::WriteAllText("$OutputPath\python\python311._pth", $pthContent, $utf8NoBom)
-    Write-Host "[OK] Created python311._pth without BOM characters" -ForegroundColor Green
+    # Also write python._pth for broader compatibility on some Win10 builds
+    [System.IO.File]::WriteAllText("$OutputPath\python\python._pth", $pthContent, $utf8NoBom)
+    Write-Host "[OK] Created python311._pth and python._pth without BOM" -ForegroundColor Green
     Write-Host "[OK] Configured Python path" -ForegroundColor Green
 
     # Verify that python311._pth is effective (Windows 10 often ignores bad encodings)
@@ -317,19 +332,46 @@ print('NEEDED_MISSING:', ';'.join(missing))
 
     # Create a robust runpip.py shim that ensures site-packages on sys.path (fallback for embedded edge cases)
     $runPipShim = @"
-import os, sys
-py_dir = os.path.dirname(sys.executable)
-sp = os.path.join(py_dir, 'Lib', 'site-packages')
-if sp not in sys.path and os.path.isdir(sp):
-    sys.path.insert(0, sp)
-try:
-    from pip._internal import main as _pip_main
-except Exception:
-    # Older pip
-    import pip
-    def _pip_main(argv=None):
-        return pip.main(argv)
-sys.exit(_pip_main(sys.argv[1:]))
+import os, sys, traceback
+
+def _ensure_paths(verbose=False):
+    py_dir = os.path.dirname(sys.executable)
+    candidates = [
+        os.path.join(py_dir, 'Lib'),
+        os.path.join(py_dir, 'Lib', 'site-packages'),
+    ]
+    for p in candidates:
+        if os.path.isdir(p) and p not in sys.path:
+            sys.path.insert(0, p)
+            if verbose:
+                print(f"[runpip] added to sys.path: {p}")
+
+def _main():
+    verbose = os.environ.get('RUNPIP_VERBOSE') == '1'
+    _ensure_paths(verbose)
+    try:
+        from pip._internal import main as _pip_main
+    except Exception:
+        try:
+            import pip
+            def _pip_main(argv=None):
+                return pip.main(argv)
+        except Exception as e:
+            if verbose:
+                print("[runpip] import error:")
+                traceback.print_exc()
+            return 1
+    try:
+        return _pip_main(sys.argv[1:])
+    except SystemExit as e:
+        return int(e.code) if isinstance(e.code, int) else 1
+    except Exception:
+        if verbose:
+            traceback.print_exc()
+        return 1
+
+if __name__ == '__main__':
+    raise SystemExit(_main())
 "@
     [System.IO.File]::WriteAllText("$OutputPath\python\runpip.py", $runPipShim, $utf8NoBom)
     Write-Host "[OK] Added runpip.py fallback shim" -ForegroundColor Green
@@ -430,6 +472,7 @@ if os.path.exists(serena_src) and serena_src not in sys.path:
     } else {
         # Standard pip testing logic
         Write-Host "Testing pip installation..." -ForegroundColor Yellow
+        $pipInstallSuccess = $false
         try {
             # Test 1: Check if pip module is accessible
             Write-Host "[TEST] Testing 'python -m pip --version'..." -ForegroundColor Gray
@@ -505,13 +548,17 @@ if os.path.exists(site_packages):
                     # Test 4: Use runpip.py shim to execute pip
                     if (-not $pipInstallSuccess) {
                         Write-Host "[TEST] Testing runpip.py shim..." -ForegroundColor Gray
+                        $prevVerbose = $env:RUNPIP_VERBOSE
+                        $env:RUNPIP_VERBOSE = "1"
                         $shimTest = & "$OutputPath\python\python.exe" "$OutputPath\python\runpip.py" --version 2>&1
                         $shimExit = $LASTEXITCODE
+                        $env:RUNPIP_VERBOSE = $prevVerbose
                         if ($shimExit -eq 0 -and $shimTest) {
                             Write-Host "[OK] runpip.py working: $shimTest" -ForegroundColor Green
                             $pipInstallSuccess = $true
                         } else {
                             Write-Host "[WARN] runpip.py shim failed (exit $shimExit)" -ForegroundColor Yellow
+                            if ($shimTest) { Write-Host $shimTest -ForegroundColor Gray }
                         }
                     }
 
