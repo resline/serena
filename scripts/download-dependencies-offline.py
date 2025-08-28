@@ -649,23 +649,42 @@ set PYTHONHOME=%SERENA_PORTABLE%\\python
 set DEPENDENCIES=%~dp0
 set TARGET_DIR=%SERENA_PORTABLE%\\Lib\\site-packages
 
-:: Check if pip module is available
+:: Check if pip module is available (try module, then shim)
 echo Checking pip availability...
 "%PYTHONHOME%\\python.exe" -m pip --version >nul 2>&1
 if %ERRORLEVEL% neq 0 (
-    echo [WARN] pip module not available, trying alternative installation...
-    goto :alternative_install
+    if exist "%PYTHONHOME%\\runpip.py" (
+        echo [INFO] Trying runpip.py shim...
+        "%PYTHONHOME%\\python.exe" "%PYTHONHOME%\\runpip.py" --version >nul 2>&1
+        if %ERRORLEVEL% neq 0 (
+            echo [WARN] pip not available (module or shim). Trying alternative installation...
+            goto :alternative_install
+        ) else (
+            set USE_SHIM=1
+        )
+    ) else (
+        echo [WARN] pip module not available and no shim found. Trying alternative installation...
+        goto :alternative_install
+    )
 )
 
 :: Install UV first (if available)
 if exist "%DEPENDENCIES%\\uv-deps" (
     echo Installing UV...
-    "%PYTHONHOME%\\python.exe" -m pip install --no-index --find-links "%DEPENDENCIES%\\uv-deps" --target "%TARGET_DIR%" uv
+    if defined USE_SHIM (
+        "%PYTHONHOME%\\python.exe" "%PYTHONHOME%\\runpip.py" install --no-index --find-links "%DEPENDENCIES%\\uv-deps" --target "%TARGET_DIR%" uv
+    ) else (
+        "%PYTHONHOME%\\python.exe" -m pip install --no-index --find-links "%DEPENDENCIES%\\uv-deps" --target "%TARGET_DIR%" uv
+    )
 )
 
 :: Install main dependencies
 echo Installing Serena dependencies...
-"%PYTHONHOME%\\python.exe" -m pip install --no-index --find-links "%DEPENDENCIES%" --target "%TARGET_DIR%" --requirement "%DEPENDENCIES%\\requirements.txt"
+if defined USE_SHIM (
+    "%PYTHONHOME%\\python.exe" "%PYTHONHOME%\\runpip.py" install --no-index --find-links "%DEPENDENCIES%" --target "%TARGET_DIR%" --requirement "%DEPENDENCIES%\\requirements.txt"
+else (
+    "%PYTHONHOME%\\python.exe" -m pip install --no-index --find-links "%DEPENDENCIES%" --target "%TARGET_DIR%" --requirement "%DEPENDENCIES%\\requirements.txt"
+)
 goto :verify
 
 :alternative_install
