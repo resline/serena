@@ -290,6 +290,7 @@ function Install-DependenciesWindows10 {
     $requirementsFile = "$dependenciesDir\requirements.txt"
     $targetDir = "$OutputPath\Lib\site-packages"
     $pythonExe = "$OutputPath\python\python.exe"
+    $runPip = "$OutputPath\python\runpip.py"
     
     if (-not (Test-Path $requirementsFile)) {
         Write-Host "[INFO] No offline dependencies found - will install online during first run" -ForegroundColor Yellow
@@ -347,7 +348,11 @@ function Install-DependenciesWindows10 {
             $uvDepsPath = "$dependenciesDir\uv-deps" -replace '\\', '/'
             $targetDirForward = $targetDir -replace '\\', '/'
             
-            & $pythonExe -m pip install --no-index --find-links $uvDepsPath --target $targetDirForward --force-reinstall uv
+            if (Test-Path $runPip) {
+                & $pythonExe $runPip install --no-index --find-links $uvDepsPath --target $targetDirForward --force-reinstall uv
+            } else {
+                & $pythonExe -m pip install --no-index --find-links $uvDepsPath --target $targetDirForward --force-reinstall uv
+            }
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "[OK] UV installed successfully" -ForegroundColor Green
             }
@@ -365,20 +370,35 @@ function Install-DependenciesWindows10 {
         $reqPath = $requirementsFile -replace '\\', '/'
         $targetDirForward = $targetDir -replace '\\', '/'
         
-        $installArgs = @(
-            "-m", "pip", "install",
-            "--no-index",
-            "--find-links", $depsPath,
-            "--target", $targetDirForward,
-            "--force-reinstall",
-            "--no-deps",
-            "--requirement", $reqPath,
-            "--timeout", "300",
-            "--retries", "3"
-        )
-        
-        Write-Host "[DEBUG] Running pip install with Windows 10 parameters..." -ForegroundColor Gray
-        & $pythonExe @installArgs
+        if (Test-Path $runPip) {
+            $installArgs = @(
+                "$runPip", "install",
+                "--no-index",
+                "--find-links", $depsPath,
+                "--target", $targetDirForward,
+                "--force-reinstall",
+                "--no-deps",
+                "--requirement", $reqPath,
+                "--timeout", "300",
+                "--retries", "3"
+            )
+            Write-Host "[DEBUG] Running pip (shim) install with Windows 10 parameters..." -ForegroundColor Gray
+            & $pythonExe @installArgs
+        } else {
+            $installArgs = @(
+                "-m", "pip", "install",
+                "--no-index",
+                "--find-links", $depsPath,
+                "--target", $targetDirForward,
+                "--force-reinstall",
+                "--no-deps",
+                "--requirement", $reqPath,
+                "--timeout", "300",
+                "--retries", "3"
+            )
+            Write-Host "[DEBUG] Running pip install with Windows 10 parameters..." -ForegroundColor Gray
+            & $pythonExe @installArgs
+        }
         
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[OK] Dependencies installed successfully" -ForegroundColor Green
@@ -407,6 +427,7 @@ function Install-IndividualPackagesWindows10 {
     $dependenciesDir = "$OutputPath\dependencies"
     $targetDir = "$OutputPath\Lib\site-packages"
     $pythonExe = "$OutputPath\python\python.exe"
+    $runPip = "$OutputPath\python\runpip.py"
     
     Write-Host "Attempting individual package installation for Windows 10..." -ForegroundColor Yellow
     
@@ -425,7 +446,11 @@ function Install-IndividualPackagesWindows10 {
         try {
             # Use safe file operations for Windows 10
             Invoke-SafeFileOperation {
-                & $pythonExe -m pip install --no-index --target $targetDir --force-reinstall $wheel.FullName
+                if (Test-Path $runPip) {
+                    & $pythonExe $runPip install --no-index --target $targetDir --force-reinstall $wheel.FullName
+                } else {
+                    & $pythonExe -m pip install --no-index --target $targetDir --force-reinstall $wheel.FullName
+                }
                 if ($LASTEXITCODE -ne 0) {
                     throw "Pip returned exit code $LASTEXITCODE"
                 }

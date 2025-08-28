@@ -287,6 +287,52 @@ if (-not $pythonInstallSuccess) {
     [System.IO.File]::WriteAllText("$OutputPath\python\python311._pth", $pthContent, $utf8NoBom)
     Write-Host "[OK] Created python311._pth without BOM characters" -ForegroundColor Green
     Write-Host "[OK] Configured Python path" -ForegroundColor Green
+
+    # Verify that python311._pth is effective (Windows 10 often ignores bad encodings)
+    Write-Host "[TEST] Verifying python311._pth takes effect..." -ForegroundColor Gray
+    $pthVerify = & "$OutputPath\python\python.exe" -c @"
+import sys, os
+py = sys.executable
+print('Python executable:', py)
+print('Python version:', sys.version)
+print('Sys.path entries:')
+for i, p in enumerate(sys.path):
+    flag = ' [EXISTS]' if os.path.exists(p) else ' [MISSING]'
+    print(f'  {i}: {p}{flag}')
+needed = [os.path.join(os.path.dirname(py), 'Lib'), os.path.join(os.path.dirname(py), 'Lib', 'site-packages')]
+missing = [p for p in needed if p not in sys.path]
+print('NEEDED_MISSING:', ';'.join(missing))
+"@ 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[WARN] Could not verify _pth due to Python error" -ForegroundColor Yellow
+    } else {
+        # Extract missing markers
+        $missingLine = ($pthVerify | Select-String -Pattern "NEEDED_MISSING:").ToString()
+        if ($missingLine -and $missingLine.Trim().EndsWith(':')) {
+            Write-Host "[OK] _pth active: Lib paths present in sys.path" -ForegroundColor Green
+        } elseif ($missingLine) {
+            Write-Host "[WARN] _pth seems inactive (Lib paths missing). Will apply compatibility fallback." -ForegroundColor Yellow
+        }
+    }
+
+    # Create a robust runpip.py shim that ensures site-packages on sys.path (fallback for embedded edge cases)
+    $runPipShim = @"
+import os, sys
+py_dir = os.path.dirname(sys.executable)
+sp = os.path.join(py_dir, 'Lib', 'site-packages')
+if sp not in sys.path and os.path.isdir(sp):
+    sys.path.insert(0, sp)
+try:
+    from pip._internal import main as _pip_main
+except Exception:
+    # Older pip
+    import pip
+    def _pip_main(argv=None):
+        return pip.main(argv)
+sys.exit(_pip_main(sys.argv[1:]))
+"@
+    [System.IO.File]::WriteAllText("$OutputPath\python\runpip.py", $runPipShim, $utf8NoBom)
+    Write-Host "[OK] Added runpip.py fallback shim" -ForegroundColor Green
 }
 
 # =============================================================================
@@ -421,8 +467,12 @@ if os.path.exists(site_packages):
                 
                 # Test 2: Alternative test - import pip directly
                 Write-Host "[TEST] Testing direct pip import..." -ForegroundColor Gray
+                # Ensure PYTHONPATH includes site-packages for this one process as a fallback
+                $prevPythonPath = $env:PYTHONPATH
+                $env:PYTHONPATH = "$OutputPath\python\Lib\site-packages;$prevPythonPath"
                 $pipImportTest = & "$OutputPath\python\python.exe" -c "import pip; print('Pip version:', pip.__version__)" 2>$null
                 $importTestExitCode = $LASTEXITCODE
+                $env:PYTHONPATH = $prevPythonPath
                 
                 if ($importTestExitCode -eq 0 -and $pipImportTest) {
                     Write-Host "[OK] Pip accessible via import: $pipImportTest" -ForegroundColor Green
@@ -452,8 +502,21 @@ if os.path.exists(site_packages):
                         Write-Host "[WARN] pip.exe not found in Scripts directory" -ForegroundColor Yellow
                     }
                     
+                    # Test 4: Use runpip.py shim to execute pip
+                    if (-not $pipInstallSuccess) {
+                        Write-Host "[TEST] Testing runpip.py shim..." -ForegroundColor Gray
+                        $shimTest = & "$OutputPath\python\python.exe" "$OutputPath\python\runpip.py" --version 2>&1
+                        $shimExit = $LASTEXITCODE
+                        if ($shimExit -eq 0 -and $shimTest) {
+                            Write-Host "[OK] runpip.py working: $shimTest" -ForegroundColor Green
+                            $pipInstallSuccess = $true
+                        } else {
+                            Write-Host "[WARN] runpip.py shim failed (exit $shimExit)" -ForegroundColor Yellow
+                        }
+                    }
+
                     # Only proceed with repair if ALL tests failed
-                    if (-not $scriptsTestPassed) {
+                    if (-not $pipInstallSuccess) {
                         Write-Host "[ERROR] Pip installation failed - not accessible via any method" -ForegroundColor Red
                         Write-Host "[DEBUG] pip -m test exit code: $pipTestExitCode" -ForegroundColor Gray
                         Write-Host "[DEBUG] pip import test exit code: $importTestExitCode" -ForegroundColor Gray
@@ -479,14 +542,20 @@ if os.path.exists(site_packages):
                         Write-Host "[TEST] Final pip verification..." -ForegroundColor Gray
                         $finalTest = & "$OutputPath\python\python.exe" -m pip --version 2>$null
                         $finalExitCode = $LASTEXITCODE
-                        
                         if ($finalExitCode -eq 0 -and $finalTest) {
                             Write-Host "[OK] Pip installation successful after repair: $finalTest" -ForegroundColor Green
                         } else {
-                            Write-Host "[ERROR] Pip installation still failed after repair" -ForegroundColor Red
-                            Write-Host "[ERROR] Final test exit code: $finalExitCode" -ForegroundColor Red
-                            Write-Host "[ERROR] Cannot proceed without working pip installation" -ForegroundColor Red
-                            exit 1
+                            # Try shim as last resort
+                            $finalShim = & "$OutputPath\python\python.exe" "$OutputPath\python\runpip.py" --version 2>$null
+                            $finalShimExit = $LASTEXITCODE
+                            if ($finalShimExit -eq 0 -and $finalShim) {
+                                Write-Host "[OK] Pip usable via runpip.py after repair: $finalShim" -ForegroundColor Green
+                            } else {
+                                Write-Host "[ERROR] Pip installation still failed after repair" -ForegroundColor Red
+                                Write-Host "[ERROR] Final test exit code: $finalExitCode (shim: $finalShimExit)" -ForegroundColor Red
+                                Write-Host "[ERROR] Cannot proceed without working pip installation" -ForegroundColor Red
+                                exit 1
+                            }
                         }
                     }
                 }
