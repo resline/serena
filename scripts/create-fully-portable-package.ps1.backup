@@ -280,6 +280,35 @@ if (-not $pipInstallSuccess) {
                     Write-Host "[INFO] Reinstalling pip to correct location..." -ForegroundColor Yellow
                     & "$OutputPath\python\python.exe" "$OutputPath\python\get-pip.py" --no-warn-script-location --target $pipLibDir --force-reinstall
                     
+                    # Recreate _pth files removed by get-pip.py --force-reinstall
+                    Write-Host "[INFO] Recreating _pth files after pip reinstall..." -ForegroundColor Gray
+                    # Redefine variables if they're out of scope
+                    $pthTargets = @(
+                        "$OutputPath\python\python311._pth",
+                        "$OutputPath\python\python._pth"
+                    )
+                    $pthLines = @(
+                        "python311.zip",
+                        ".",
+                        "..\..\serena\src",
+                        "Lib\site-packages",
+                        "import site"
+                    )
+                    $pthContent = $pthLines -join "`r`n"
+                    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+
+                    foreach ($pth in $pthTargets) {
+                        try {
+                            if (Test-Path $pth) {
+                                (Get-Item $pth).IsReadOnly = $false
+                            }
+                            [System.IO.File]::WriteAllText($pth, $pthContent, $utf8NoBom)
+                        } catch {
+                            Write-Host "[WARN] Could not recreate $pth: $($_.Exception.Message)" -ForegroundColor Yellow
+                        }
+                    }
+                    Write-Host "[OK] Recreated _pth files after pip reinstall" -ForegroundColor Green
+                    
                     # Final verification
                     Write-Host "[TEST] Final pip verification..." -ForegroundColor Gray
                     $finalTest = & "$OutputPath\python\python.exe" -m pip --version 2>$null
