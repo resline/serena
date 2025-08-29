@@ -36,23 +36,48 @@ try {
 
 # Load Windows 10 compatibility modules
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Win10CompatibilityLoaded = $false
-$Win10HelpersLoaded = $false
 
-try {
-    . "$ScriptDir\windows10-compatibility.ps1"
-    $Win10CompatibilityLoaded = $true
-    Write-Host "[OK] Windows 10 compatibility module loaded" -ForegroundColor Green
-} catch {
-    Write-Host "[WARN] Windows 10 compatibility module not found - using fallback methods" -ForegroundColor Yellow
+# Windows 10 compatibility module loading with enhanced error handling
+$Win10CompatibilityLoaded = $false
+$compatModulePath = "$ScriptDir\windows10-compatibility.ps1"
+
+if (Test-Path $compatModulePath) {
+    try {
+        . $compatModulePath
+        # Verify key functions are available
+        if (Get-Command Test-Windows10Compatibility -ErrorAction SilentlyContinue) {
+            $Win10CompatibilityLoaded = $true
+            Write-Host "[OK] Windows 10 compatibility module loaded successfully" -ForegroundColor Green
+        } else {
+            Write-Host "[WARN] Windows 10 compatibility module loaded but functions not available" -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "[WARN] Failed to load Windows 10 compatibility module: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "[DEBUG] Attempted path: $compatModulePath" -ForegroundColor Gray
+    }
+} else {
+    Write-Host "[WARN] Windows 10 compatibility module not found at: $compatModulePath" -ForegroundColor Yellow
 }
 
-try {
-    . "$ScriptDir\portable-package-windows10-helpers.ps1"
-    $Win10HelpersLoaded = $true
-    Write-Host "[OK] Windows 10 portable package helpers loaded" -ForegroundColor Green
-} catch {
-    Write-Host "[WARN] Windows 10 helpers not found - using standard methods" -ForegroundColor Yellow
+# Windows 10 helpers module loading with enhanced error handling
+$Win10HelpersLoaded = $false
+$helpersModulePath = "$ScriptDir\portable-package-windows10-helpers.ps1"
+
+if (Test-Path $helpersModulePath) {
+    try {
+        . $helpersModulePath
+        if (Get-Command Install-PythonEmbeddedWindows10 -ErrorAction SilentlyContinue) {
+            $Win10HelpersLoaded = $true
+            Write-Host "[OK] Windows 10 helpers module loaded successfully" -ForegroundColor Green
+        } else {
+            Write-Host "[WARN] Windows 10 helpers module loaded but functions not available" -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "[WARN] Failed to load Windows 10 helpers: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "[DEBUG] Attempted path: $helpersModulePath" -ForegroundColor Gray
+    }
+} else {
+    Write-Host "[WARN] Windows 10 helpers not found at: $helpersModulePath" -ForegroundColor Yellow
 }
 
 # =============================================================================
@@ -341,11 +366,25 @@ print('NEEDED_MISSING:', ';'.join(missing))
         } elseif ($missingLine) {
             Write-Host "[WARN] _pth seems inactive (Lib paths missing). Attempting repair..." -ForegroundColor Yellow
             # Repair attempt: force-rewrite the _pth files and re-verify
+            Write-Host "[DEBUG] Attempting _pth repair..." -ForegroundColor Gray
             try {
                 foreach ($pth in $pthTargets) {
-                    try { if (Test-Path $pth) { (Get-Item $pth).IsReadOnly = $false } } catch { }
+                    Write-Host "[DEBUG] Repairing _pth file: $pth" -ForegroundColor Gray
+                    try { 
+                        if (Test-Path $pth) { 
+                            (Get-Item $pth).IsReadOnly = $false 
+                            Write-Host "[DEBUG] Set writable: $pth" -ForegroundColor Gray
+                        }
+                    } catch { 
+                        Write-Host "[DEBUG] Could not set writable: $($_.Exception.Message)" -ForegroundColor Gray
+                    }
+                    
                     [System.IO.File]::WriteAllText($pth, $pthContent, $utf8NoBom)
+                    $repairedSize = (Get-Item $pth -ErrorAction SilentlyContinue).Length
+                    Write-Host "[DEBUG] Rewrote: $pth ($repairedSize bytes)" -ForegroundColor Gray
                 }
+                
+                Write-Host "[DEBUG] Re-verifying _pth effectiveness after repair..." -ForegroundColor Gray
                 $reVerify = & "$OutputPath\python\python.exe" -c @"
 import sys, os
 py = sys.executable
@@ -356,6 +395,7 @@ print('OK' if all(p in sys.path for p in needed) else 'MISS')
                     Write-Host "[OK] _pth repaired successfully" -ForegroundColor Green
                 } else {
                     Write-Host "[WARN] _pth repair did not take effect; sitecustomize fallback will be used" -ForegroundColor Yellow
+                    Write-Host "[DEBUG] Re-verify output: $reVerify" -ForegroundColor Gray
                 }
             } catch {
                 Write-Host "[WARN] _pth repair failed: $($_.Exception.Message)" -ForegroundColor Yellow
@@ -431,6 +471,21 @@ if (-not $pipInstallSuccess) {
     Write-Host "Installing pip in embedded Python (standard method)..." -ForegroundColor Yellow
     
     Write-Host "[INFO] Installing pip using get-pip.py for embedded Python..." -ForegroundColor Gray
+    
+    # DEBUG: Check _pth files before initial pip installation
+    Write-Host "[DEBUG] Checking _pth files before initial pip installation..." -ForegroundColor Gray
+    $pthFilesCheck = @(
+        "$OutputPath\python\python311._pth",
+        "$OutputPath\python\python._pth"
+    )
+    foreach ($pthFile in $pthFilesCheck) {
+        if (Test-Path $pthFile) {
+            $pthSize = (Get-Item $pthFile).Length
+            Write-Host "[DEBUG] Found: $pthFile ($pthSize bytes)" -ForegroundColor Gray
+        } else {
+            Write-Host "[DEBUG] Missing: $pthFile" -ForegroundColor Yellow
+        }
+    }
 
     # Install pip WITHOUT --target for embedded Python compatibility
     # Run pip installation with timeout protection
@@ -450,6 +505,17 @@ if (-not $pipInstallSuccess) {
     
     $pipExitCode = $pipProcess.ExitCode
 
+    # DEBUG: Check _pth files after initial pip installation
+    Write-Host "[DEBUG] Checking _pth files after initial pip installation..." -ForegroundColor Gray
+    foreach ($pthFile in $pthFilesCheck) {
+        if (Test-Path $pthFile) {
+            $pthSize = (Get-Item $pthFile).Length
+            Write-Host "[DEBUG] Still exists: $pthFile ($pthSize bytes)" -ForegroundColor Gray
+        } else {
+            Write-Host "[WARN] Deleted by initial pip installation: $pthFile" -ForegroundColor Yellow
+        }
+    }
+    
     if ($pipExitCode -ne 0) {
         Write-Host "[WARN] Pip installation had issues: $pipInstallResult" -ForegroundColor Yellow
     } else {
@@ -606,6 +672,26 @@ if os.path.exists(site_packages):
                         # Retry installation without --target to let get-pip.py choose proper location
                         Write-Host "[INFO] Reinstalling pip using get-pip.py (force reinstall)..." -ForegroundColor Yellow
                         
+                        # DEBUG: Check _pth files before pip reinstall
+                        Write-Host "[DEBUG] Checking _pth files before pip reinstall..." -ForegroundColor Gray
+                        $pthPreCheck = @(
+                            "$OutputPath\python\python311._pth",
+                            "$OutputPath\python\python._pth"
+                        )
+                        foreach ($pthFile in $pthPreCheck) {
+                            if (Test-Path $pthFile) {
+                                $pthSize = (Get-Item $pthFile).Length
+                                Write-Host "[DEBUG] Found: $pthFile ($pthSize bytes)" -ForegroundColor Gray
+                                # Show first few lines of content
+                                $pthContent = Get-Content $pthFile -Head 3 -ErrorAction SilentlyContinue
+                                if ($pthContent) {
+                                    Write-Host "[DEBUG]   Content preview: $($pthContent -join ';')" -ForegroundColor Gray
+                                }
+                            } else {
+                                Write-Host "[DEBUG] Missing: $pthFile" -ForegroundColor Yellow
+                            }
+                        }
+                        
                         # Temporarily add Scripts directory to PATH to help with pip installation
                         $originalPath = $env:PATH
                         $pythonScriptsDir = "$OutputPath\python\Scripts"
@@ -617,6 +703,47 @@ if os.path.exists(site_packages):
                             # Restore original PATH
                             $env:PATH = $originalPath
                         }
+                        
+                        # DEBUG: Check _pth files after pip reinstall
+                        Write-Host "[DEBUG] Checking _pth files after pip reinstall..." -ForegroundColor Gray
+                        foreach ($pthFile in $pthPreCheck) {
+                            if (Test-Path $pthFile) {
+                                $pthSize = (Get-Item $pthFile).Length
+                                Write-Host "[DEBUG] Still exists: $pthFile ($pthSize bytes)" -ForegroundColor Gray
+                            } else {
+                                Write-Host "[WARN] Deleted by pip reinstall: $pthFile" -ForegroundColor Yellow
+                            }
+                        }
+                        
+                        # Recreate _pth files removed by get-pip.py --force-reinstall
+                        Write-Host "[INFO] Recreating _pth files after pip reinstall..." -ForegroundColor Gray
+                        # Redefine variables if they're out of scope
+                        $pthTargets = @(
+                            "$OutputPath\python\python311._pth",
+                            "$OutputPath\python\python._pth"
+                        )
+                        $pthLines = @(
+                            "python311.zip",
+                            ".",
+                            "DLLs",
+                            "Lib",
+                            "Lib\site-packages",
+                            "import site"
+                        )
+                        $pthContent = $pthLines -join "`r`n"
+                        $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+
+                        foreach ($pth in $pthTargets) {
+                            try {
+                                if (Test-Path $pth) {
+                                    (Get-Item $pth).IsReadOnly = $false
+                                }
+                                [System.IO.File]::WriteAllText($pth, $pthContent, $utf8NoBom)
+                            } catch {
+                                Write-Host "[WARN] Could not recreate $pth: $($_.Exception.Message)" -ForegroundColor Yellow
+                            }
+                        }
+                        Write-Host "[OK] Recreated _pth files after pip reinstall" -ForegroundColor Green
                         
                         # Final verification
                         Write-Host "[TEST] Final pip verification..." -ForegroundColor Gray
@@ -865,7 +992,34 @@ if (-not $dependencyInstallSuccess -and (Test-Path "$OutputPath\dependencies\req
         )
         
         Write-Host "[DEBUG] Running pip install command with Windows 10 optimizations..." -ForegroundColor Gray
+        
+        # DEBUG: Check _pth files before main dependency installation
+        Write-Host "[DEBUG] Checking _pth files before main dependency installation..." -ForegroundColor Gray
+        $pthCheckBeforeDeps = @(
+            "$OutputPath\python\python311._pth",
+            "$OutputPath\python\python._pth"
+        )
+        foreach ($pthFile in $pthCheckBeforeDeps) {
+            if (Test-Path $pthFile) {
+                $pthSize = (Get-Item $pthFile).Length
+                Write-Host "[DEBUG] Found: $pthFile ($pthSize bytes)" -ForegroundColor Gray
+            } else {
+                Write-Host "[DEBUG] Missing: $pthFile" -ForegroundColor Yellow
+            }
+        }
+        
         & $installCmd[0] $installCmd[1..$($installCmd.Length-1)]
+        
+        # DEBUG: Check _pth files after main dependency installation
+        Write-Host "[DEBUG] Checking _pth files after main dependency installation..." -ForegroundColor Gray
+        foreach ($pthFile in $pthCheckBeforeDeps) {
+            if (Test-Path $pthFile) {
+                $pthSize = (Get-Item $pthFile).Length
+                Write-Host "[DEBUG] Still exists: $pthFile ($pthSize bytes)" -ForegroundColor Gray
+            } else {
+                Write-Host "[WARN] Deleted by dependency installation: $pthFile" -ForegroundColor Yellow
+            }
+        }
     }
     
     if ($LASTEXITCODE -eq 0) {
@@ -876,6 +1030,18 @@ if (-not $dependencyInstallSuccess -and (Test-Path "$OutputPath\dependencies\req
         
         # Try individual package installation as fallback
         Write-Host "[INFO] Attempting fallback individual package installation..." -ForegroundColor Yellow
+        
+        # DEBUG: Check _pth files before individual wheel installation
+        Write-Host "[DEBUG] Checking _pth files before individual wheel installation..." -ForegroundColor Gray
+        foreach ($pthFile in $pthCheckBeforeDeps) {
+            if (Test-Path $pthFile) {
+                $pthSize = (Get-Item $pthFile).Length
+                Write-Host "[DEBUG] Found: $pthFile ($pthSize bytes)" -ForegroundColor Gray
+            } else {
+                Write-Host "[DEBUG] Missing: $pthFile" -ForegroundColor Yellow
+            }
+        }
+        
         $wheelFiles = Get-ChildItem "$OutputPath\dependencies\*.whl" -ErrorAction SilentlyContinue
         if ($wheelFiles) {
             $successCount = 0
@@ -884,6 +1050,17 @@ if (-not $dependencyInstallSuccess -and (Test-Path "$OutputPath\dependencies\req
                 & "$OutputPath\python\python.exe" -m pip install --no-index --target $targetDir --force-reinstall $wheel.FullName
                 if ($LASTEXITCODE -eq 0) {
                     $successCount++
+                }
+            }
+            
+            # DEBUG: Check _pth files after individual wheel installation
+            Write-Host "[DEBUG] Checking _pth files after individual wheel installation..." -ForegroundColor Gray
+            foreach ($pthFile in $pthCheckBeforeDeps) {
+                if (Test-Path $pthFile) {
+                    $pthSize = (Get-Item $pthFile).Length
+                    Write-Host "[DEBUG] Still exists: $pthFile ($pthSize bytes)" -ForegroundColor Gray
+                } else {
+                    Write-Host "[WARN] Deleted by individual wheel installation: $pthFile" -ForegroundColor Yellow
                 }
             }
             
