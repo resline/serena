@@ -272,7 +272,8 @@ if (-not $pythonInstallSuccess) {
     }
     
     # Remove any conflicting ._pth files and create fresh ones
-    $existingPth = Get-ChildItem -Path "$OutputPath\python" -Filter "*.?_pth" -ErrorAction SilentlyContinue
+    # FIX: Correct the filter to match all *._pth files (previous pattern missed python311._pth)
+    $existingPth = Get-ChildItem -Path "$OutputPath\python" -Filter "*._pth" -ErrorAction SilentlyContinue
     if ($existingPth) {
         foreach ($f in $existingPth) {
             try {
@@ -297,9 +298,21 @@ if (-not $pythonInstallSuccess) {
     # Write file with explicit UTF8 encoding without BOM
     $pthContent = $pthLines -join "`r`n"
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-    [System.IO.File]::WriteAllText("$OutputPath\python\python311._pth", $pthContent, $utf8NoBom)
+    # Ensure targets are writable (some corp images mark files read-only after extraction)
+    $pthTargets = @(
+        "$OutputPath\python\python311._pth",
+        "$OutputPath\python\python._pth"
+    )
+    foreach ($pth in $pthTargets) {
+        if (Test-Path $pth) {
+            try {
+                (Get-Item $pth).IsReadOnly = $false
+            } catch { }
+        }
+    }
+    [System.IO.File]::WriteAllText($pthTargets[0], $pthContent, $utf8NoBom)
     # Also write python._pth for broader compatibility on some Win10 builds
-    [System.IO.File]::WriteAllText("$OutputPath\python\python._pth", $pthContent, $utf8NoBom)
+    [System.IO.File]::WriteAllText($pthTargets[1], $pthContent, $utf8NoBom)
     Write-Host "[OK] Created python311._pth and python._pth without BOM" -ForegroundColor Green
     Write-Host "[OK] Configured Python path" -ForegroundColor Green
 
@@ -326,7 +339,27 @@ print('NEEDED_MISSING:', ';'.join(missing))
         if ($missingLine -and $missingLine.Trim().EndsWith(':')) {
             Write-Host "[OK] _pth active: Lib paths present in sys.path" -ForegroundColor Green
         } elseif ($missingLine) {
-            Write-Host "[WARN] _pth seems inactive (Lib paths missing). Will apply compatibility fallback." -ForegroundColor Yellow
+            Write-Host "[WARN] _pth seems inactive (Lib paths missing). Attempting repair..." -ForegroundColor Yellow
+            # Repair attempt: force-rewrite the _pth files and re-verify
+            try {
+                foreach ($pth in $pthTargets) {
+                    try { if (Test-Path $pth) { (Get-Item $pth).IsReadOnly = $false } } catch { }
+                    [System.IO.File]::WriteAllText($pth, $pthContent, $utf8NoBom)
+                }
+                $reVerify = & "$OutputPath\python\python.exe" -c @"
+import sys, os
+py = sys.executable
+needed = [os.path.join(os.path.dirname(py), 'Lib'), os.path.join(os.path.dirname(py), 'Lib', 'site-packages')]
+print('OK' if all(p in sys.path for p in needed) else 'MISS')
+"@ 2>&1
+                if ($LASTEXITCODE -eq 0 -and ($reVerify -join '').Contains('OK')) {
+                    Write-Host "[OK] _pth repaired successfully" -ForegroundColor Green
+                } else {
+                    Write-Host "[WARN] _pth repair did not take effect; sitecustomize fallback will be used" -ForegroundColor Yellow
+                }
+            } catch {
+                Write-Host "[WARN] _pth repair failed: $($_.Exception.Message)" -ForegroundColor Yellow
+            }
         }
     }
 
