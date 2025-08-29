@@ -740,7 +740,7 @@ if os.path.exists(site_packages):
                                 }
                                 [System.IO.File]::WriteAllText($pth, $pthContent, $utf8NoBom)
                             } catch {
-                                Write-Host "[WARN] Could not recreate $pth: $($_.Exception.Message)" -ForegroundColor Yellow
+                                Write-Host "[WARN] Could not recreate ${pth}: $($_.Exception.Message)" -ForegroundColor Yellow
                             }
                         }
                         Write-Host "[OK] Recreated _pth files after pip reinstall" -ForegroundColor Green
