@@ -861,14 +861,14 @@ This is a complete offline installation package for Serena Agent, designed for W
 
 ```
 serena-offline-package/
-├── python/                 # Python {self.python_version} embeddable
-├── wheels/                 # Python packages
-├── serena-source/          # Serena source code
-├── language-servers/       # Language server binaries
-├── templates/              # Configuration templates
-├── scripts/                # Installation scripts
-├── docs/                   # Documentation
-└── README.md              # This file
+|-- python/                 # Python {self.python_version} embeddable
+|-- wheels/                 # Python packages
+|-- serena-source/          # Serena source code
+|-- language-servers/       # Language server binaries
+|-- templates/              # Configuration templates
+|-- scripts/                # Installation scripts
+|-- docs/                   # Documentation
+`-- README.md              # This file
 ```
 
 ## Installation Options
@@ -1458,11 +1458,11 @@ Each language server is configured for offline operation with the following stru
 
 ```
 language-servers/
-├── java/           # Eclipse JDTLS + JRE
-├── csharp/         # .NET runtime + language server  
-├── typescript/     # Node.js + TypeScript tools
-├── al/             # Microsoft AL extension
-└── gradle/         # Gradle build tool (for Java)
+|-- java/           # Eclipse JDTLS + JRE
+|-- csharp/         # .NET runtime + language server  
+|-- typescript/     # Node.js + TypeScript tools
+|-- al/             # Microsoft AL extension
+`-- gradle/         # Gradle build tool (for Java)
 ```
 
 ### Offline Configuration
@@ -1685,7 +1685,7 @@ To add additional language servers:
 
 Common development patterns:
 
-1. **Code → Test → Debug** cycle
+1. **Code -> Test -> Debug** cycle
 2. **Git integration** with Serena tools
 3. **Build automation** using language-specific tools
 4. **Documentation generation** from code
@@ -2281,13 +2281,13 @@ Enterprise Examples:
                 if args.compress:
                     print("Compressed archive created")
                 if enterprise_downloader:
-                    print("🏢 Enterprise networking was used for downloads")
+                    print("[ENTERPRISE] Enterprise networking was used for downloads")
                 sys.exit(0)
             else:
                 print(f"\n[ERROR] FAILED: Check log files for details")
                 print("Build log: offline_package_build.log")
                 if not enterprise_downloader:
-                    print("💡 If you're behind a corporate firewall, try enterprise options:")
+                    print("[INFO] If you're behind a corporate firewall, try enterprise options:")
                     print("   --proxy http://your-proxy:8080")
                     print("   --no-ssl-verify (if SSL issues)")
                     print("   --config offline_config.ini")
@@ -2299,7 +2299,7 @@ Enterprise Examples:
         sys.exit(2)
     except Exception as e:
         logger.error(f"Build failed with exception: {e}")
-        print(f"\n💥 EXCEPTION: {e}")
+        print(f"\n[ERROR] EXCEPTION: {e}")
         print("Check log files for detailed error information")
         sys.exit(3)
 

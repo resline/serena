@@ -877,7 +877,7 @@ For more information, visit: https://github.com/oraios/serena
         
         all_passed = True
         for component, passed, details in verification_results:
-            status = "✓ PASS" if passed else "✗ FAIL"
+            status = "[OK] PASS" if passed else "[FAIL] FAIL"
             logger.info(f"{status:8} {component:25} {details}")
             if not passed:
                 all_passed = False
@@ -885,15 +885,15 @@ For more information, visit: https://github.com/oraios/serena
         logger.info("=" * 50)
         
         if all_passed:
-            logger.info("🎉 Package verification PASSED - Ready for distribution!")
+            logger.info("[SUCCESS] Package verification PASSED - Ready for distribution!")
             
             # Calculate package size
             total_size = sum(f.stat().st_size for f in self.output_dir.rglob('*') if f.is_file())
             size_mb = total_size / (1024 * 1024)
-            logger.info(f"📦 Package size: {size_mb:.1f} MB")
+            logger.info(f"[PACKAGE] Package size: {size_mb:.1f} MB")
             
         else:
-            logger.error("❌ Package verification FAILED - Please fix issues before distribution")
+            logger.error("[FAIL] Package verification FAILED - Please fix issues before distribution")
         
         return all_passed
     
@@ -927,15 +927,15 @@ For more information, visit: https://github.com/oraios/serena
             verification_passed = self.verify_package()
             
             if verification_passed:
-                logger.info("🎉 Offline package build completed successfully!")
-                logger.info(f"📁 Package location: {self.output_dir}")
-                logger.info("📋 Next steps:")
+                logger.info("[SUCCESS] Offline package build completed successfully!")
+                logger.info(f"[LOCATION] Package location: {self.output_dir}")
+                logger.info("[NEXT] Next steps:")
                 logger.info("   1. Test installation on a clean Windows machine")
                 logger.info("   2. Create ZIP archive for distribution")
                 logger.info("   3. Update documentation with installation instructions")
                 return True
             else:
-                logger.error("❌ Package build completed with errors - please review verification results")
+                logger.error("[FAIL] Package build completed with errors - please review verification results")
                 return False
                 
         except Exception as e:
@@ -1033,14 +1033,14 @@ For detailed enterprise configuration, see offline_config.ini.template
         success = builder.build_package()
         
         if success:
-            print(f"\n✅ Success! Package created at: {Path(args.output_dir).resolve()}")
+            print(f"\n[SUCCESS] Success! Package created at: {Path(args.output_dir).resolve()}")
             if enterprise_downloader:
-                print("🏢 Enterprise networking was used for downloads")
+                print("[ENTERPRISE] Enterprise networking was used for downloads")
             sys.exit(0)
         else:
-            print(f"\n❌ Failed! Check the log file for details.")
+            print(f"\n[FAIL] Failed! Check the log file for details.")
             if not enterprise_downloader:
-                print("💡 If you're behind a corporate firewall, try enterprise options:")
+                print("[INFO] If you're behind a corporate firewall, try enterprise options:")
                 print("   --proxy http://your-proxy:8080")
                 print("   --no-ssl-verify (if SSL issues)")
                 print("   --config offline_config.ini")
