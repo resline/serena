@@ -1,0 +1,106 @@
+# Enterprise Configuration Template for Serena Agent Offline Downloads
+# Copy this file to 'offline_config.ini' and customize as needed for your environment
+#
+# This configuration file supports enterprise environments with proxy servers,
+# custom SSL certificates, and other networking restrictions.
+
+[proxy]
+# HTTP proxy server (e.g., http://proxy.company.com:8080)
+# Leave empty if no proxy is required
+http_proxy = 
+
+# HTTPS proxy server (can be same as http_proxy)
+# Leave empty if no proxy is required
+https_proxy = 
+
+# Comma-separated list of hosts to bypass proxy
+# Common values: localhost,127.0.0.1,.company.com,*.internal
+no_proxy = localhost,127.0.0.1
+
+# Proxy authentication in format username:password
+# Leave empty if proxy doesn't require authentication
+# WARNING: This will be stored in plain text
+proxy_auth = 
+
+[ssl]
+# Enable SSL certificate verification (true/false)
+# Set to false only if you have certificate issues and understand the risks
+verify = true
+
+# Path to custom CA bundle file (PEM format)
+# Use this if your company uses custom SSL certificates
+# Examples:
+#   Windows: C:\certs\company-ca-bundle.pem
+#   Linux:   /etc/ssl/certs/company-ca-bundle.pem
+ca_bundle = 
+
+# Additional trusted hosts (comma-separated)
+# These hosts will be trusted even if SSL verification would normally fail
+# Only used when verify=false
+trusted_hosts = pypi.org,files.pythonhosted.org,marketplace.visualstudio.com,github.com,nodejs.org,services.gradle.org
+
+[download]
+# Number of retry attempts for failed downloads
+retry_attempts = 3
+
+# Download timeout in seconds
+timeout = 300
+
+# User agent string for HTTP requests
+# Some corporate firewalls may require specific user agent strings
+user_agent = Mozilla/5.0 (Windows NT 10.0; Win64; x64)
+
+[output]
+# Use ASCII-only output for compatibility with older terminals
+# Set to true if you see encoding issues in output
+ascii_only = false
+
+# Example configurations for common enterprise scenarios:
+
+# SCENARIO 1: Corporate proxy with authentication
+# [proxy]
+# http_proxy = http://proxy.company.com:8080
+# https_proxy = http://proxy.company.com:8080  
+# proxy_auth = myusername:mypassword
+# no_proxy = localhost,127.0.0.1,.company.com
+
+# SCENARIO 2: Custom CA certificates
+# [ssl]
+# verify = true
+# ca_bundle = C:\certs\company-ca-bundle.pem
+
+# SCENARIO 3: Disable SSL verification (NOT RECOMMENDED)
+# [ssl]
+# verify = false
+# trusted_hosts = pypi.org,files.pythonhosted.org,marketplace.visualstudio.com,github.com,nodejs.org
+
+# SCENARIO 4: Corporate firewall with custom user agent
+# [download]
+# user_agent = CompanyName-DownloadTool/1.0
+# timeout = 600
+# retry_attempts = 5
+
+# SCENARIO 5: Combination of proxy and custom certificates  
+# [proxy]
+# http_proxy = http://proxy.company.com:8080
+# https_proxy = http://proxy.company.com:8080
+# no_proxy = localhost,127.0.0.1,.company.com
+# [ssl]
+# verify = true
+# ca_bundle = /etc/ssl/certs/company-ca-bundle.pem
+
+# Environment Variable Alternatives:
+# Instead of using this config file, you can set these environment variables:
+#
+# Proxy settings:
+#   HTTP_PROXY=http://proxy.company.com:8080
+#   HTTPS_PROXY=http://proxy.company.com:8080
+#   NO_PROXY=localhost,127.0.0.1,.company.com
+#
+# SSL settings:
+#   REQUESTS_CA_BUNDLE=/path/to/ca-bundle.pem
+#   SSL_CERT_FILE=/path/to/ca-bundle.pem
+#   CURL_CA_BUNDLE=/path/to/ca-bundle.pem
+#   PYTHONHTTPSVERIFY=0  # Disables SSL verification (not recommended)
+#
+# The environment variables will override settings in this config file.

@@ -11,7 +11,7 @@ Usage:
 Options:
     --verify-only       Only verify existing package, don't download
     --output-dir        Output directory (default: serena-offline-windows)
-    --python-version    Python version (default: 3.11.10)
+    --python-version    Python version (default: 3.11.9)
 
 Author: Serena Agent Team
 License: MIT
@@ -31,6 +31,15 @@ from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
 from urllib.request import urlretrieve
 
+# Import enterprise download module
+try:
+    from enterprise_download_simple import SimpleEnterpriseDownloader as EnterpriseDownloader, add_enterprise_args, create_enterprise_downloader_from_args
+except ImportError:
+    # Fallback if enterprise_download is not available
+    EnterpriseDownloader = None
+    add_enterprise_args = lambda parser: None
+    create_enterprise_downloader_from_args = lambda args: None
+
 # Conditional imports - some may not be available in all environments
 try:
     import requests
@@ -43,7 +52,7 @@ except ImportError:
     toml = None
 
 # Constants
-DEFAULT_PYTHON_VERSION = "3.11.10"
+DEFAULT_PYTHON_VERSION = "3.11.9"
 DEFAULT_OUTPUT_DIR = "serena-offline-windows"
 PYTHON_EMBEDDABLE_URL_TEMPLATE = "https://www.python.org/ftp/python/{version}/python-{version}-embed-amd64.zip"
 GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
@@ -85,17 +94,20 @@ class OfflinePackageBuilder:
     def __init__(self, 
                  output_dir: str = DEFAULT_OUTPUT_DIR,
                  python_version: str = DEFAULT_PYTHON_VERSION,
-                 verify_only: bool = False):
+                 verify_only: bool = False,
+                 enterprise_downloader: Optional[EnterpriseDownloader] = None):
         """Initialize the package builder.
         
         Args:
             output_dir: Directory to create the package in
-            python_version: Python version to use (e.g., "3.11.10")
+            python_version: Python version to use (e.g., "3.11.9")
             verify_only: If True, only verify existing package
+            enterprise_downloader: Optional enterprise downloader for networking features
         """
         self.output_dir = Path(output_dir).resolve()
         self.python_version = python_version
         self.verify_only = verify_only
+        self.enterprise_downloader = enterprise_downloader
         self.repo_root = Path(__file__).parent.parent.resolve()
         
         # Package structure paths
@@ -112,6 +124,7 @@ class OfflinePackageBuilder:
         logger.info(f"  Output directory: {self.output_dir}")
         logger.info(f"  Python version: {self.python_version}")
         logger.info(f"  Verify only: {self.verify_only}")
+        logger.info(f"  Enterprise networking: {'Enabled' if self.enterprise_downloader else 'Disabled'}")
         logger.info(f"  Repository root: {self.repo_root}")
         logger.info(f"  Temporary directory: {self.temp_dir}")
     
@@ -163,9 +176,19 @@ class OfflinePackageBuilder:
                 return
             
             logger.info(f"Downloading from: {url}")
-            progress = DownloadProgress(f"Python {self.python_version}")
-            urlretrieve(url, zip_path, reporthook=progress)
-            print()  # New line after progress
+            
+            # Use enterprise downloader if available
+            if self.enterprise_downloader:
+                success = self.enterprise_downloader.download_with_progress(
+                    url, zip_path
+                )
+                if not success:
+                    raise RuntimeError(f"Failed to download Python embeddable: {url}")
+            else:
+                # Fallback to standard download
+                progress = DownloadProgress(f"Python {self.python_version}")
+                urlretrieve(url, zip_path, reporthook=progress)
+                print()  # New line after progress
             
             # Extract Python embeddable
             logger.info("Extracting Python embeddable...")
@@ -197,9 +220,18 @@ class OfflinePackageBuilder:
                 logger.info("get-pip.py already exists, skipping download")
                 return
             
-            progress = DownloadProgress("get-pip.py")
-            urlretrieve(GET_PIP_URL, get_pip_path, reporthook=progress)
-            print()  # New line after progress
+            # Use enterprise downloader if available
+            if self.enterprise_downloader:
+                success = self.enterprise_downloader.download_with_progress(
+                    GET_PIP_URL, get_pip_path
+                )
+                if not success:
+                    raise RuntimeError(f"Failed to download get-pip.py: {GET_PIP_URL}")
+            else:
+                # Fallback to standard download
+                progress = DownloadProgress("get-pip.py")
+                urlretrieve(GET_PIP_URL, get_pip_path, reporthook=progress)
+                print()  # New line after progress
             
             logger.info("get-pip.py downloaded successfully")
             
@@ -347,7 +379,8 @@ class OfflinePackageBuilder:
             
             # Download wheels using pip
             logger.info("Running pip download...")
-            result = subprocess.run([
+            
+            pip_cmd = [
                 sys.executable, "-m", "pip", "download",
                 "--requirement", str(requirements_path),
                 "--dest", str(self.wheels_dir),
@@ -356,23 +389,71 @@ class OfflinePackageBuilder:
                 "--python-version", "3.11",
                 "--abi", "cp311",
                 "--implementation", "cp"
-            ], capture_output=True, text=True, cwd=self.temp_dir)
+            ]
+            
+            # Add enterprise networking options
+            pip_env = os.environ.copy()
+            if self.enterprise_downloader:
+                # Get enterprise environment variables
+                enterprise_env = self.enterprise_downloader.get_environment_config()
+                pip_env.update(enterprise_env)
+                
+                # Add enterprise pip arguments
+                enterprise_pip_args = self.enterprise_downloader.get_pip_args()
+                pip_cmd.extend(enterprise_pip_args)
+                
+                logger.info("Using enterprise networking for pip downloads")
+            
+            result = subprocess.run(
+                pip_cmd,
+                capture_output=True, 
+                text=True, 
+                cwd=self.temp_dir,
+                env=pip_env
+            )
             
             if result.returncode != 0:
                 logger.warning("pip download with binary-only failed, trying with source packages...")
+                
                 # Retry without --only-binary constraint
-                result = subprocess.run([
+                pip_cmd_retry = [
                     sys.executable, "-m", "pip", "download",
                     "--requirement", str(requirements_path),
                     "--dest", str(self.wheels_dir),
                     "--platform", "win_amd64",
                     "--python-version", "3.11"
-                ], capture_output=True, text=True, cwd=self.temp_dir)
+                ]
+                
+                # Add enterprise networking options to retry
+                if self.enterprise_downloader:
+                    enterprise_pip_args = self.enterprise_downloader.get_pip_args()
+                    pip_cmd_retry.extend(enterprise_pip_args)
+                
+                result = subprocess.run(
+                    pip_cmd_retry,
+                    capture_output=True,
+                    text=True,
+                    cwd=self.temp_dir,
+                    env=pip_env
+                )
             
             if result.returncode != 0:
                 logger.error("pip download failed:")
                 logger.error(f"STDOUT: {result.stdout}")
                 logger.error(f"STDERR: {result.stderr}")
+                
+                # Provide helpful troubleshooting information
+                if "proxy" in result.stderr.lower():
+                    logger.error("\nProxy-related error detected. Try:")
+                    logger.error("  --proxy http://your-proxy:8080")
+                elif "ssl" in result.stderr.lower() or "certificate" in result.stderr.lower():
+                    logger.error("\nSSL/Certificate error detected. Try:")
+                    logger.error("  --no-ssl-verify (not recommended for production)")
+                    logger.error("  --ca-bundle /path/to/your/ca-bundle.pem")
+                elif "timeout" in result.stderr.lower():
+                    logger.error("\nTimeout error detected. Try:")
+                    logger.error("  --timeout 600 (increase timeout)")
+                
                 raise RuntimeError("Failed to download Python wheels")
             
             # Count downloaded packages
@@ -872,11 +953,29 @@ def main():
         description="Build offline Windows installation package for Serena Agent",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
+Basic Examples:
   python scripts/prepare_offline_windows.py
   python scripts/prepare_offline_windows.py --output-dir my-package
   python scripts/prepare_offline_windows.py --verify-only
   python scripts/prepare_offline_windows.py --python-version 3.11.9
+
+Enterprise Examples:
+  # With corporate proxy
+  python scripts/prepare_offline_windows.py --proxy http://proxy.company.com:8080
+  
+  # Disable SSL verification (not recommended)
+  python scripts/prepare_offline_windows.py --no-ssl-verify
+  
+  # Use custom CA bundle
+  python scripts/prepare_offline_windows.py --ca-bundle /path/to/company-ca.pem
+  
+  # Use configuration file
+  python scripts/prepare_offline_windows.py --config offline_config.ini
+  
+  # Enable enterprise mode with auto-detection
+  python scripts/prepare_offline_windows.py --enterprise
+
+For detailed enterprise configuration, see offline_config.ini.template
         """
     )
     
@@ -905,24 +1004,46 @@ Examples:
         help="Set logging level (default: INFO)"
     )
     
+    # Add enterprise networking arguments if available
+    if add_enterprise_args:
+        add_enterprise_args(parser)
+    
     args = parser.parse_args()
     
     # Set log level
     logging.getLogger().setLevel(getattr(logging, args.log_level))
     
+    # Create enterprise downloader if available
+    enterprise_downloader = None
+    if EnterpriseDownloader:
+        try:
+            enterprise_downloader = create_enterprise_downloader_from_args(args)
+            logger.info("Enterprise networking features enabled")
+        except Exception as e:
+            logger.warning(f"Failed to initialize enterprise downloader: {e}")
+            logger.warning("Falling back to standard networking")
+    
     # Build package
     with OfflinePackageBuilder(
         output_dir=args.output_dir,
         python_version=args.python_version,
-        verify_only=args.verify_only
+        verify_only=args.verify_only,
+        enterprise_downloader=enterprise_downloader
     ) as builder:
         success = builder.build_package()
         
         if success:
             print(f"\n✅ Success! Package created at: {Path(args.output_dir).resolve()}")
+            if enterprise_downloader:
+                print("🏢 Enterprise networking was used for downloads")
             sys.exit(0)
         else:
             print(f"\n❌ Failed! Check the log file for details.")
+            if not enterprise_downloader:
+                print("💡 If you're behind a corporate firewall, try enterprise options:")
+                print("   --proxy http://your-proxy:8080")
+                print("   --no-ssl-verify (if SSL issues)")
+                print("   --config offline_config.ini")
             sys.exit(1)
 
 
