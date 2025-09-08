@@ -137,6 +137,40 @@ class OfflineDepsDownloader:
                 target_path.unlink()
             return False
     
+    def validate_binary_file(self, file_path: Path) -> bool:
+        """Check if downloaded file is actually binary (not HTML error page)."""
+        try:
+            with open(file_path, 'rb') as f:
+                header = f.read(512)
+                
+                # Check for ZIP/VSIX signature (PK)
+                if header.startswith(b'PK'):
+                    return True
+                
+                # Check for HTML content in binary data
+                if b'<!DOCTYPE' in header or b'<html' in header or b'<HTML' in header:
+                    logger.error(f"File {file_path.name} contains HTML content instead of binary data")
+                    return False
+                
+                # Try to decode as UTF-8 and check for HTML/error indicators
+                try:
+                    header_text = header.decode('utf-8').lower()
+                    html_indicators = ['<html', '<!doctype', '<error', '404', '403', '<title>', 'not found', 'access denied']
+                    if any(indicator in header_text for indicator in html_indicators):
+                        logger.error(f"File {file_path.name} appears to be an HTML error page")
+                        # Log first 200 chars for debugging
+                        logger.error(f"Content preview: {header_text[:200]}...")
+                        return False
+                except UnicodeDecodeError:
+                    # If it can't decode as UTF-8, likely binary
+                    pass
+                
+                return True  # Assume binary if not clearly HTML
+                
+        except Exception as e:
+            logger.error(f"Error validating file {file_path}: {e}")
+            return False
+
     def verify_checksum(self, file_path: Path, expected_hash: str, algorithm: str = "sha256") -> bool:
         """Verify file checksum."""
         if not expected_hash:
@@ -158,10 +192,27 @@ class OfflineDepsDownloader:
     def extract_archive(self, archive_path: Path, extract_to: Path, archive_type: str = "zip") -> bool:
         """Extract archive with proper handling."""
         try:
+            # First, validate that the file is actually binary/ZIP and not HTML
+            if not self.validate_binary_file(archive_path):
+                logger.error(f"Cannot extract {archive_path.name}: file is not a valid binary archive")
+                return False
+            
             logger.info(f"Extracting {archive_path.name} to {extract_to}")
             extract_to.mkdir(parents=True, exist_ok=True)
             
             if archive_type == "zip" or archive_path.suffix.lower() in [".zip", ".vsix", ".nupkg"]:
+                # Test if it's a valid ZIP file before extraction
+                try:
+                    with zipfile.ZipFile(archive_path, 'r') as zip_test:
+                        # Test the ZIP file integrity
+                        bad_file = zip_test.testzip()
+                        if bad_file is not None:
+                            logger.error(f"ZIP file {archive_path.name} is corrupted. Bad file: {bad_file}")
+                            return False
+                except zipfile.BadZipFile:
+                    logger.error(f"File {archive_path.name} is not a valid ZIP file")
+                    return False
+                
                 with zipfile.ZipFile(archive_path, 'r') as zip_ref:
                     # Extract with progress
                     members = zip_ref.infolist()
@@ -175,9 +226,52 @@ class OfflineDepsDownloader:
             logger.info(f"Extraction complete: {archive_path.name}")
             return True
             
+        except zipfile.BadZipFile as e:
+            logger.error(f"ZIP extraction failed for {archive_path}: File is not a zip file or is corrupted - {e}")
+            return False
         except Exception as e:
             logger.error(f"Extraction failed for {archive_path}: {e}")
             return False
+    
+    def download_vsix_with_retry(self, name: str, marketplace_url: str, target_path: Path, fallback_urls: List[str] = None) -> bool:
+        """Download VSIX file with retry logic and fallback strategies."""
+        logger.info(f"Downloading {name} VSIX...")
+        
+        # Strategy 1: Marketplace API with proper headers
+        headers_marketplace = {
+            'User-Agent': 'VSCode/1.85.0 (Windows)',
+            'Accept': 'application/octet-stream, application/vsix, application/zip',
+            'Accept-Encoding': 'gzip, deflate',
+            'X-Market-Client-Id': 'VSCode',
+            'X-Market-User-Id': 'anonymous'
+        }
+        
+        strategies = [
+            (f"marketplace API for {name}", marketplace_url, headers_marketplace),
+        ]
+        
+        # Add fallback URLs if provided
+        if fallback_urls:
+            for i, fallback_url in enumerate(fallback_urls):
+                strategies.append((f"fallback {i+1} for {name}", fallback_url, headers_marketplace))
+        
+        for strategy_name, url, headers in strategies:
+            logger.info(f"Attempting {strategy_name}...")
+            
+            if self.download_with_progress(url, target_path, headers):
+                # Validate the downloaded file
+                if self.validate_binary_file(target_path):
+                    logger.info(f"Successfully downloaded {name} using {strategy_name}")
+                    return True
+                else:
+                    logger.warning(f"{strategy_name} downloaded HTML instead of binary - trying next strategy")
+                    if target_path.exists():
+                        target_path.unlink()
+            else:
+                logger.warning(f"{strategy_name} failed - trying next strategy")
+        
+        logger.error(f"All download strategies failed for {name}")
+        return False
     
     def download_gradle(self) -> bool:
         """Download Gradle 8.14.2."""
@@ -214,6 +308,8 @@ class OfflineDepsDownloader:
         java_dir = self.output_dir / "java"
         java_dir.mkdir(exist_ok=True)
         
+        success = True
+        
         # VS Code Java Extension  
         platform_map = self.platform_mappings.get(self.platform, "win32-x64")
         java_url = f"https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-{platform_map}-1.42.0-561.vsix"
@@ -221,45 +317,56 @@ class OfflineDepsDownloader:
         
         logger.info("Downloading VS Code Java Extension...")
         if not self.download_with_progress(java_url, java_archive):
-            return False
-            
-        # Extract Java extension
-        java_extract_dir = java_dir / "vscode-java"
-        if not self.extract_archive(java_archive, java_extract_dir):
-            logger.error("Failed to extract VS Code Java extension")
-            return False
+            logger.error("Failed to download VS Code Java Extension")
+            success = False
+        else:
+            # Extract Java extension
+            java_extract_dir = java_dir / "vscode-java"
+            if not self.extract_archive(java_archive, java_extract_dir):
+                logger.error("Failed to extract VS Code Java extension")
+                success = False
         
-        # IntelliCode Extension
+        # IntelliCode Extension with retry logic
         intellicode_url = "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/VisualStudioExptTeam/vsextensions/vscodeintellicode/1.2.30/vspackage"
         intellicode_archive = java_dir / "vscodeintellicode-1.2.30.vsix"
         
-        logger.info("Downloading IntelliCode Extension...")
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        }
-        if not self.download_with_progress(intellicode_url, intellicode_archive, headers):
-            return False
+        # Try alternative GitHub releases URL as fallback
+        intellicode_fallbacks = [
+            "https://github.com/MicrosoftDocs/intellicode/releases/download/v1.2.30/vscodeintellicode-1.2.30.vsix"
+        ]
         
-        # Extract IntelliCode
-        intellicode_extract_dir = java_dir / "intellicode" 
-        if not self.extract_archive(intellicode_archive, intellicode_extract_dir):
-            logger.error("Failed to extract IntelliCode extension")
-            return False
+        if self.download_vsix_with_retry("IntelliCode", intellicode_url, intellicode_archive, intellicode_fallbacks):
+            # Extract IntelliCode
+            intellicode_extract_dir = java_dir / "intellicode" 
+            if not self.extract_archive(intellicode_archive, intellicode_extract_dir):
+                logger.error("Failed to extract IntelliCode extension")
+                # Don't fail completely, just warn since IntelliCode is not critical
+                logger.warning("Continuing without IntelliCode extension")
+        else:
+            logger.warning("Failed to download IntelliCode extension - continuing without it")
+            # Don't fail completely since IntelliCode is not critical for basic Java LS functionality
         
-        self.manifest["downloads"]["java"] = {
-            "vscode_java": {
+        # Update manifest only with successfully downloaded components
+        manifest_data = {}
+        
+        if java_archive.exists():
+            manifest_data["vscode_java"] = {
                 "url": java_url,
                 "archive": str(java_archive),
-                "extracted": str(java_extract_dir)
-            },
-            "intellicode": {
-                "url": intellicode_url,
-                "archive": str(intellicode_archive), 
-                "extracted": str(intellicode_extract_dir)
+                "extracted": str(java_dir / "vscode-java") if (java_dir / "vscode-java").exists() else None
             }
-        }
         
-        return True
+        if intellicode_archive.exists():
+            manifest_data["intellicode"] = {
+                "url": intellicode_url,
+                "archive": str(intellicode_archive),
+                "extracted": str(java_dir / "intellicode") if (java_dir / "intellicode").exists() else None
+            }
+        
+        self.manifest["downloads"]["java"] = manifest_data
+        
+        # Return success if at least the main Java extension was downloaded
+        return success and java_archive.exists()
     
     def download_csharp_language_server(self) -> bool:
         """Download C# Language Server components."""
@@ -350,26 +457,25 @@ class OfflineDepsDownloader:
         al_url = "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/ms-dynamics-smb/vsextensions/al/latest/vspackage"
         al_archive = al_dir / "al-latest.vsix"
         
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "application/octet-stream, application/vsix, */*"
-        }
-        
-        if not self.download_with_progress(al_url, al_archive, headers):
+        # Try to download with retry logic (no known fallbacks for AL currently)
+        if self.download_vsix_with_retry("AL Language Server", al_url, al_archive):
+            # Extract AL extension
+            al_extract_dir = al_dir / "extension"
+            if not self.extract_archive(al_archive, al_extract_dir):
+                logger.error("Failed to extract AL extension")
+                return False
+                
+            self.manifest["downloads"]["al"] = {
+                "url": al_url,
+                "archive": str(al_archive),
+                "extracted": str(al_extract_dir)
+            }
+            
+            return True
+        else:
+            logger.error("Failed to download AL Language Server - this may impact AL language support")
+            logger.warning("AL Language Server is not available from marketplace. Consider manual installation.")
             return False
-        
-        # Extract AL extension
-        al_extract_dir = al_dir / "extension"
-        if not self.extract_archive(al_archive, al_extract_dir):
-            return False
-        
-        self.manifest["downloads"]["al"] = {
-            "url": al_url,
-            "archive": str(al_archive),
-            "extracted": str(al_extract_dir)
-        }
-        
-        return True
     
     def download_typescript_deps(self) -> bool:
         """Download TypeScript Language Server dependencies."""
@@ -393,33 +499,96 @@ class OfflineDepsDownloader:
         with open(package_json_path, 'w') as f:
             json.dump(package_json, f, indent=2)
         
-        # Check if npm is available
-        if not shutil.which("npm"):
-            logger.error("npm is not available. Please install Node.js and npm first.")
+        # First ensure Node.js is downloaded
+        node_version = "20.18.2"
+        if self.platform == "win-x64":
+            nodejs_dir = self.output_dir / "nodejs" / "extracted" / f"node-v{node_version}-win-x64"
+        elif self.platform == "win-arm64":
+            nodejs_dir = self.output_dir / "nodejs" / "extracted" / f"node-v{node_version}-win-arm64"
+        else:
+            logger.error(f"Unsupported platform for Node.js: {self.platform}")
             return False
+        
+        # Find npm in the downloaded Node.js
+        if sys.platform == "win32":
+            npm_cmd = nodejs_dir / "npm.cmd"
+            node_cmd = nodejs_dir / "node.exe"
+        else:
+            npm_cmd = nodejs_dir / "bin" / "npm"
+            node_cmd = nodejs_dir / "bin" / "node"
+        
+        # Check if npm exists from our download, if not download Node.js first
+        if not npm_cmd.exists():
+            logger.info("npm not found in downloaded Node.js, downloading Node.js first...")
+            if not self.download_node_runtime():
+                logger.error("Failed to download Node.js runtime")
+                # Fallback to system npm if available
+                npm_command = shutil.which("npm")
+                if not npm_command:
+                    logger.error("npm not found - cannot install TypeScript dependencies")
+                    logger.info("Please ensure Node.js is installed or manually download TypeScript dependencies")
+                    # Don't fail completely - TypeScript deps are non-critical
+                    logger.warning("Skipping TypeScript dependencies (non-critical for basic functionality)")
+                    return True
+                else:
+                    logger.info("Using system npm as fallback")
+            else:
+                # Verify npm exists after download
+                if not npm_cmd.exists():
+                    logger.error("npm still not found after Node.js download")
+                    return False
+                npm_command = str(npm_cmd)
+        else:
+            npm_command = str(npm_cmd)
+            logger.info(f"Using npm from downloaded Node.js: {npm_command}")
+        
+        # Set up environment for npm to use the downloaded Node.js
+        env = os.environ.copy()
+        if npm_command == str(npm_cmd):  # Using downloaded npm
+            # Add Node.js bin directory to PATH
+            if sys.platform == "win32":
+                node_bin_dir = str(nodejs_dir)
+            else:
+                node_bin_dir = str(nodejs_dir / "bin")
+            env["PATH"] = f"{node_bin_dir}{os.pathsep}{env.get('PATH', '')}"
+            env["NODE_PATH"] = str(nodejs_dir)
         
         # Run npm install to download packages
         logger.info("Running npm install...")
         try:
             result = subprocess.run(
-                ["npm", "install", "--production"],
+                [npm_command, "install", "--production", "--no-audit", "--no-fund"],
                 cwd=ts_dir,
                 capture_output=True,
                 text=True,
-                check=True
+                check=True,
+                env=env,
+                timeout=300  # 5 minute timeout
             )
             logger.info("npm install completed successfully")
+            if result.stdout:
+                logger.info(f"npm stdout: {result.stdout}")
             
+        except subprocess.TimeoutExpired:
+            logger.error("npm install timed out after 5 minutes")
+            logger.warning("TypeScript dependencies download failed (non-critical)")
+            return True  # Don't fail the entire process
         except subprocess.CalledProcessError as e:
             logger.error(f"npm install failed: {e}")
             logger.error(f"stdout: {e.stdout}")
             logger.error(f"stderr: {e.stderr}")
-            return False
+            logger.warning("TypeScript dependencies download failed (non-critical)")
+            return True  # Don't fail the entire process
+        except Exception as e:
+            logger.error(f"Unexpected error during npm install: {e}")
+            logger.warning("TypeScript dependencies download failed (non-critical)")
+            return True  # Don't fail the entire process
         
         self.manifest["downloads"]["typescript"] = {
             "package_json": str(package_json_path),
             "node_modules": str(ts_dir / "node_modules"),
-            "packages": package_json["dependencies"]
+            "packages": package_json["dependencies"],
+            "npm_used": npm_command
         }
         
         return True
@@ -475,8 +644,8 @@ class OfflineDepsDownloader:
             ("Java Language Server", self.download_java_language_server),
             ("C# Language Server", self.download_csharp_language_server),
             ("AL Language Server", self.download_al_language_server),
-            ("TypeScript Dependencies", self.download_typescript_deps),
             ("Node.js Runtime", self.download_node_runtime),
+            ("TypeScript Dependencies", self.download_typescript_deps),
         ]
         
         failed_downloads = []
