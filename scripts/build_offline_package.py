@@ -42,6 +42,24 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
 
+# Ensure proper encoding for Windows console
+if sys.platform == "win32":
+    import locale
+    # Set console encoding to handle ASCII output properly
+    try:
+        locale.setlocale(locale.LC_ALL, 'C')
+    except locale.Error:
+        pass
+
+# Import enterprise download module
+try:
+    from enterprise_download_simple import SimpleEnterpriseDownloader as EnterpriseDownloader, add_enterprise_args, create_enterprise_downloader_from_args
+except ImportError:
+    # Fallback if enterprise_download is not available
+    EnterpriseDownloader = None
+    add_enterprise_args = lambda parser: None
+    create_enterprise_downloader_from_args = lambda args: None
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -55,7 +73,7 @@ logger = logging.getLogger(__name__)
 
 # Constants
 DEFAULT_OUTPUT_DIR = "serena-offline-package"
-DEFAULT_PYTHON_VERSION = "3.11.10"
+DEFAULT_PYTHON_VERSION = "3.11.9"
 
 # Package variant definitions
 PACKAGE_VARIANTS = {
@@ -163,7 +181,8 @@ class OfflinePackageBuilder:
                  resume: bool = False,
                  compress: bool = False,
                  verify_checksums: bool = True,
-                 parallel_downloads: bool = True):
+                 parallel_downloads: bool = True,
+                 enterprise_downloader: Optional[EnterpriseDownloader] = None):
         """Initialize the package builder.
         
         Args:
@@ -176,6 +195,7 @@ class OfflinePackageBuilder:
             compress: Create compressed archive
             verify_checksums: Verify downloaded file checksums
             parallel_downloads: Enable parallel downloads
+            enterprise_downloader: Optional enterprise downloader for networking features
         """
         self.output_dir = Path(output_dir).resolve()
         self.variant = variant
@@ -185,6 +205,7 @@ class OfflinePackageBuilder:
         self.compress = compress
         self.verify_checksums = verify_checksums
         self.parallel_downloads = parallel_downloads
+        self.enterprise_downloader = enterprise_downloader
         
         # Determine languages to include
         if variant == "custom" and custom_languages:
@@ -227,6 +248,7 @@ class OfflinePackageBuilder:
         logger.info(f"  Estimated size: {self.estimate_size():.0f}MB")
         logger.info(f"  Resume: {resume}")
         logger.info(f"  Compress: {compress}")
+        logger.info(f"  Enterprise networking: {'Enabled' if self.enterprise_downloader else 'Disabled'}")
     
     def __enter__(self):
         """Context manager entry."""
@@ -324,6 +346,28 @@ class OfflinePackageBuilder:
             if self.resume:
                 cmd.append("--verify-only")
             
+            # Add enterprise networking options if available
+            if self.enterprise_downloader:
+                enterprise_config = self.enterprise_downloader.config
+                
+                # Add proxy settings
+                if enterprise_config['proxy'].get('http_proxy'):
+                    cmd.extend(["--proxy", enterprise_config['proxy']['http_proxy']])
+                
+                # Add SSL settings
+                if enterprise_config['ssl']['verify'].lower() == 'false':
+                    cmd.append("--no-ssl-verify")
+                elif enterprise_config['ssl'].get('ca_bundle'):
+                    cmd.extend(["--ca-bundle", enterprise_config['ssl']['ca_bundle']])
+                
+                # Add other settings
+                if hasattr(self.enterprise_downloader, 'retry_attempts'):
+                    cmd.extend(["--retry-attempts", str(self.enterprise_downloader.retry_attempts)])
+                if hasattr(self.enterprise_downloader, 'timeout'):
+                    cmd.extend(["--timeout", str(self.enterprise_downloader.timeout)])
+                
+                logger.info("Passing enterprise networking options to prepare_offline_windows.py")
+            
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -369,6 +413,28 @@ class OfflinePackageBuilder:
             
             if self.resume:
                 cmd.append("--resume")
+            
+            # Add enterprise networking options if available
+            if self.enterprise_downloader:
+                enterprise_config = self.enterprise_downloader.config
+                
+                # Add proxy settings
+                if enterprise_config['proxy'].get('http_proxy'):
+                    cmd.extend(["--proxy", enterprise_config['proxy']['http_proxy']])
+                
+                # Add SSL settings
+                if enterprise_config['ssl']['verify'].lower() == 'false':
+                    cmd.append("--no-ssl-verify")
+                elif enterprise_config['ssl'].get('ca_bundle'):
+                    cmd.extend(["--ca-bundle", enterprise_config['ssl']['ca_bundle']])
+                
+                # Add other settings
+                if hasattr(self.enterprise_downloader, 'retry_attempts'):
+                    cmd.extend(["--retry-attempts", str(self.enterprise_downloader.retry_attempts)])
+                if hasattr(self.enterprise_downloader, 'timeout'):
+                    cmd.extend(["--timeout", str(self.enterprise_downloader.timeout)])
+                
+                logger.info("Passing enterprise networking options to offline_deps_downloader.py")
             
             result = subprocess.run(
                 cmd,
@@ -698,24 +764,24 @@ def main():
     for check_name, check_func in checks:
         try:
             success, message = check_func()
-            status = "✓ PASS" if success else "✗ FAIL"
+            status = "[OK] PASS" if success else "[FAIL] FAIL"
             print(f"{{status:8}} {{check_name:20}} {{message}}")
             
             if not success:
                 all_passed = False
                 
         except Exception as e:
-            print(f"{'✗ ERROR':8} {{check_name:20}} Exception: {{e}}")
+            print(f"{'[ERROR]':8} {{check_name:20}} Exception: {{e}}")
             all_passed = False
     
     print("=" * 50)
     
     if all_passed:
-        print("✅ All verification checks passed!")
+        print("[SUCCESS] All verification checks passed!")
         print("The Serena offline installation is ready to use.")
         return 0
     else:
-        print("❌ Some verification checks failed.")
+        print("[ERROR] Some verification checks failed.")
         print("Please review the issues above and reinstall if necessary.")
         return 1
 
@@ -824,7 +890,7 @@ scripts\\install.ps1
 
 ## Supported Languages
 
-{"".join(f"- **{lang.title()}**: Language server and runtime support\\n" for lang in sorted(self.languages))}
+{"".join(f"- **{lang.title()}**: Language server and runtime support\n" for lang in sorted(self.languages))}
 
 ## Usage Examples
 
@@ -935,10 +1001,10 @@ python scripts\\verify_installation.py
 
 Expected output:
 ```
-✓ PASS    Python Installation    Python version: {self.python_version}
-✓ PASS    Serena Installation    Serena version check passed
-✓ PASS    Language Servers       All language servers present
-✓ PASS    Offline Configuration  Offline configuration is valid
+[OK] PASS    Python Installation    Python version: {self.python_version}
+[OK] PASS    Serena Installation    Serena version check passed
+[OK] PASS    Language Servers       All language servers present
+[OK] PASS    Offline Configuration  Offline configuration is valid
 ```
 
 ### 2. Test Basic Functionality
@@ -1383,7 +1449,7 @@ This document describes the language servers and development tools included in t
 
 {lang_details.get(lang, "Language server support")}
 
-**Status:** {'✅ Included' if lang in self.languages else '❌ Not included'}
+**Status:** {'[OK] Included' if lang in self.languages else '[NOT] Not included'}
 """ for lang in sorted(lang_details.keys()))}
 
 ## Language Server Configuration
@@ -1665,7 +1731,7 @@ For language-specific issues, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
             
             all_passed = True
             for component, passed, details in verification_results:
-                status = "✓ PASS" if passed else "✗ FAIL"
+                status = "[OK] PASS" if passed else "[FAIL] FAIL"
                 logger.info(f"{status:8} {component:25} {details}")
                 if not passed:
                     all_passed = False
@@ -1673,7 +1739,7 @@ For language-specific issues, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
             logger.info("=" * 60)
             
             if all_passed:
-                logger.info("🎉 Package verification PASSED - Ready for distribution!")
+                logger.info("[SUCCESS] Package verification PASSED - Ready for distribution!")
                 
                 # Calculate final package size
                 total_size = sum(f.stat().st_size for f in self.output_dir.rglob('*') if f.is_file())
@@ -1681,9 +1747,9 @@ For language-specific issues, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
                 size_gb = size_mb / 1024
                 
                 if size_gb >= 1.0:
-                    logger.info(f"📦 Package size: {size_gb:.2f} GB")
+                    logger.info(f"[SIZE] Package size: {size_gb:.2f} GB")
                 else:
-                    logger.info(f"📦 Package size: {size_mb:.1f} MB")
+                    logger.info(f"[SIZE] Package size: {size_mb:.1f} MB")
                 
                 self.build_manifest["verification"] = {
                     "status": "passed",
@@ -1692,7 +1758,7 @@ For language-specific issues, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
                     "final_size_mb": size_mb
                 }
             else:
-                logger.error("❌ Package verification FAILED - Please fix issues before distribution")
+                logger.error("[ERROR] Package verification FAILED - Please fix issues before distribution")
                 self.build_manifest["verification"] = {
                     "status": "failed", 
                     "checks": len(verification_results),
@@ -2040,36 +2106,36 @@ For language-specific issues, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
             logger.info("="*80)
             
             if verification_passed:
-                logger.info("✅ SUCCESS: Offline package build completed successfully!")
-                logger.info(f"📁 Package location: {self.output_dir}")
+                logger.info("[SUCCESS] SUCCESS: Offline package build completed successfully!")
+                logger.info(f"[LOCATION] Package location: {self.output_dir}")
                 
                 # Size information
                 total_size = sum(f.stat().st_size for f in self.output_dir.rglob('*') if f.is_file())
                 size_mb = total_size / (1024 * 1024)
                 if size_mb >= 1024:
-                    logger.info(f"📦 Package size: {size_mb/1024:.2f} GB")
+                    logger.info(f"[SIZE] Package size: {size_mb/1024:.2f} GB")
                 else:
-                    logger.info(f"📦 Package size: {size_mb:.1f} MB")
+                    logger.info(f"[SIZE] Package size: {size_mb:.1f} MB")
                 
-                logger.info(f"⏱️  Total build time: {summary['total_duration']:.1f} seconds")
-                logger.info(f"🔧 Build variant: {self.variant} ({self.config['description']})")
-                logger.info(f"🌐 Target platform: {self.platform}")
-                logger.info(f"🔤 Languages included: {', '.join(sorted(self.languages))}")
+                logger.info(f"[TIME] Total build time: {summary['total_duration']:.1f} seconds")
+                logger.info(f"[CONFIG] Build variant: {self.variant} ({self.config['description']})")
+                logger.info(f"[PLATFORM] Target platform: {self.platform}")
+                logger.info(f"[LANGUAGES] Languages included: {', '.join(sorted(self.languages))}")
                 
                 if self.compress and "archive" in self.build_manifest:
                     archive_info = self.build_manifest["archive"]
-                    logger.info(f"📦 Compressed archive: {Path(archive_info['path']).name}")
-                    logger.info(f"📉 Compression ratio: {archive_info['compression_ratio']:.1f}%")
+                    logger.info(f"[ARCHIVE] Compressed archive: {Path(archive_info['path']).name}")
+                    logger.info(f"[COMPRESS] Compression ratio: {archive_info['compression_ratio']:.1f}%")
                 
                 logger.info("")
-                logger.info("📋 Next steps:")
+                logger.info("[NEXT] Next steps:")
                 logger.info("   1. Test installation on a clean Windows machine")
                 logger.info("   2. Run verification script: python scripts/verify_installation.py")
                 logger.info("   3. Test core functionality with different languages")
                 logger.info("   4. Distribute package to target systems")
                 
             else:
-                logger.error("❌ FAILED: Package build completed with errors")
+                logger.error("[ERROR] FAILED: Package build completed with errors")
                 logger.error("Please review verification results and fix issues before distribution")
                 
             progress.complete_step(True, f"Build completed with {'success' if verification_passed else 'errors'}")
@@ -2096,12 +2162,28 @@ Package Variants:
   full      - All language servers (~2GB)
   custom    - User-selected languages
 
-Examples:
+Basic Examples:
   %(prog)s --full --compress
   %(prog)s --standard --platform win-x64
   %(prog)s --minimal --output-dir serena-minimal
   %(prog)s --custom --languages python,java,csharp --compress
   %(prog)s --resume --output-dir previous-build
+
+Enterprise Examples:
+  # With corporate proxy
+  %(prog)s --standard --proxy http://proxy.company.com:8080
+  
+  # Disable SSL verification
+  %(prog)s --full --no-ssl-verify
+  
+  # Use custom CA bundle
+  %(prog)s --standard --ca-bundle /path/to/company-ca.pem
+  
+  # Use configuration file
+  %(prog)s --full --config offline_config.ini
+  
+  # Enable enterprise mode
+  %(prog)s --standard --enterprise
         """
     )
     
@@ -2142,6 +2224,10 @@ Examples:
     parser.add_argument("--quiet", action="store_true",
                        help="Suppress non-essential output")
     
+    # Add enterprise networking arguments if available
+    if add_enterprise_args:
+        add_enterprise_args(parser)
+    
     args = parser.parse_args()
     
     # Configure logging
@@ -2161,6 +2247,16 @@ Examples:
     else:
         custom_languages = None
     
+    # Create enterprise downloader if available
+    enterprise_downloader = None
+    if EnterpriseDownloader:
+        try:
+            enterprise_downloader = create_enterprise_downloader_from_args(args)
+            logger.info("Enterprise networking features enabled")
+        except Exception as e:
+            logger.warning(f"Failed to initialize enterprise downloader: {e}")
+            logger.warning("Falling back to standard networking")
+    
     # Build package
     try:
         with OfflinePackageBuilder(
@@ -2172,25 +2268,33 @@ Examples:
             resume=args.resume,
             compress=args.compress,
             verify_checksums=not args.no_verify,
-            parallel_downloads=not args.no_parallel
+            parallel_downloads=not args.no_parallel,
+            enterprise_downloader=enterprise_downloader
         ) as builder:
             
             success = builder.build_complete_package()
             
             if success:
-                print(f"\n✅ SUCCESS: Package created at {Path(args.output_dir).resolve()}")
+                print(f"\n[SUCCESS] Package created at {Path(args.output_dir).resolve()}")
                 print(f"Variant: {args.variant}")
                 print(f"Platform: {args.platform}")
                 if args.compress:
                     print("Compressed archive created")
+                if enterprise_downloader:
+                    print("🏢 Enterprise networking was used for downloads")
                 sys.exit(0)
             else:
-                print(f"\n❌ FAILED: Check log files for details")
+                print(f"\n[ERROR] FAILED: Check log files for details")
                 print("Build log: offline_package_build.log")
+                if not enterprise_downloader:
+                    print("💡 If you're behind a corporate firewall, try enterprise options:")
+                    print("   --proxy http://your-proxy:8080")
+                    print("   --no-ssl-verify (if SSL issues)")
+                    print("   --config offline_config.ini")
                 sys.exit(1)
                 
     except KeyboardInterrupt:
-        print(f"\n⚠️  Build interrupted by user")
+        print(f"\n[WARNING] Build interrupted by user")
         print("Use --resume flag to continue from last successful step")
         sys.exit(2)
     except Exception as e:

@@ -50,6 +50,15 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import logging
 
+# Import enterprise download module
+try:
+    from enterprise_download_simple import SimpleEnterpriseDownloader as EnterpriseDownloader, add_enterprise_args, create_enterprise_downloader_from_args
+except ImportError:
+    # Fallback if enterprise_download is not available
+    EnterpriseDownloader = None
+    add_enterprise_args = lambda parser: None
+    create_enterprise_downloader_from_args = lambda args: None
+
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
@@ -60,10 +69,11 @@ logger = logging.getLogger(__name__)
 class OfflineDepsDownloader:
     """Downloads all runtime dependencies for offline Windows usage."""
     
-    def __init__(self, output_dir: str, platform: str = "win-x64", resume: bool = False):
+    def __init__(self, output_dir: str, platform: str = "win-x64", resume: bool = False, enterprise_downloader=None):
         self.output_dir = Path(output_dir)
         self.platform = platform
         self.resume = resume
+        self.enterprise_downloader = enterprise_downloader
         self.manifest = {"platform": platform, "downloads": {}}
         
         # Create output directory
@@ -77,6 +87,12 @@ class OfflineDepsDownloader:
         
     def download_with_progress(self, url: str, target_path: Path, headers: Optional[Dict] = None) -> bool:
         """Download a file with progress tracking and resume support."""
+        # Use enterprise downloader if available
+        if self.enterprise_downloader:
+            logger.info(f"Using enterprise downloader for: {url}")
+            return self.enterprise_downloader.download_with_progress(url, target_path, headers)
+        
+        # Standard download method
         if self.resume and target_path.exists():
             logger.info(f"Resuming download: {target_path.name}")
             resume_pos = target_path.stat().st_size
@@ -179,6 +195,7 @@ class OfflineDepsDownloader:
         # Extract gradle
         extract_dir = gradle_dir / "extracted"
         if not self.extract_archive(archive_path, extract_dir):
+            logger.error("Failed to extract Gradle archive")
             return False
         
         self.manifest["downloads"]["gradle"] = {
@@ -209,6 +226,7 @@ class OfflineDepsDownloader:
         # Extract Java extension
         java_extract_dir = java_dir / "vscode-java"
         if not self.extract_archive(java_archive, java_extract_dir):
+            logger.error("Failed to extract VS Code Java extension")
             return False
         
         # IntelliCode Extension
@@ -225,6 +243,7 @@ class OfflineDepsDownloader:
         # Extract IntelliCode
         intellicode_extract_dir = java_dir / "intellicode" 
         if not self.extract_archive(intellicode_archive, intellicode_extract_dir):
+            logger.error("Failed to extract IntelliCode extension")
             return False
         
         self.manifest["downloads"]["java"] = {
@@ -477,9 +496,9 @@ class OfflineDepsDownloader:
         # Summary
         logger.info(f"\n{'='*60}")
         if success:
-            logger.info("✅ All dependencies downloaded successfully!")
+            logger.info("[SUCCESS] All dependencies downloaded successfully!")
         else:
-            logger.error(f"❌ Failed to download: {', '.join(failed_downloads)}")
+            logger.error(f"[ERROR] Failed to download: {', '.join(failed_downloads)}")
         
         return success
     
@@ -547,12 +566,27 @@ def main():
         help="Create manifest.json with download metadata"
     )
     
+    # Add enterprise networking arguments if available
+    if add_enterprise_args:
+        add_enterprise_args(parser)
+    
     args = parser.parse_args()
+    
+    # Create enterprise downloader if available
+    enterprise_downloader = None
+    if EnterpriseDownloader:
+        try:
+            enterprise_downloader = create_enterprise_downloader_from_args(args)
+            logger.info("Enterprise networking features enabled")
+        except Exception as e:
+            logger.warning(f"Failed to initialize enterprise downloader: {e}")
+            logger.warning("Falling back to standard networking")
     
     downloader = OfflineDepsDownloader(
         output_dir=args.output_dir,
         platform=args.platform,
-        resume=args.resume
+        resume=args.resume,
+        enterprise_downloader=enterprise_downloader
     )
     
     success = downloader.download_all_dependencies()

@@ -22,6 +22,15 @@ from datetime import datetime
 import shutil
 import json
 
+# Ensure proper encoding for Windows console
+if sys.platform == "win32":
+    import locale
+    # Set console encoding to handle ASCII output properly
+    try:
+        locale.setlocale(locale.LC_ALL, 'C')
+    except locale.Error:
+        pass
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -78,7 +87,7 @@ class OfflinePackageBuilder:
             logger.error("Please ensure all scripts have been created first.")
             return False
             
-        logger.info("✓ All required scripts found")
+        logger.info("[OK] All required scripts found")
         return True
         
     def run_command(self, cmd, description):
@@ -95,14 +104,14 @@ class OfflinePackageBuilder:
             )
             if result.stdout:
                 logger.debug(result.stdout)
-            logger.info(f"✓ {description} completed successfully")
+            logger.info(f"[OK] {description} completed successfully")
             return True
         except subprocess.CalledProcessError as e:
-            logger.error(f"✗ {description} failed")
+            logger.error(f"[FAIL] {description} failed")
             logger.error(f"Error: {e.stderr}")
             return False
         except FileNotFoundError:
-            logger.error(f"✗ Command not found: {cmd[0]}")
+            logger.error(f"[NOT_FOUND] Command not found: {cmd[0]}")
             return False
             
     def build_package(self, package_type="full", compress=True):
@@ -161,9 +170,9 @@ class OfflinePackageBuilder:
         logger.info("="*60)
         
         if self.verify_package():
-            logger.info("✓ Package verification successful")
+            logger.info("[OK] Package verification successful")
         else:
-            logger.warning("⚠ Package verification failed - manual review recommended")
+            logger.warning("[WARNING] Package verification failed - manual review recommended")
             
         return True
         
@@ -213,9 +222,9 @@ class OfflinePackageBuilder:
             if src.exists():
                 dst = self.output_dir / script
                 shutil.copy2(src, dst)
-                logger.info(f"✓ Copied {script}")
+                logger.info(f"[OK] Copied {script}")
             else:
-                logger.warning(f"⚠ Script not found: {script}")
+                logger.warning(f"[WARNING] Script not found: {script}")
                 
     def generate_documentation(self):
         """Generate final documentation"""
@@ -224,7 +233,7 @@ class OfflinePackageBuilder:
         if readme_src.exists():
             readme_dst = self.output_dir / "README.md"
             shutil.copy2(readme_src, readme_dst)
-            logger.info("✓ Copied README.md")
+            logger.info("[OK] Copied README.md")
             
         # Create QUICK_START.txt
         quick_start = self.output_dir / "QUICK_START.txt"
@@ -258,7 +267,7 @@ Package Type: Full Offline Package
 Platform: Windows 10/11 (x64/ARM64)
 ==========================================
 """.format(date=datetime.now().strftime("%Y-%m-%d")))
-        logger.info("✓ Created QUICK_START.txt")
+        logger.info("[OK] Created QUICK_START.txt")
         
     def create_manifest(self, package_type):
         """Create package manifest"""
@@ -269,9 +278,9 @@ Platform: Windows 10/11 (x64/ARM64)
             "package_type": package_type,
             "platform": "windows",
             "architecture": ["x64", "arm64"],
-            "python_version": "3.11.10",
+            "python_version": "3.11.9",
             "components": {
-                "python": "3.11.10",
+                "python": "3.11.9",
                 "language_servers": {
                     "java": "Eclipse JDT.LS 1.42.0",
                     "csharp": "Microsoft.CodeAnalysis.LanguageServer 5.0.0",
@@ -293,7 +302,7 @@ Platform: Windows 10/11 (x64/ARM64)
         manifest_path = self.output_dir / "manifest.json"
         with open(manifest_path, 'w') as f:
             json.dump(manifest, f, indent=2)
-        logger.info("✓ Created manifest.json")
+        logger.info("[OK] Created manifest.json")
         
     def calculate_package_size(self):
         """Calculate total package size in MB"""
@@ -316,9 +325,9 @@ Platform: Windows 10/11 (x64/ARM64)
         all_present = True
         for item in required_items:
             if item.exists():
-                logger.info(f"✓ Found: {item.name}")
+                logger.info(f"[OK] Found: {item.name}")
             else:
-                logger.warning(f"✗ Missing: {item.name}")
+                logger.warning(f"[MISSING] Missing: {item.name}")
                 all_present = False
                 
         return all_present
