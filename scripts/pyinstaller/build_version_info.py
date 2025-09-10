@@ -108,7 +108,7 @@ def generate_version_info(pyproject_path: Path, template_path: Path, output_path
     
     Args:
         pyproject_path: Path to pyproject.toml
-        template_path: Path to version_info_template.txt  
+        template_path: Path to version_info_template.txt
         output_path: Path where version_info.txt will be written
         
     Raises:
@@ -150,7 +150,9 @@ def generate_version_info(pyproject_path: Path, template_path: Path, output_path
     output_path.write_text(version_info_content, encoding='utf-8')
     
     print(f"Generated version info at: {output_path}")
-    print(f"Version: {version_string} ({version_components['major']}.{version_components['minor']}.{version_components['patch']}.0)")
+    print(
+        f"Version: {version_string} ({version_components['major']}.{version_components['minor']}.{version_components['patch']}.0)"
+    )
     print(f"Copyright year: {current_year}")
 
 
@@ -183,7 +185,6 @@ def main() -> None:
     try:
         generate_version_info(args.pyproject, args.template, args.output)
         print("\nSuccess! You can now use the generated version_info.txt with PyInstaller.")
-        
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)

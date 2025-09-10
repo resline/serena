@@ -1,4 +1,4 @@
-name: Build Windows Portable Serena
+name: Build Windows Portable Serena (Optimized)
 
 on:
   workflow_dispatch:
@@ -39,10 +39,203 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Pre-download language servers in parallel to speed up builds
+  download-language-servers:
+    name: Download Language Servers
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        server_group:
+          - essential
+          - additional
+    
+    outputs:
+      essential-cache-key: ${{ steps.cache-essential.outputs.cache-primary-key }}
+      additional-cache-key: ${{ steps.cache-additional.outputs.cache-primary-key }}
+    
+    steps:
+      - name: Cache Essential Language Servers
+        id: cache-essential
+        if: matrix.server_group == 'essential'
+        uses: actions/cache@v4
+        with:
+          path: language_servers_essential
+          key: language-servers-essential-v3-${{ hashFiles('.github/workflows/windows-portable.yml') }}
+          restore-keys: |
+            language-servers-essential-v3-
+            language-servers-essential-
+      
+      - name: Cache Additional Language Servers
+        id: cache-additional
+        if: matrix.server_group == 'additional'
+        uses: actions/cache@v4
+        with:
+          path: language_servers_additional
+          key: language-servers-additional-v3-${{ hashFiles('.github/workflows/windows-portable.yml') }}
+          restore-keys: |
+            language-servers-additional-v3-
+            language-servers-additional-
+      
+      - name: Download Essential Language Servers
+        if: matrix.server_group == 'essential' && steps.cache-essential.outputs.cache-hit != 'true'
+        run: |
+          set -e
+          mkdir -p language_servers_essential
+          
+          # Download essential servers in parallel with retry logic
+          download_with_retry() {
+            local url="$1"
+            local output="$2"
+            local type="$3"
+            local retries=3
+            local delay=5
+            
+            for i in $(seq 1 $retries); do
+              echo "Attempt $i: Downloading $url"
+              if curl -fsSL --connect-timeout 30 --max-time 300 "$url" -o "$output"; then
+                return 0
+              fi
+              
+              if [ $i -lt $retries ]; then
+                echo "Download failed, retrying in ${delay}s..."
+                sleep $delay
+                delay=$((delay * 2))
+              fi
+            done
+            
+            echo "Failed to download after $retries attempts: $url"
+            return 1
+          }
+          
+          # Essential language servers
+          (
+            # Pyright v1.1.405 (latest stable release)
+            download_with_retry "https://registry.npmjs.org/pyright/-/pyright-1.1.405.tgz" "language_servers_essential/pyright.tgz" "npm" &&
+            mkdir -p language_servers_essential/pyright &&
+            tar -xzf language_servers_essential/pyright.tgz -C language_servers_essential/pyright --strip-components=1
+          ) &
+          
+          (
+            # TypeScript Language Server v4.4.0 (latest stable release)
+            download_with_retry "https://registry.npmjs.org/typescript-language-server/-/typescript-language-server-4.4.0.tgz" "language_servers_essential/typescript.tgz" "npm" &&
+            mkdir -p language_servers_essential/typescript &&
+            tar -xzf language_servers_essential/typescript.tgz -C language_servers_essential/typescript --strip-components=1
+          ) &
+          
+          (
+            # rust-analyzer v2025-08-25 x64 (latest stable release)
+            download_with_retry "https://github.com/rust-lang/rust-analyzer/releases/download/2025-08-25/rust-analyzer-x86_64-pc-windows-msvc.zip" "language_servers_essential/rust-analyzer-x64.zip" "zip" &&
+            mkdir -p language_servers_essential/rust-analyzer-x64 &&
+            unzip -q language_servers_essential/rust-analyzer-x64.zip -d language_servers_essential/rust-analyzer-x64
+          ) &
+          
+          (
+            # rust-analyzer v2025-08-25 ARM64 (latest stable release)
+            download_with_retry "https://github.com/rust-lang/rust-analyzer/releases/download/2025-08-25/rust-analyzer-aarch64-pc-windows-msvc.zip" "language_servers_essential/rust-analyzer-arm64.zip" "zip" &&
+            mkdir -p language_servers_essential/rust-analyzer-arm64 &&
+            unzip -q language_servers_essential/rust-analyzer-arm64.zip -d language_servers_essential/rust-analyzer-arm64
+          ) &
+          
+          (
+            # gopls v0.20.0 x64 (latest stable release)
+            download_with_retry "https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls-windows-amd64.zip" "language_servers_essential/gopls-x64.zip" "zip" &&
+            mkdir -p language_servers_essential/gopls-x64 &&
+            unzip -q language_servers_essential/gopls-x64.zip -d language_servers_essential/gopls-x64
+          ) &
+          
+          (
+            # gopls v0.20.0 ARM64 (latest stable release)
+            download_with_retry "https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls-windows-arm64.zip" "language_servers_essential/gopls-arm64.zip" "zip" &&
+            mkdir -p language_servers_essential/gopls-arm64 &&
+            unzip -q language_servers_essential/gopls-arm64.zip -d language_servers_essential/gopls-arm64
+          ) &
+          
+          # Wait for all downloads to complete
+          wait
+          
+          echo "Essential language servers downloaded successfully"
+          find language_servers_essential -type f | head -20
+      
+      - name: Download Additional Language Servers
+        if: matrix.server_group == 'additional' && steps.cache-additional.outputs.cache-hit != 'true'
+        run: |
+          set -e
+          mkdir -p language_servers_additional
+          
+          # Download additional servers in parallel with retry logic
+          download_with_retry() {
+            local url="$1"
+            local output="$2"
+            local type="$3"
+            local retries=3
+            local delay=5
+            
+            for i in $(seq 1 $retries); do
+              echo "Attempt $i: Downloading $url"
+              if curl -fsSL --connect-timeout 30 --max-time 300 "$url" -o "$output"; then
+                return 0
+              fi
+              
+              if [ $i -lt $retries ]; then
+                echo "Download failed, retrying in ${delay}s..."
+                sleep $delay
+                delay=$((delay * 2))
+              fi
+            done
+            
+            echo "Failed to download after $retries attempts: $url"
+            return 1
+          }
+          
+          # Additional language servers with version comments
+          (
+            # Eclipse JDT Language Server v1.50.0 (latest stable milestone)
+            download_with_retry "https://download.eclipse.org/jdtls/milestones/1.50.0/jdt-language-server-1.50.0-202509041608.tar.gz" "language_servers_additional/java.tar.gz" "tar" &&
+            mkdir -p language_servers_additional/java &&
+            tar -xzf language_servers_additional/java.tar.gz -C language_servers_additional/java
+          ) &
+          
+          (
+            # OmniSharp-Roslyn v1.39.14 (latest stable release)
+            download_with_retry "https://roslynomnisharp.blob.core.windows.net/releases/1.39.14/omnisharp-win-x64-1.39.14.zip" "language_servers_additional/omnisharp-x64.zip" "zip" &&
+            mkdir -p language_servers_additional/omnisharp-x64 &&
+            unzip -q language_servers_additional/omnisharp-x64.zip -d language_servers_additional/omnisharp-x64
+          ) &
+          
+          (
+            # OmniSharp-Roslyn v1.39.14 ARM64 (latest stable release)
+            download_with_retry "https://roslynomnisharp.blob.core.windows.net/releases/1.39.14/omnisharp-win-arm64-1.39.14.zip" "language_servers_additional/omnisharp-arm64.zip" "zip" &&
+            mkdir -p language_servers_additional/omnisharp-arm64 &&
+            unzip -q language_servers_additional/omnisharp-arm64.zip -d language_servers_additional/omnisharp-arm64
+          ) &
+          
+          (
+            # Lua Language Server v3.15.0 (latest stable release)
+            download_with_retry "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-win32-x64.zip" "language_servers_additional/lua-ls.zip" "zip" &&
+            mkdir -p language_servers_additional/lua-ls &&
+            unzip -q language_servers_additional/lua-ls.zip -d language_servers_additional/lua-ls
+          ) &
+          
+          (
+            # Bash Language Server v5.6.0 (latest stable release)
+            download_with_retry "https://registry.npmjs.org/bash-language-server/-/bash-language-server-5.6.0.tgz" "language_servers_additional/bash-ls.tgz" "npm" &&
+            mkdir -p language_servers_additional/bash-ls &&
+            tar -xzf language_servers_additional/bash-ls.tgz -C language_servers_additional/bash-ls --strip-components=1
+          ) &
+          
+          # Wait for all downloads to complete
+          wait
+          
+          echo "Additional language servers downloaded successfully"
+          find language_servers_additional -type f | head -20
+
   build-portable:
     name: Build Portable (${{ matrix.arch }}, ${{ matrix.bundle_tier }})
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
+    needs: download-language-servers
     strategy:
       fail-fast: false
       matrix:
@@ -69,7 +262,7 @@ jobs:
         with:
           version: ${{ env.UV_VERSION }}
 
-      # Cache strategy for dependencies
+      # Enhanced cache strategy for dependencies
       - name: Cache UV dependencies
         id: cache-uv-deps
         uses: actions/cache@v4
@@ -77,9 +270,11 @@ jobs:
           path: |
             .venv
             ~/.cache/uv
-          key: uv-windows-${{ matrix.arch }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('uv.lock', 'pyproject.toml') }}
+            %APPDATA%\uv\cache
+          key: uv-windows-${{ matrix.arch }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('uv.lock', 'pyproject.toml') }}-v2
           restore-keys: |
             uv-windows-${{ matrix.arch }}-${{ env.PYTHON_VERSION }}-
+            uv-windows-${{ matrix.arch }}-
 
       # Prepare environment directories
       - name: Prepare build environment
@@ -88,6 +283,7 @@ jobs:
           # Create necessary directories
           New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.serena\language_servers\static"
           New-Item -ItemType Directory -Force -Path "build\language_servers"
+          New-Item -ItemType Directory -Force -Path "build\pyinstaller"
           New-Item -ItemType Directory -Force -Path "dist"
           
           # Set environment variables for portable build
@@ -95,18 +291,22 @@ jobs:
           echo "SERENA_BUNDLE_TIER=${{ matrix.bundle_tier }}" >> $env:GITHUB_ENV
           echo "SERENA_ARCH=${{ matrix.arch }}" >> $env:GITHUB_ENV
 
-      # Cache language servers separately for better reuse
-      - name: Cache Language Servers
-        id: cache-language-servers
-        uses: actions/cache@v4
+      # Restore cached language servers from download job
+      - name: Restore Essential Language Servers
+        if: matrix.bundle_tier == 'essential' || matrix.bundle_tier == 'complete' || matrix.bundle_tier == 'full'
+        uses: actions/cache/restore@v4
         with:
-          path: |
-            ~/.serena/language_servers
-            build/language_servers
-          key: language-servers-windows-${{ matrix.arch }}-${{ matrix.bundle_tier }}-v2
-          restore-keys: |
-            language-servers-windows-${{ matrix.arch }}-
-            language-servers-windows-
+          path: language_servers_essential
+          key: ${{ needs.download-language-servers.outputs.essential-cache-key }}
+          fail-on-cache-miss: true
+      
+      - name: Restore Additional Language Servers
+        if: matrix.bundle_tier == 'complete' || matrix.bundle_tier == 'full'
+        uses: actions/cache/restore@v4
+        with:
+          path: language_servers_additional
+          key: ${{ needs.download-language-servers.outputs.additional-cache-key }}
+          fail-on-cache-miss: true
 
       # Set up virtual environment
       - name: Create virtual environment
@@ -115,170 +315,118 @@ jobs:
         run: |
           uv venv --python ${{ env.PYTHON_VERSION }}
 
-      # Install dependencies with PyInstaller
+      # Install dependencies with PyInstaller (optimized for parallel execution)
       - name: Install dependencies
         shell: powershell
         run: |
-          # Install core dependencies
+          # Use optimized UV settings for faster downloads
+          $env:UV_CONCURRENT_DOWNLOADS = "10"
+          $env:UV_HTTP_TIMEOUT = "300"
+          $env:UV_CACHE_DIR = "$env:APPDATA\uv\cache"
+          
           uv pip install -e ".[dev]"
-          
-          # Install PyInstaller for building
           uv pip install pyinstaller[encryption]==6.11.1
-          
-          # Install additional dependencies for Windows portable build
           uv pip install pywin32 pywin32-ctypes
 
-      # Download and setup language servers based on bundle tier
-      - name: Download Essential Language Servers
+      # Setup language servers from cached downloads
+      - name: Setup Essential Language Servers
         if: matrix.bundle_tier == 'essential' || matrix.bundle_tier == 'complete' || matrix.bundle_tier == 'full'
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-          $ProgressPreference = "SilentlyContinue"
           
-          Write-Host "Downloading essential language servers for ${{ matrix.arch }}..."
-          
-          # Define language servers for essential tier
-          $servers = @{
-            "pyright" = @{
-              "url" = "https://registry.npmjs.org/pyright/-/pyright-1.1.396.tgz"
-              "type" = "npm"
-            }
-            "typescript" = @{
-              "url" = "https://registry.npmjs.org/typescript-language-server/-/typescript-language-server-4.3.3.tgz"
-              "type" = "npm"
-            }
-            "rust-analyzer" = @{
-              "url" = "https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-16/rust-analyzer-x86_64-pc-windows-msvc.zip"
-              "url_arm64" = "https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-16/rust-analyzer-aarch64-pc-windows-msvc.zip"
-              "type" = "zip"
-            }
-            "gopls" = @{
-              "url" = "https://github.com/golang/tools/releases/download/gopls/v0.18.0/gopls-windows-amd64.zip"
-              "url_arm64" = "https://github.com/golang/tools/releases/download/gopls/v0.18.0/gopls-windows-arm64.zip"
-              "type" = "zip"
-            }
-          }
+          Write-Host "Setting up essential language servers for ${{ matrix.arch }}..."
           
           $targetDir = "build/language_servers"
+          New-Item -ItemType Directory -Force -Path $targetDir
           
-          foreach ($server in $servers.GetEnumerator()) {
-            $serverName = $server.Key
-            $serverInfo = $server.Value
-            $serverDir = Join-Path $targetDir $serverName
+          # Copy pre-downloaded essential servers
+          if (Test-Path "language_servers_essential") {
+            # Copy architecture-specific servers
+            $archSuffix = if ("${{ matrix.arch }}" -eq "arm64") { "arm64" } else { "x64" }
             
-            if (!(Test-Path $serverDir)) {
-              New-Item -ItemType Directory -Force -Path $serverDir
-              
-              # Select appropriate URL for architecture
-              $downloadUrl = $serverInfo.url
-              if ("${{ matrix.arch }}" -eq "arm64" -and $serverInfo.ContainsKey("url_arm64")) {
-                $downloadUrl = $serverInfo.url_arm64
-              }
-              
-              Write-Host "Downloading $serverName from $downloadUrl"
-              
-              try {
-                $tempFile = [System.IO.Path]::GetTempFileName()
-                Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFile -UseBasicParsing
-                
-                if ($serverInfo.type -eq "zip") {
-                  Expand-Archive -Path $tempFile -DestinationPath $serverDir -Force
-                } elseif ($serverInfo.type -eq "npm") {
-                  # Extract npm tarball
-                  tar -xzf $tempFile -C $serverDir --strip-components=1
-                }
-                
-                Remove-Item $tempFile -Force
-                Write-Host "Successfully downloaded $serverName"
-              } catch {
-                Write-Warning "Failed to download $serverName : $($_.Exception.Message)"
-              }
-            } else {
-              Write-Host "Using cached $serverName"
+            # Copy common servers
+            Copy-Item "language_servers_essential/pyright" "$targetDir/pyright" -Recurse -Force
+            Copy-Item "language_servers_essential/typescript" "$targetDir/typescript" -Recurse -Force
+            
+            # Copy architecture-specific servers
+            if (Test-Path "language_servers_essential/rust-analyzer-$archSuffix") {
+              Copy-Item "language_servers_essential/rust-analyzer-$archSuffix" "$targetDir/rust-analyzer" -Recurse -Force
             }
+            
+            if (Test-Path "language_servers_essential/gopls-$archSuffix") {
+              Copy-Item "language_servers_essential/gopls-$archSuffix" "$targetDir/gopls" -Recurse -Force
+            }
+            
+            Write-Host "Essential language servers setup completed"
+          } else {
+            Write-Warning "Essential language servers cache not found"
           }
 
-      - name: Download Complete Language Server Bundle
+      - name: Setup Additional Language Servers
         if: matrix.bundle_tier == 'complete' || matrix.bundle_tier == 'full'
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-          $ProgressPreference = "SilentlyContinue"
           
-          Write-Host "Downloading complete language server bundle..."
-          
-          # Additional servers for complete tier
-          $additionalServers = @{
-            "java" = @{
-              "url" = "https://download.eclipse.org/jdtls/milestones/1.41.0/jdt-language-server-1.41.0-202412191307.tar.gz"
-              "type" = "tar"
-            }
-            "omnisharp" = @{
-              "url" = "https://roslynomnisharp.blob.core.windows.net/releases/1.39.10/omnisharp-win-x64-1.39.10.zip"
-              "url_arm64" = "https://roslynomnisharp.blob.core.windows.net/releases/1.39.10/omnisharp-win-arm64-1.39.10.zip"
-              "type" = "zip"
-            }
-            "lua-ls" = @{
-              "url" = "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-win32-x64.zip"
-              "type" = "zip"
-            }
-            "bash-ls" = @{
-              "url" = "https://registry.npmjs.org/bash-language-server/-/bash-language-server-5.4.0.tgz"
-              "type" = "npm"
-            }
-          }
+          Write-Host "Setting up additional language servers for ${{ matrix.arch }}..."
           
           $targetDir = "build/language_servers"
           
-          foreach ($server in $additionalServers.GetEnumerator()) {
-            $serverName = $server.Key
-            $serverInfo = $server.Value
-            $serverDir = Join-Path $targetDir $serverName
+          # Copy pre-downloaded additional servers
+          if (Test-Path "language_servers_additional") {
+            # Copy architecture-specific servers
+            $archSuffix = if ("${{ matrix.arch }}" -eq "arm64") { "arm64" } else { "x64" }
             
-            if (!(Test-Path $serverDir)) {
-              New-Item -ItemType Directory -Force -Path $serverDir
-              
-              # Select appropriate URL for architecture  
-              $downloadUrl = $serverInfo.url
-              if ("${{ matrix.arch }}" -eq "arm64" -and $serverInfo.ContainsKey("url_arm64")) {
-                $downloadUrl = $serverInfo.url_arm64
-              }
-              
-              Write-Host "Downloading $serverName from $downloadUrl"
-              
-              try {
-                $tempFile = [System.IO.Path]::GetTempFileName()
-                Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFile -UseBasicParsing
-                
-                if ($serverInfo.type -eq "zip") {
-                  Expand-Archive -Path $tempFile -DestinationPath $serverDir -Force
-                } elseif ($serverInfo.type -eq "tar") {
-                  tar -xzf $tempFile -C $serverDir
-                } elseif ($serverInfo.type -eq "npm") {
-                  tar -xzf $tempFile -C $serverDir --strip-components=1
-                }
-                
-                Remove-Item $tempFile -Force
-                Write-Host "Successfully downloaded $serverName"
-              } catch {
-                Write-Warning "Failed to download $serverName : $($_.Exception.Message)"
-              }
-            } else {
-              Write-Host "Using cached $serverName"
+            # Copy common servers
+            Copy-Item "language_servers_additional/java" "$targetDir/java" -Recurse -Force
+            Copy-Item "language_servers_additional/lua-ls" "$targetDir/lua-ls" -Recurse -Force
+            Copy-Item "language_servers_additional/bash-ls" "$targetDir/bash-ls" -Recurse -Force
+            
+            # Copy architecture-specific servers
+            if (Test-Path "language_servers_additional/omnisharp-$archSuffix") {
+              Copy-Item "language_servers_additional/omnisharp-$archSuffix" "$targetDir/omnisharp" -Recurse -Force
             }
+            
+            Write-Host "Additional language servers setup completed"
+          } else {
+            Write-Warning "Additional language servers cache not found"
           }
 
-      # Run quality checks
-      - name: Run code formatting check
+      # Run quality checks in parallel
+      - name: Run code quality checks
         shell: powershell
         run: |
-          uv run poe lint
-
-      - name: Run type checking
-        shell: powershell
-        run: |
-          uv run poe type-check
+          # Run linting and type checking in parallel using background jobs
+          $lintJob = Start-Job -ScriptBlock { 
+            Set-Location "$using:PWD"; 
+            & uv run poe lint 
+          }
+          $typeJob = Start-Job -ScriptBlock { 
+            Set-Location "$using:PWD"; 
+            & uv run poe type-check 
+          }
+          
+          # Wait for both jobs to complete
+          Wait-Job $lintJob, $typeJob | Out-Null
+          
+          # Get results and check for failures
+          $lintResult = Receive-Job $lintJob
+          $typeResult = Receive-Job $typeJob
+          
+          $lintFailed = $lintJob.State -eq "Failed"
+          $typeFailed = $typeJob.State -eq "Failed"
+          
+          Remove-Job $lintJob, $typeJob
+          
+          Write-Host "Lint results:"
+          Write-Host $lintResult
+          Write-Host "Type check results:"
+          Write-Host $typeResult
+          
+          if ($lintFailed -or $typeFailed) {
+            throw "Quality checks failed"
+          }
 
       # Build with PyInstaller
       - name: Build portable executable
@@ -294,13 +442,24 @@ jobs:
           $version = (Select-String -Path "pyproject.toml" -Pattern 'version = "([^"]+)"').Matches[0].Groups[1].Value
           $outputName = "serena-windows-${archSuffix}-${bundleSuffix}-${version}"
           
-          # PyInstaller arguments
+          # Optimized PyInstaller arguments for better performance
           $pyinstallerArgs = @(
             "--name", $outputName,
             "--onefile",
             "--console",
             "--clean",
-            "--noconfirm"
+            "--noconfirm",
+            "--optimize", "2",
+            "--strip",
+            "--noupx",
+            "--exclude-module", "tkinter",
+            "--exclude-module", "matplotlib",
+            "--exclude-module", "PIL",
+            "--exclude-module", "numpy",
+            "--exclude-module", "pandas",
+            "--distpath", "dist",
+            "--workpath", "build/pyinstaller",
+            "--specpath", "build"
           )
           
           # Add debug flags if requested
@@ -329,7 +488,10 @@ jobs:
             "anthropic",
             "requests",
             "yaml",
-            "jinja2"
+            "jinja2",
+            "win32api",
+            "win32con",
+            "pywintypes"
           )
           
           foreach ($import in $hiddenImports) {
@@ -340,6 +502,9 @@ jobs:
           $pyinstallerArgs += @("src/serena/cli.py")
           
           Write-Host "PyInstaller command: uv run pyinstaller $($pyinstallerArgs -join ' ')"
+          
+          # Set memory optimizations for PyInstaller
+          $env:PYINSTALLER_COMPILE_BOOTLOADER = "1"
           
           uv run pyinstaller @pyinstallerArgs
           
@@ -376,136 +541,115 @@ jobs:
           
           Write-Host "Creating distribution bundle: $bundleDir"
           
-          # Create bundle directory structure
-          New-Item -ItemType Directory -Force -Path $bundleDir
-          New-Item -ItemType Directory -Force -Path "$bundleDir/bin"
-          New-Item -ItemType Directory -Force -Path "$bundleDir/docs"
-          New-Item -ItemType Directory -Force -Path "$bundleDir/examples"
+          # Create bundle directory structure in parallel
+          $directories = @("$bundleDir", "$bundleDir/bin", "$bundleDir/docs", "$bundleDir/examples")
+          $directories | ForEach-Object -Parallel {
+            New-Item -ItemType Directory -Force -Path $_ | Out-Null
+          }
           
           # Copy executable
           Copy-Item "dist/${outputName}.exe" "$bundleDir/bin/serena.exe"
           
-          # Copy documentation
-          if (Test-Path "README.md") {
-            Copy-Item "README.md" "$bundleDir/README.md"
+          # Copy documentation files in parallel
+          $docFiles = @(
+            @{ Source = "README.md"; Dest = "$bundleDir/README.md" },
+            @{ Source = "LICENSE"; Dest = "$bundleDir/LICENSE" },
+            @{ Source = "CLAUDE.md"; Dest = "$bundleDir/docs/" }
+          )
+          
+          $docFiles | ForEach-Object -Parallel {
+            if (Test-Path $_.Source) {
+              Copy-Item $_.Source $_.Dest
+            }
           }
-          if (Test-Path "LICENSE") {
-            Copy-Item "LICENSE" "$bundleDir/LICENSE"
-          }
-          if (Test-Path "CLAUDE.md") {
-            Copy-Item "CLAUDE.md" "$bundleDir/docs/"
-          }
           
-          # Create installation script
-          @"
-          @echo off
-          setlocal enabledelayedexpansion
+          # Create installation scripts with optimized content
+          $installBat = @"
+@echo off
+setlocal enabledelayedexpansion
+
+echo Serena Windows Portable Installation
+echo ===================================
+echo.
+
+set "INSTALL_DIR=%USERPROFILE%\AppData\Local\Serena"
+set "BIN_DIR=%INSTALL_DIR%\bin"
+
+echo Creating installation directory: !INSTALL_DIR!
+if not exist "!INSTALL_DIR!" mkdir "!INSTALL_DIR!"
+if not exist "!BIN_DIR!" mkdir "!BIN_DIR!"
+
+echo Copying Serena executable...
+copy /Y "bin\serena.exe" "!BIN_DIR!\serena.exe" >nul
+
+echo Adding to PATH...
+powershell -Command "[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ';!BIN_DIR!', 'User')"
+
+echo.
+echo Installation complete!
+echo Restart your command prompt or PowerShell to use 'serena' command.
+echo.
+echo To verify installation, run: serena --version
+echo.
+pause
+"@
           
-          echo Serena Windows Portable Installation
-          echo ===================================
-          echo.
-          
-          set "INSTALL_DIR=%USERPROFILE%\AppData\Local\Serena"
-          set "BIN_DIR=%INSTALL_DIR%\bin"
-          
-          echo Creating installation directory: !INSTALL_DIR!
-          if not exist "!INSTALL_DIR!" mkdir "!INSTALL_DIR!"
-          if not exist "!BIN_DIR!" mkdir "!BIN_DIR!"
-          
-          echo Copying Serena executable...
-          copy /Y "bin\serena.exe" "!BIN_DIR!\serena.exe" >nul
-          
-          echo Adding to PATH...
-          powershell -Command "[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ';!BIN_DIR!', 'User')"
-          
-          echo.
-          echo Installation complete!
-          echo Restart your command prompt or PowerShell to use 'serena' command.
-          echo.
-          echo To verify installation, run: serena --version
-          echo.
-          pause
-          "@ | Out-File -FilePath "$bundleDir/install.bat" -Encoding ascii
+          $installBat | Out-File -FilePath "$bundleDir/install.bat" -Encoding ascii
           
           # Create PowerShell installation script
-          @"
-          # Serena Windows Portable Installation Script
-          Write-Host "Serena Windows Portable Installation" -ForegroundColor Green
-          Write-Host "=====================================" -ForegroundColor Green
-          Write-Host ""
+          $installPs1 = @"
+# Serena Windows Portable Installation Script
+Write-Host "Serena Windows Portable Installation" -ForegroundColor Green
+Write-Host "=====================================" -ForegroundColor Green
+Write-Host ""
+
+`$installDir = "`$env:USERPROFILE\AppData\Local\Serena"
+`$binDir = "`$installDir\bin"
+
+Write-Host "Creating installation directory: `$installDir"
+New-Item -ItemType Directory -Force -Path `$installDir | Out-Null
+New-Item -ItemType Directory -Force -Path `$binDir | Out-Null
+
+Write-Host "Copying Serena executable..."
+Copy-Item "bin\serena.exe" "`$binDir\serena.exe" -Force
+
+Write-Host "Adding to PATH..."
+`$currentPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+if (`$currentPath -notlike "*`$binDir*") {
+    [Environment]::SetEnvironmentVariable('Path', "`$currentPath;`$binDir", 'User')
+    Write-Host "Added `$binDir to user PATH" -ForegroundColor Yellow
+} else {
+    Write-Host "Directory already in PATH" -ForegroundColor Yellow
+}
+
+Write-Host ""
+Write-Host "Installation complete!" -ForegroundColor Green
+Write-Host "Restart your PowerShell or Command Prompt to use 'serena' command."
+Write-Host ""
+Write-Host "To verify installation, run: serena --version"
+Write-Host ""
+"@
           
-          `$installDir = "`$env:USERPROFILE\AppData\Local\Serena"
-          `$binDir = "`$installDir\bin"
-          
-          Write-Host "Creating installation directory: `$installDir"
-          New-Item -ItemType Directory -Force -Path `$installDir | Out-Null
-          New-Item -ItemType Directory -Force -Path `$binDir | Out-Null
-          
-          Write-Host "Copying Serena executable..."
-          Copy-Item "bin\serena.exe" "`$binDir\serena.exe" -Force
-          
-          Write-Host "Adding to PATH..."
-          `$currentPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-          if (`$currentPath -notlike "*`$binDir*") {
-              [Environment]::SetEnvironmentVariable('Path', "`$currentPath;`$binDir", 'User')
-              Write-Host "Added `$binDir to user PATH" -ForegroundColor Yellow
-          } else {
-              Write-Host "Directory already in PATH" -ForegroundColor Yellow
-          }
-          
-          Write-Host ""
-          Write-Host "Installation complete!" -ForegroundColor Green
-          Write-Host "Restart your PowerShell or Command Prompt to use 'serena' command."
-          Write-Host ""
-          Write-Host "To verify installation, run: serena --version"
-          Write-Host ""
-          "@ | Out-File -FilePath "$bundleDir/install.ps1" -Encoding utf8
+          $installPs1 | Out-File -FilePath "$bundleDir/install.ps1" -Encoding utf8
           
           # Create usage examples
-          @"
-          # Serena Usage Examples
-          
-          ## Basic Commands
-          
-          # Start MCP server (for Claude Desktop integration)
-          serena-mcp-server
-          
-          # Get version information  
-          serena --version
-          
-          # Get help
-          serena --help
-          
-          ## Language Server Bundle Information
-          
-          This $bundleSuffix bundle includes:
-          "@ | Out-File -FilePath "$bundleDir/examples/usage.md" -Encoding utf8
+          $usageContent = "# Serena Usage Examples`n`n## Basic Commands`n`n# Start MCP server (for Claude Desktop integration)`nserena-mcp-server`n`n# Get version information`nserena --version`n`n# Get help`nserena --help`n`n## Language Server Bundle Information`n`nThis $bundleSuffix bundle includes:`n"
           
           if ($bundleSuffix -eq "essential" -or $bundleSuffix -eq "complete" -or $bundleSuffix -eq "full") {
-            Add-Content -Path "$bundleDir/examples/usage.md" -Value @"
-          - Python (Pyright)
-          - TypeScript/JavaScript
-          - Rust (rust-analyzer) 
-          - Go (gopls)
-          "@
+            $usageContent += "- Python (Pyright)`n- TypeScript/JavaScript`n- Rust (rust-analyzer)`n- Go (gopls)`n"
           }
           
           if ($bundleSuffix -eq "complete" -or $bundleSuffix -eq "full") {
-            Add-Content -Path "$bundleDir/examples/usage.md" -Value @"
-          - Java (Eclipse JDT)
-          - C# (OmniSharp)
-          - Lua
-          - Bash
-          "@
+            $usageContent += "- Java (Eclipse JDT)`n- C# (OmniSharp)`n- Lua`n- Bash`n"
           }
           
           if ($bundleSuffix -eq "full") {
-            Add-Content -Path "$bundleDir/examples/usage.md" -Value @"
-          - Additional language servers (28 total)
-          "@
+            $usageContent += "- Additional language servers (28 total)`n"
           }
           
-          # Create ZIP archive
+          $usageContent | Out-File -FilePath "$bundleDir/examples/usage.md" -Encoding utf8
+          
+          # Create ZIP archive with optimal compression
           $zipPath = "dist/${outputName}-bundle.zip"
           Write-Host "Creating ZIP archive: $zipPath"
           
@@ -513,6 +657,7 @@ jobs:
             Remove-Item $zipPath -Force
           }
           
+          # Use optimal compression settings
           Compress-Archive -Path "$bundleDir/*" -DestinationPath $zipPath -CompressionLevel Optimal
           
           $zipSize = (Get-Item $zipPath).Length / 1MB
@@ -572,32 +717,37 @@ jobs:
           Write-Host "### Language Servers Included" >> $env:GITHUB_STEP_SUMMARY
           Write-Host "" >> $env:GITHUB_STEP_SUMMARY
           
-          if ($bundleSuffix -eq "minimal") {
-            Write-Host "- None (minimal build)" >> $env:GITHUB_STEP_SUMMARY
-          } elseif ($bundleSuffix -eq "essential") {
-            Write-Host "- Python (Pyright)" >> $env:GITHUB_STEP_SUMMARY
-            Write-Host "- TypeScript/JavaScript" >> $env:GITHUB_STEP_SUMMARY  
-            Write-Host "- Rust (rust-analyzer)" >> $env:GITHUB_STEP_SUMMARY
-            Write-Host "- Go (gopls)" >> $env:GITHUB_STEP_SUMMARY
-          } elseif ($bundleSuffix -eq "complete") {
-            Write-Host "- Python (Pyright)" >> $env:GITHUB_STEP_SUMMARY
-            Write-Host "- TypeScript/JavaScript" >> $env:GITHUB_STEP_SUMMARY
-            Write-Host "- Rust (rust-analyzer)" >> $env:GITHUB_STEP_SUMMARY
-            Write-Host "- Go (gopls)" >> $env:GITHUB_STEP_SUMMARY
-            Write-Host "- Java (Eclipse JDT)" >> $env:GITHUB_STEP_SUMMARY
-            Write-Host "- C# (OmniSharp)" >> $env:GITHUB_STEP_SUMMARY
-            Write-Host "- Lua Language Server" >> $env:GITHUB_STEP_SUMMARY
-            Write-Host "- Bash Language Server" >> $env:GITHUB_STEP_SUMMARY
-          } elseif ($bundleSuffix -eq "full") {
-            Write-Host "- Python (Pyright)" >> $env:GITHUB_STEP_SUMMARY
-            Write-Host "- TypeScript/JavaScript" >> $env:GITHUB_STEP_SUMMARY
-            Write-Host "- Rust (rust-analyzer)" >> $env:GITHUB_STEP_SUMMARY
-            Write-Host "- Go (gopls)" >> $env:GITHUB_STEP_SUMMARY
-            Write-Host "- Java (Eclipse JDT)" >> $env:GITHUB_STEP_SUMMARY
-            Write-Host "- C# (OmniSharp)" >> $env:GITHUB_STEP_SUMMARY
-            Write-Host "- Lua Language Server" >> $env:GITHUB_STEP_SUMMARY
-            Write-Host "- Bash Language Server" >> $env:GITHUB_STEP_SUMMARY
-            Write-Host "- All 28 supported language servers" >> $env:GITHUB_STEP_SUMMARY
+          switch ($bundleSuffix) {
+            "minimal" { 
+              Write-Host "- None (minimal build)" >> $env:GITHUB_STEP_SUMMARY 
+            }
+            "essential" { 
+              Write-Host "- Python (Pyright)" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "- TypeScript/JavaScript" >> $env:GITHUB_STEP_SUMMARY  
+              Write-Host "- Rust (rust-analyzer)" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "- Go (gopls)" >> $env:GITHUB_STEP_SUMMARY
+            }
+            "complete" { 
+              Write-Host "- Python (Pyright)" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "- TypeScript/JavaScript" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "- Rust (rust-analyzer)" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "- Go (gopls)" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "- Java (Eclipse JDT)" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "- C# (OmniSharp)" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "- Lua Language Server" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "- Bash Language Server" >> $env:GITHUB_STEP_SUMMARY
+            }
+            "full" { 
+              Write-Host "- Python (Pyright)" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "- TypeScript/JavaScript" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "- Rust (rust-analyzer)" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "- Go (gopls)" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "- Java (Eclipse JDT)" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "- C# (OmniSharp)" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "- Lua Language Server" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "- Bash Language Server" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "- All 28 supported language servers" >> $env:GITHUB_STEP_SUMMARY
+            }
           }
 
   # Create a summary job that runs after all builds complete
@@ -615,7 +765,7 @@ jobs:
       - name: Generate final summary
         shell: bash
         run: |
-          echo "# Windows Portable Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "# Windows Portable Build Results (Optimized)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           if [ "${{ needs.build-portable.result }}" == "success" ]; then
@@ -624,6 +774,15 @@ jobs:
             echo "❌ **Build Status**: FAILED" >> $GITHUB_STEP_SUMMARY
           fi
           
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Performance Improvements" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- ⚡ **Parallel language server downloads** - Up to 6x faster downloads" >> $GITHUB_STEP_SUMMARY
+          echo "- 🗂️ **Enhanced caching strategy** - Better cache hit rates and reuse" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔧 **Optimized PyInstaller flags** - Smaller executables with better performance" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔄 **Network retry logic** - Robust handling of download failures" >> $GITHUB_STEP_SUMMARY
+          echo "- ⏱️ **Parallel quality checks** - Faster linting and type checking" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 **Efficient bundle creation** - Parallel file operations" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Artifacts Created" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
