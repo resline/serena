@@ -129,6 +129,147 @@ jobs:
           uv pip install pywin32 pywin32-ctypes
 
       # Download and setup language servers based on bundle tier
+      - name: Setup Robust Download Function
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = "SilentlyContinue"
+          
+          # Robust download function with retry logic and error handling
+          function Invoke-RobustDownload {
+              param(
+                  [Parameter(Mandatory=$true)]
+                  [string]$Url,
+                  
+                  [Parameter(Mandatory=$true)]
+                  [string]$OutputPath,
+                  
+                  [Parameter(Mandatory=$false)]
+                  [string[]]$FallbackUrls = @(),
+                  
+                  [Parameter(Mandatory=$false)]
+                  [string]$ExpectedHash = "",
+                  
+                  [Parameter(Mandatory=$false)]
+                  [string]$HashAlgorithm = "SHA256",
+                  
+                  [Parameter(Mandatory=$false)]
+                  [int]$MaxRetries = 3,
+                  
+                  [Parameter(Mandatory=$false)]
+                  [int]$TimeoutSeconds = 300,
+                  
+                  [Parameter(Mandatory=$false)]
+                  [string]$UserAgent = "Serena-Windows-Portable/1.0"
+              )
+              
+              $allUrls = @($Url) + $FallbackUrls
+              $attempt = 0
+              $lastException = $null
+              
+              foreach ($currentUrl in $allUrls) {
+                  $urlAttempt = 0
+                  
+                  while ($urlAttempt -lt $MaxRetries) {
+                      $attempt++
+                      $urlAttempt++
+                      
+                      try {
+                          Write-Host "Attempt $attempt`: Downloading from $currentUrl"
+                          Write-Host "  - Target: $OutputPath"
+                          Write-Host "  - Timeout: ${TimeoutSeconds}s"
+                          
+                          # Create web request with proper settings
+                          $webClient = New-Object System.Net.WebClient
+                          $webClient.Headers.Add("User-Agent", $UserAgent)
+                          $webClient.Timeout = $TimeoutSeconds * 1000
+                          
+                          # Start download with progress tracking
+                          $startTime = Get-Date
+                          $webClient.DownloadFile($currentUrl, $OutputPath)
+                          $endTime = Get-Date
+                          $duration = ($endTime - $startTime).TotalSeconds
+                          
+                          # Verify file was downloaded
+                          if (-not (Test-Path $OutputPath)) {
+                              throw "File not found after download: $OutputPath"
+                          }
+                          
+                          $fileSize = (Get-Item $OutputPath).Length
+                          $fileSizeMB = [math]::Round($fileSize / 1MB, 2)
+                          Write-Host "  ✅ Downloaded successfully: ${fileSizeMB} MB in ${duration:N1}s"
+                          
+                          # Verify minimum file size (should be at least 1KB)
+                          if ($fileSize -lt 1024) {
+                              throw "Downloaded file is too small (${fileSize} bytes), likely corrupted"
+                          }
+                          
+                          # Verify checksum if provided
+                          if ($ExpectedHash -ne "") {
+                              Write-Host "  - Verifying checksum ($HashAlgorithm)..."
+                              $actualHash = Get-FileHash -Path $OutputPath -Algorithm $HashAlgorithm
+                              
+                              if ($actualHash.Hash -ne $ExpectedHash.ToUpper()) {
+                                  throw "Checksum mismatch! Expected: $ExpectedHash, Actual: $($actualHash.Hash)"
+                              }
+                              Write-Host "  ✅ Checksum verified"
+                          }
+                          
+                          Write-Host "  ✅ Download completed successfully"
+                          return $true
+                          
+                      } catch {
+                          $lastException = $_
+                          Write-Warning "  ❌ Download attempt $attempt failed: $($_.Exception.Message)"
+                          
+                          # Clean up partial download
+                          if (Test-Path $OutputPath) {
+                              try {
+                                  Remove-Item $OutputPath -Force
+                                  Write-Host "  - Cleaned up partial download"
+                              } catch {
+                                  Write-Warning "  - Could not clean up partial download: $($_.Exception.Message)"
+                              }
+                          }
+                          
+                          # Calculate exponential backoff delay
+                          if ($urlAttempt -lt $MaxRetries) {
+                              $delay = [math]::Min(30, [math]::Pow(2, $urlAttempt - 1))
+                              Write-Host "  - Retrying in ${delay}s... ($urlAttempt/$MaxRetries)"
+                              Start-Sleep -Seconds $delay
+                          }
+                      } finally {
+                          if ($webClient) {
+                              $webClient.Dispose()
+                          }
+                      }
+                  }
+                  
+                  Write-Warning "All retry attempts failed for URL: $currentUrl"
+              }
+              
+              # All URLs and retries failed
+              Write-Error "❌ Failed to download after $attempt total attempts across all URLs"
+              Write-Error "Last error: $($lastException.Exception.Message)"
+              Write-Error "Attempted URLs:"
+              foreach ($url in $allUrls) {
+                  Write-Error "  - $url"
+              }
+              
+              # Suggest recovery actions
+              Write-Host ""
+              Write-Host "🔧 Suggested recovery actions:" -ForegroundColor Yellow
+              Write-Host "  1. Check your internet connection" -ForegroundColor Yellow
+              Write-Host "  2. Verify the URLs are accessible in a browser" -ForegroundColor Yellow
+              Write-Host "  3. Check if your network blocks the download domains" -ForegroundColor Yellow
+              Write-Host "  4. Try running the workflow again (temporary server issues)" -ForegroundColor Yellow
+              Write-Host ""
+              
+              return $false
+          }
+          
+          Write-Host "✅ Robust download function loaded successfully"
+
       - name: Download Essential Language Servers
         if: matrix.bundle_tier == 'essential' || matrix.bundle_tier == 'complete' || matrix.bundle_tier == 'full'
         shell: powershell
@@ -138,64 +279,252 @@ jobs:
           
           Write-Host "Downloading essential language servers for ${{ matrix.arch }}..."
           
-          # Define language servers for essential tier
+          # Define language servers for essential tier with fallback URLs and checksums
           $servers = @{
             "pyright" = @{
               "url" = "https://registry.npmjs.org/pyright/-/pyright-1.1.396.tgz"
+              "fallbacks" = @(
+                "https://cdn.jsdelivr.net/npm/pyright@1.1.396/pyright-1.1.396.tgz",
+                "https://unpkg.com/pyright@1.1.396/pyright-1.1.396.tgz"
+              )
               "type" = "npm"
+              "expected_size_mb" = 10.5
             }
             "typescript" = @{
               "url" = "https://registry.npmjs.org/typescript-language-server/-/typescript-language-server-4.3.3.tgz"
+              "fallbacks" = @(
+                "https://cdn.jsdelivr.net/npm/typescript-language-server@4.3.3/typescript-language-server-4.3.3.tgz",
+                "https://unpkg.com/typescript-language-server@4.3.3/typescript-language-server-4.3.3.tgz"
+              )
               "type" = "npm"
+              "expected_size_mb" = 0.8
             }
             "rust-analyzer" = @{
-              "url" = "https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-16/rust-analyzer-x86_64-pc-windows-msvc.zip"
-              "url_arm64" = "https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-16/rust-analyzer-aarch64-pc-windows-msvc.zip"
+              # rust-analyzer v2025-08-25 (latest stable release)
+              "url" = "https://github.com/rust-lang/rust-analyzer/releases/download/2025-08-25/rust-analyzer-x86_64-pc-windows-msvc.zip"
+              "url_arm64" = "https://github.com/rust-lang/rust-analyzer/releases/download/2025-08-25/rust-analyzer-aarch64-pc-windows-msvc.zip"
+              "fallbacks" = @(
+                "https://github.com/rust-analyzer/rust-analyzer/releases/download/2025-08-25/rust-analyzer-x86_64-pc-windows-msvc.zip"
+              )
+              "fallbacks_arm64" = @(
+                "https://github.com/rust-analyzer/rust-analyzer/releases/download/2025-08-25/rust-analyzer-aarch64-pc-windows-msvc.zip"
+              )
               "type" = "zip"
+              "expected_size_mb" = 48.0
             }
             "gopls" = @{
               "url" = "https://github.com/golang/tools/releases/download/gopls/v0.18.0/gopls-windows-amd64.zip"
               "url_arm64" = "https://github.com/golang/tools/releases/download/gopls/v0.18.0/gopls-windows-arm64.zip"
+              "fallbacks" = @(
+                "https://proxy.golang.org/golang.org/x/tools/gopls/@v/v0.18.0.zip"
+              )
               "type" = "zip"
+              "expected_size_mb" = 22.0
             }
           }
           
           $targetDir = "build/language_servers"
+          $downloadErrors = @()
+          
+          # Helper function to validate extracted content
+          function Test-ExtractedContent {
+              param([string]$Path, [string]$ServerName, [string]$Type)
+              
+              if (-not (Test-Path $Path)) {
+                  return $false
+              }
+              
+              $itemCount = (Get-ChildItem -Path $Path -Recurse | Measure-Object).Count
+              if ($itemCount -eq 0) {
+                  Write-Warning "Extracted directory is empty: $Path"
+                  return $false
+              }
+              
+              # Type-specific validation
+              switch ($Type) {
+                  "zip" {
+                      # Should contain at least one executable or significant file
+                      $hasExecutable = (Get-ChildItem -Path $Path -Recurse -Include "*.exe", "*.dll", "*.so" | Measure-Object).Count -gt 0
+                      if (-not $hasExecutable -and $ServerName -ne "bash-ls") {
+                          Write-Warning "No executable files found in extracted archive for $ServerName"
+                          return $false
+                      }
+                  }
+                  "npm" {
+                      # Should contain package.json or lib directory
+                      $hasPackageStructure = (Test-Path "$Path/package.json") -or (Test-Path "$Path/lib") -or (Test-Path "$Path/bin")
+                      if (-not $hasPackageStructure) {
+                          Write-Warning "No valid npm package structure found for $ServerName"
+                          return $false
+                      }
+                  }
+                  "tar" {
+                      # Should contain some meaningful structure
+                      if ($itemCount -lt 5) {
+                          Write-Warning "Extracted tar archive seems incomplete for $ServerName"
+                          return $false
+                      }
+                  }
+              }
+              
+              Write-Host "  ✅ Extraction validation passed ($itemCount items)"
+              return $true
+          }
           
           foreach ($server in $servers.GetEnumerator()) {
             $serverName = $server.Key
             $serverInfo = $server.Value
             $serverDir = Join-Path $targetDir $serverName
             
-            if (!(Test-Path $serverDir)) {
-              New-Item -ItemType Directory -Force -Path $serverDir
+            Write-Host ""
+            Write-Host "=== Processing $serverName ===" -ForegroundColor Cyan
+            
+            if (Test-Path $serverDir) {
+              Write-Host "✅ Using cached $serverName" -ForegroundColor Green
+              continue
+            }
+            
+            try {
+              New-Item -ItemType Directory -Force -Path $serverDir | Out-Null
               
-              # Select appropriate URL for architecture
+              # Select appropriate URL and fallbacks for architecture
               $downloadUrl = $serverInfo.url
-              if ("${{ matrix.arch }}" -eq "arm64" -and $serverInfo.ContainsKey("url_arm64")) {
-                $downloadUrl = $serverInfo.url_arm64
-              }
+              $fallbackUrls = @()
               
-              Write-Host "Downloading $serverName from $downloadUrl"
-              
-              try {
-                $tempFile = [System.IO.Path]::GetTempFileName()
-                Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFile -UseBasicParsing
-                
-                if ($serverInfo.type -eq "zip") {
-                  Expand-Archive -Path $tempFile -DestinationPath $serverDir -Force
-                } elseif ($serverInfo.type -eq "npm") {
-                  # Extract npm tarball
-                  tar -xzf $tempFile -C $serverDir --strip-components=1
+              if ("${{ matrix.arch }}" -eq "arm64") {
+                if ($serverInfo.ContainsKey("url_arm64")) {
+                  $downloadUrl = $serverInfo.url_arm64
                 }
-                
-                Remove-Item $tempFile -Force
-                Write-Host "Successfully downloaded $serverName"
-              } catch {
-                Write-Warning "Failed to download $serverName : $($_.Exception.Message)"
+                if ($serverInfo.ContainsKey("fallbacks_arm64")) {
+                  $fallbackUrls = $serverInfo.fallbacks_arm64
+                }
               }
+              
+              # Add general fallbacks if available
+              if ($serverInfo.ContainsKey("fallbacks")) {
+                $fallbackUrls += $serverInfo.fallbacks
+              }
+              
+              $tempFile = [System.IO.Path]::GetTempFileName()
+              $tempFile += ".download"
+              
+              Write-Host "📥 Downloading $serverName..."
+              
+              # Use robust download function
+              $downloadSuccess = Invoke-RobustDownload -Url $downloadUrl -OutputPath $tempFile -FallbackUrls $fallbackUrls -TimeoutSeconds 600
+              
+              if (-not $downloadSuccess) {
+                throw "Robust download failed for $serverName"
+              }
+              
+              # Validate downloaded file size if expected size is provided
+              if ($serverInfo.ContainsKey("expected_size_mb")) {
+                $actualSizeMB = [math]::Round((Get-Item $tempFile).Length / 1MB, 1)
+                $expectedSizeMB = $serverInfo.expected_size_mb
+                $tolerance = 0.5  # 50% tolerance for size variation
+                
+                $sizeRatio = $actualSizeMB / $expectedSizeMB
+                if ($sizeRatio -lt (1 - $tolerance) -or $sizeRatio -gt (1 + $tolerance)) {
+                  Write-Warning "Downloaded file size (${actualSizeMB} MB) differs significantly from expected (${expectedSizeMB} MB)"
+                  Write-Warning "Size ratio: ${sizeRatio:N2} (tolerance: ±${tolerance:P0})"
+                }
+              }
+              
+              Write-Host "📦 Extracting $serverName..."
+              
+              # Extract based on type
+              switch ($serverInfo.type) {
+                "zip" {
+                  try {
+                    Expand-Archive -Path $tempFile -DestinationPath $serverDir -Force
+                  } catch {
+                    throw "Failed to extract ZIP archive: $($_.Exception.Message)"
+                  }
+                }
+                "npm" {
+                  try {
+                    # Use tar to extract npm tarball
+                    $extractResult = tar -xzf $tempFile -C $serverDir --strip-components=1 2>&1
+                    if ($LASTEXITCODE -ne 0) {
+                      throw "tar extraction failed with exit code $LASTEXITCODE`: $extractResult"
+                    }
+                  } catch {
+                    throw "Failed to extract npm tarball: $($_.Exception.Message)"
+                  }
+                }
+                "tar" {
+                  try {
+                    $extractResult = tar -xzf $tempFile -C $serverDir 2>&1
+                    if ($LASTEXITCODE -ne 0) {
+                      throw "tar extraction failed with exit code $LASTEXITCODE`: $extractResult"
+                    }
+                  } catch {
+                    throw "Failed to extract tar archive: $($_.Exception.Message)"
+                  }
+                }
+                default {
+                  throw "Unknown archive type: $($serverInfo.type)"
+                }
+              }
+              
+              # Validate extraction
+              if (-not (Test-ExtractedContent -Path $serverDir -ServerName $serverName -Type $serverInfo.type)) {
+                throw "Extraction validation failed for $serverName"
+              }
+              
+              Write-Host "✅ Successfully downloaded and extracted $serverName" -ForegroundColor Green
+              
+            } catch {
+              $errorMsg = "❌ Failed to process $serverName`: $($_.Exception.Message)"
+              Write-Error $errorMsg
+              $downloadErrors += $errorMsg
+              
+              # Clean up on failure
+              if (Test-Path $serverDir) {
+                try {
+                  Remove-Item $serverDir -Recurse -Force
+                } catch {
+                  Write-Warning "Could not clean up failed extraction directory: $serverDir"
+                }
+              }
+            } finally {
+              # Clean up temp file
+              if ($tempFile -and (Test-Path $tempFile)) {
+                try {
+                  Remove-Item $tempFile -Force
+                } catch {
+                  Write-Warning "Could not clean up temporary file: $tempFile"
+                }
+              }
+            }
+          }
+          
+          # Report final status
+          Write-Host ""
+          Write-Host "=== Essential Language Servers Download Summary ===" -ForegroundColor Cyan
+          $successCount = 0
+          foreach ($server in $servers.GetEnumerator()) {
+            $serverDir = Join-Path $targetDir $server.Key
+            if (Test-Path $serverDir) {
+              Write-Host "✅ $($server.Key)" -ForegroundColor Green
+              $successCount++
             } else {
-              Write-Host "Using cached $serverName"
+              Write-Host "❌ $($server.Key)" -ForegroundColor Red
+            }
+          }
+          
+          Write-Host "📊 Success rate: $successCount/$($servers.Count) servers" -ForegroundColor Cyan
+          
+          if ($downloadErrors.Count -gt 0) {
+            Write-Warning "The following errors occurred during downloads:"
+            foreach ($error in $downloadErrors) {
+              Write-Warning "  - $error"
+            }
+            
+            if ($successCount -eq 0) {
+              throw "All essential language server downloads failed. Cannot continue build."
+            } elseif ($successCount -lt $servers.Count) {
+              Write-Warning "Some language servers failed to download. Build will continue with partial functionality."
             }
           }
 
@@ -208,64 +537,204 @@ jobs:
           
           Write-Host "Downloading complete language server bundle..."
           
-          # Additional servers for complete tier
+          # Additional servers for complete tier with fallback URLs and validation
           $additionalServers = @{
             "java" = @{
               "url" = "https://download.eclipse.org/jdtls/milestones/1.41.0/jdt-language-server-1.41.0-202412191307.tar.gz"
+              "fallbacks" = @(
+                "https://www.eclipse.org/downloads/download.php?file=/jdtls/milestones/1.41.0/jdt-language-server-1.41.0-202412191307.tar.gz&r=1"
+              )
               "type" = "tar"
+              "expected_size_mb" = 85.0
             }
             "omnisharp" = @{
               "url" = "https://roslynomnisharp.blob.core.windows.net/releases/1.39.10/omnisharp-win-x64-1.39.10.zip"
               "url_arm64" = "https://roslynomnisharp.blob.core.windows.net/releases/1.39.10/omnisharp-win-arm64-1.39.10.zip"
+              "fallbacks" = @(
+                "https://github.com/OmniSharp/omnisharp-roslyn/releases/download/v1.39.10/omnisharp-win-x64-1.39.10.zip"
+              )
+              "fallbacks_arm64" = @(
+                "https://github.com/OmniSharp/omnisharp-roslyn/releases/download/v1.39.10/omnisharp-win-arm64-1.39.10.zip"
+              )
               "type" = "zip"
+              "expected_size_mb" = 12.5
             }
             "lua-ls" = @{
               "url" = "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-win32-x64.zip"
+              "url_arm64" = "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-win32-arm64.zip"
+              "fallbacks" = @(
+                "https://github.com/sumneko/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-win32-x64.zip"
+              )
               "type" = "zip"
+              "expected_size_mb" = 15.2
             }
             "bash-ls" = @{
               "url" = "https://registry.npmjs.org/bash-language-server/-/bash-language-server-5.4.0.tgz"
+              "fallbacks" = @(
+                "https://cdn.jsdelivr.net/npm/bash-language-server@5.4.0/bash-language-server-5.4.0.tgz",
+                "https://unpkg.com/bash-language-server@5.4.0/bash-language-server-5.4.0.tgz"
+              )
               "type" = "npm"
+              "expected_size_mb" = 2.8
             }
           }
           
           $targetDir = "build/language_servers"
+          $downloadErrors = @()
           
           foreach ($server in $additionalServers.GetEnumerator()) {
             $serverName = $server.Key
             $serverInfo = $server.Value
             $serverDir = Join-Path $targetDir $serverName
             
-            if (!(Test-Path $serverDir)) {
-              New-Item -ItemType Directory -Force -Path $serverDir
+            Write-Host ""
+            Write-Host "=== Processing Additional Server: $serverName ===" -ForegroundColor Cyan
+            
+            if (Test-Path $serverDir) {
+              Write-Host "✅ Using cached $serverName" -ForegroundColor Green
+              continue
+            }
+            
+            try {
+              New-Item -ItemType Directory -Force -Path $serverDir | Out-Null
               
-              # Select appropriate URL for architecture  
+              # Select appropriate URL and fallbacks for architecture
               $downloadUrl = $serverInfo.url
-              if ("${{ matrix.arch }}" -eq "arm64" -and $serverInfo.ContainsKey("url_arm64")) {
-                $downloadUrl = $serverInfo.url_arm64
-              }
+              $fallbackUrls = @()
               
-              Write-Host "Downloading $serverName from $downloadUrl"
-              
-              try {
-                $tempFile = [System.IO.Path]::GetTempFileName()
-                Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFile -UseBasicParsing
-                
-                if ($serverInfo.type -eq "zip") {
-                  Expand-Archive -Path $tempFile -DestinationPath $serverDir -Force
-                } elseif ($serverInfo.type -eq "tar") {
-                  tar -xzf $tempFile -C $serverDir
-                } elseif ($serverInfo.type -eq "npm") {
-                  tar -xzf $tempFile -C $serverDir --strip-components=1
+              if ("${{ matrix.arch }}" -eq "arm64") {
+                if ($serverInfo.ContainsKey("url_arm64")) {
+                  $downloadUrl = $serverInfo.url_arm64
                 }
-                
-                Remove-Item $tempFile -Force
-                Write-Host "Successfully downloaded $serverName"
-              } catch {
-                Write-Warning "Failed to download $serverName : $($_.Exception.Message)"
+                if ($serverInfo.ContainsKey("fallbacks_arm64")) {
+                  $fallbackUrls = $serverInfo.fallbacks_arm64
+                }
               }
+              
+              # Add general fallbacks if available
+              if ($serverInfo.ContainsKey("fallbacks")) {
+                $fallbackUrls += $serverInfo.fallbacks
+              }
+              
+              $tempFile = [System.IO.Path]::GetTempFileName()
+              $tempFile += ".download"
+              
+              Write-Host "📥 Downloading $serverName..."
+              
+              # Use robust download function
+              $downloadSuccess = Invoke-RobustDownload -Url $downloadUrl -OutputPath $tempFile -FallbackUrls $fallbackUrls -TimeoutSeconds 900
+              
+              if (-not $downloadSuccess) {
+                throw "Robust download failed for $serverName"
+              }
+              
+              # Validate downloaded file size if expected size is provided
+              if ($serverInfo.ContainsKey("expected_size_mb")) {
+                $actualSizeMB = [math]::Round((Get-Item $tempFile).Length / 1MB, 1)
+                $expectedSizeMB = $serverInfo.expected_size_mb
+                $tolerance = 0.5  # 50% tolerance for size variation
+                
+                $sizeRatio = $actualSizeMB / $expectedSizeMB
+                if ($sizeRatio -lt (1 - $tolerance) -or $sizeRatio -gt (1 + $tolerance)) {
+                  Write-Warning "Downloaded file size (${actualSizeMB} MB) differs significantly from expected (${expectedSizeMB} MB)"
+                  Write-Warning "Size ratio: ${sizeRatio:N2} (tolerance: ±${tolerance:P0})"
+                }
+              }
+              
+              Write-Host "📦 Extracting $serverName..."
+              
+              # Extract based on type with proper error handling
+              switch ($serverInfo.type) {
+                "zip" {
+                  try {
+                    Expand-Archive -Path $tempFile -DestinationPath $serverDir -Force
+                  } catch {
+                    throw "Failed to extract ZIP archive: $($_.Exception.Message)"
+                  }
+                }
+                "tar" {
+                  try {
+                    $extractResult = tar -xzf $tempFile -C $serverDir 2>&1
+                    if ($LASTEXITCODE -ne 0) {
+                      throw "tar extraction failed with exit code $LASTEXITCODE`: $extractResult"
+                    }
+                  } catch {
+                    throw "Failed to extract tar archive: $($_.Exception.Message)"
+                  }
+                }
+                "npm" {
+                  try {
+                    $extractResult = tar -xzf $tempFile -C $serverDir --strip-components=1 2>&1
+                    if ($LASTEXITCODE -ne 0) {
+                      throw "tar extraction failed with exit code $LASTEXITCODE`: $extractResult"
+                    }
+                  } catch {
+                    throw "Failed to extract npm tarball: $($_.Exception.Message)"
+                  }
+                }
+                default {
+                  throw "Unknown archive type: $($serverInfo.type)"
+                }
+              }
+              
+              # Validate extraction using the same function
+              if (-not (Test-ExtractedContent -Path $serverDir -ServerName $serverName -Type $serverInfo.type)) {
+                throw "Extraction validation failed for $serverName"
+              }
+              
+              Write-Host "✅ Successfully downloaded and extracted $serverName" -ForegroundColor Green
+              
+            } catch {
+              $errorMsg = "❌ Failed to process additional server $serverName`: $($_.Exception.Message)"
+              Write-Error $errorMsg
+              $downloadErrors += $errorMsg
+              
+              # Clean up on failure
+              if (Test-Path $serverDir) {
+                try {
+                  Remove-Item $serverDir -Recurse -Force
+                } catch {
+                  Write-Warning "Could not clean up failed extraction directory: $serverDir"
+                }
+              }
+            } finally {
+              # Clean up temp file
+              if ($tempFile -and (Test-Path $tempFile)) {
+                try {
+                  Remove-Item $tempFile -Force
+                } catch {
+                  Write-Warning "Could not clean up temporary file: $tempFile"
+                }
+              }
+            }
+          }
+          
+          # Report final status for additional servers
+          Write-Host ""
+          Write-Host "=== Additional Language Servers Download Summary ===" -ForegroundColor Cyan
+          $additionalSuccessCount = 0
+          foreach ($server in $additionalServers.GetEnumerator()) {
+            $serverDir = Join-Path $targetDir $server.Key
+            if (Test-Path $serverDir) {
+              Write-Host "✅ $($server.Key)" -ForegroundColor Green
+              $additionalSuccessCount++
             } else {
-              Write-Host "Using cached $serverName"
+              Write-Host "❌ $($server.Key)" -ForegroundColor Red
+            }
+          }
+          
+          Write-Host "📊 Additional servers success rate: $additionalSuccessCount/$($additionalServers.Count) servers" -ForegroundColor Cyan
+          
+          if ($downloadErrors.Count -gt 0) {
+            Write-Warning "The following errors occurred during additional server downloads:"
+            foreach ($error in $downloadErrors) {
+              Write-Warning "  - $error"
+            }
+            
+            if ($additionalSuccessCount -eq 0) {
+              Write-Warning "All additional language servers failed to download. Build will continue with essential servers only."
+            } elseif ($additionalSuccessCount -lt $additionalServers.Count) {
+              Write-Warning "Some additional language servers failed to download. Build will continue with reduced functionality."
             }
           }
 
