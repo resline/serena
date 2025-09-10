@@ -422,11 +422,11 @@ function Add-TestResult {
     switch ($Status) {
         "Pass" { 
             $script:PassCount++
-            Write-Success "✓ $Name $(if($Duration.TotalMilliseconds -gt 0){"($($Duration.TotalMilliseconds)ms)"})"
+            Write-Success "[OK] $Name $(if($Duration.TotalMilliseconds -gt 0){"($($Duration.TotalMilliseconds)ms)"})"
         }
         "Fail" { 
             $script:FailCount++
-            Write-Error "✗ $Name $(if($Duration.TotalMilliseconds -gt 0){"($($Duration.TotalMilliseconds)ms)"})"
+            Write-Error "[FAIL] $Name $(if($Duration.TotalMilliseconds -gt 0){"($($Duration.TotalMilliseconds)ms)"})"
             if ($Details) { Write-Error "  $Details" }
         }
         "Skip" { 
@@ -849,8 +849,8 @@ function Export-TestResults {
     
     foreach ($result in $script:TestResults) {
         $statusIcon = switch ($result.Status) {
-            "Pass" { "✓" }
-            "Fail" { "✗" }
+            "Pass" { "[OK]" }
+            "Fail" { "[FAIL]" }
             "Skip" { "-" }
             default { "?" }
         }

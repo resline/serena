@@ -313,12 +313,21 @@ jobs:
             }
             
             # Test PyInstaller installation simulation
-            uv add --dry-run pyinstaller
-            if ($LASTEXITCODE -eq 0) {
+            Write-Host "Testing PyInstaller dependency resolution..." -ForegroundColor Yellow
+            $tempDir = New-TemporaryFile
+            Remove-Item $tempDir
+            New-Item -ItemType Directory -Path $tempDir | Out-Null
+            Push-Location $tempDir
+            try {
+              uv init --no-workspace --no-readme --no-pin-python 2>$null | Out-Null
+              uv add pyinstaller --no-sync 2>$null | Out-Null
               Write-Host "[OK] PyInstaller can be installed" -ForegroundColor Green
-            } else {
+            } catch {
               Write-Host "[FAIL] PyInstaller installation test failed" -ForegroundColor Red  
               exit 1
+            } finally {
+              Pop-Location
+              Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue
             }
             
           } catch {

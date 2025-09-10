@@ -192,6 +192,12 @@ function Initialize-BuildEnvironment {
 function Install-Dependencies {
     Write-Step "Installing Python dependencies..."
     
+    # Validate we're in a Python project
+    if (!(Test-Path "pyproject.toml")) {
+        Write-Error "pyproject.toml not found. Ensure this script runs from the project root."
+        exit 1
+    }
+    
     try {
         Write-Info "Syncing dependencies with uv..."
         & uv sync --dev
