@@ -1,0 +1,204 @@
+# GitHub Release Configuration
+# This file configures automatic release note generation for GitHub releases
+# See: https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes
+
+changelog:
+  # Exclude specific labels from the changelog
+  exclude:
+    labels:
+      - "duplicate"
+      - "invalid"
+      - "question"
+      - "wontfix"
+      - "dependencies"
+      - "internal"
+      - "ci"
+      - "github_actions"
+      - "ignore-for-release"
+    authors:
+      - "dependabot"
+      - "dependabot[bot]"
+      - "github-actions[bot]"
+
+  # Categorize pull requests
+  categories:
+    # Breaking Changes (highest priority)
+    - title: "🚨 Breaking Changes"
+      labels:
+        - "breaking-change"
+        - "breaking"
+        - "major"
+      collapse-after: 10
+
+    # New Language Support  
+    - title: "🗣️ New Language Support"
+      labels:
+        - "language-support"
+        - "new-language"
+        - "lsp-integration"
+      collapse-after: 15
+
+    # Major Features
+    - title: "🚀 New Features"
+      labels:
+        - "feature"
+        - "enhancement"
+        - "new-feature"
+        - "major-feature"
+      collapse-after: 20
+
+    # Tool System Improvements
+    - title: "🛠️ Tool System"
+      labels:
+        - "tools"
+        - "tool-enhancement"
+        - "symbol-tools"
+        - "file-tools"
+        - "memory-tools"
+        - "config-tools"
+      collapse-after: 15
+
+    # Language Server Improvements
+    - title: "🔧 Language Server Protocol"
+      labels:
+        - "lsp"
+        - "language-server"
+        - "solidlsp"
+        - "lsp-improvement"
+        - "lsp-fix"
+      collapse-after: 15
+
+    # MCP and Agent Integration
+    - title: "🤖 Agent & MCP Integration"
+      labels:
+        - "mcp"
+        - "agent"
+        - "serena-agent"
+        - "model-context-protocol"
+        - "claude-integration"
+      collapse-after: 10
+
+    # Configuration System
+    - title: "⚙️ Configuration & Setup"
+      labels:
+        - "configuration"
+        - "config"
+        - "setup"
+        - "cli"
+        - "modes"
+        - "contexts"
+      collapse-after: 10
+
+    # Performance Improvements
+    - title: "⚡ Performance"
+      labels:
+        - "performance"
+        - "optimization"
+        - "speed"
+        - "memory"
+        - "caching"
+      collapse-after: 10
+
+    # Bug Fixes
+    - title: "🐛 Bug Fixes"
+      labels:
+        - "bug"
+        - "fix"
+        - "bugfix"
+        - "hotfix"
+        - "regression"
+      collapse-after: 20
+
+    # Documentation
+    - title: "📚 Documentation"
+      labels:
+        - "documentation"
+        - "docs"
+        - "readme"
+        - "wiki"
+        - "examples"
+      collapse-after: 10
+
+    # Testing & Quality
+    - title: "🧪 Testing & Quality"
+      labels:
+        - "test"
+        - "testing"
+        - "quality"
+        - "coverage"
+        - "linting"
+        - "type-checking"
+      collapse-after: 10
+
+    # Platform Specific
+    - title: "🖥️ Platform Support"
+      labels:
+        - "windows"
+        - "macos"
+        - "linux"
+        - "cross-platform"
+        - "platform-specific"
+      collapse-after: 10
+
+    # Developer Experience
+    - title: "👨‍💻 Developer Experience"
+      labels:
+        - "dx"
+        - "developer-experience"
+        - "usability"
+        - "error-handling"
+        - "debugging"
+      collapse-after: 10
+
+    # Security
+    - title: "🔒 Security"
+      labels:
+        - "security"
+        - "vulnerability"
+        - "safety"
+        - "permissions"
+      collapse-after: 5
+
+    # Deprecations
+    - title: "⚠️ Deprecations"
+      labels:
+        - "deprecation"
+        - "deprecated"
+        - "removal"
+      collapse-after: 5
+
+    # Dependencies
+    - title: "📦 Dependencies"
+      labels:
+        - "dependencies"
+        - "deps"
+        - "requirements"
+        - "upgrade"
+      collapse-after: 15
+
+    # Infrastructure & CI
+    - title: "🔧 Infrastructure"
+      labels:
+        - "ci"
+        - "cd"
+        - "github-actions"
+        - "infrastructure"
+        - "build"
+        - "deployment"
+      collapse-after: 10
+
+    # Miscellaneous
+    - title: "🔄 Other Changes"
+      labels:
+        - "misc"
+        - "miscellaneous"
+        - "chore"
+        - "maintenance"
+        - "cleanup"
+        - "refactor"
+      collapse-after: 10
+
+    # Default category for uncategorized items
+    - title: "📝 Uncategorized"
+      labels:
+        - "*"

@@ -1,0 +1,34 @@
+# Windows Version Information Resource Template for Serena
+# This file is used to generate version_info.txt for PyInstaller builds
+# Template variables are replaced by build_version_info.py
+
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=({MAJOR_VERSION}, {MINOR_VERSION}, {PATCH_VERSION}, 0),
+    prodvers=({MAJOR_VERSION}, {MINOR_VERSION}, {PATCH_VERSION}, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable('040904B0', [
+        StringStruct('CompanyName', 'Oraios AI'),
+        StringStruct('FileDescription', 'Serena Coding Agent - AI-powered development toolkit with MCP server'),
+        StringStruct('FileVersion', '{VERSION_STRING}.0'),
+        StringStruct('InternalName', 'serena-mcp-server'),
+        StringStruct('LegalCopyright', 'Copyright © {YEAR} Oraios AI. All rights reserved.'),
+        StringStruct('LegalTrademarks', 'Serena is a trademark of Oraios AI'),
+        StringStruct('OriginalFilename', 'serena-mcp-server.exe'),
+        StringStruct('ProductName', 'Serena Coding Agent'),
+        StringStruct('ProductVersion', '{VERSION_STRING}.0'),
+        StringStruct('Comments', 'Dual-layer coding agent toolkit with 28+ language servers'),
+        StringStruct('Website', 'https://github.com/oraios/serena')
+      ])
+    ]),
+    VarFileInfo([VarStruct('Translation', [1033, 1200])])
+  ]
+)

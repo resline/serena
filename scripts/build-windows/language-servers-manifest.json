@@ -1,0 +1,999 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://serena.ai/schemas/language-servers-manifest.json",
+  "title": "Serena Language Servers Manifest for Windows",
+  "description": "Complete manifest for downloading and configuring language servers on Windows platforms",
+  "version": "1.0.0",
+  "lastUpdated": "2025-01-16",
+  "runtimeRequirements": {
+    "dotnet": {
+      "version": "9.0.6",
+      "description": ".NET 9 Runtime required for C# language servers",
+      "downloads": {
+        "win-x64": {
+          "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.6/dotnet-runtime-9.0.6-win-x64.zip",
+          "size": "35MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip"
+        },
+        "win-arm64": {
+          "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.6/dotnet-runtime-9.0.6-win-arm64.zip",
+          "size": "34MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip"
+        }
+      }
+    },
+    "nodejs": {
+      "version": "20.11.1",
+      "description": "Node.js runtime required for TypeScript, JavaScript, and other npm-based language servers",
+      "downloads": {
+        "win-x64": {
+          "url": "https://nodejs.org/dist/v20.11.1/node-v20.11.1-win-x64.zip",
+          "size": "28MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip"
+        },
+        "win-arm64": {
+          "url": "https://nodejs.org/dist/v20.11.1/node-v20.11.1-win-arm64.zip",
+          "size": "27MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip"
+        }
+      }
+    }
+  },
+  "tiers": {
+    "core": {
+      "description": "Essential language servers for the most popular programming languages",
+      "servers": ["rust-analyzer", "pyright", "gopls", "typescript-language-server"]
+    },
+    "popular": {
+      "description": "Language servers for widely-used languages",
+      "servers": ["clangd", "eclipse-jdtls", "csharp-language-server", "bash-language-server", "intelephense", "terraform-ls"]
+    },
+    "extended": {
+      "description": "Language servers for specialized or emerging languages",
+      "servers": ["zls", "lua-language-server", "clojure-lsp", "nixd", "sourcekit-lsp", "erlang-ls"]
+    },
+    "full": {
+      "description": "Complete set including experimental and legacy language servers",
+      "servers": ["ruby-lsp", "solargraph", "omnisharp", "jedi-language-server", "vtsls", "kotlin-language-server", "r-language-server", "dart-language-server", "al-language-server"]
+    }
+  },
+  "languageServers": {
+    "rust-analyzer": {
+      "name": "rust-analyzer",
+      "description": "Official Rust language server providing IDE features",
+      "language": "rust",
+      "tier": "core",
+      "version": "2024-12-16",
+      "runtimeDependencies": ["rustc", "cargo"],
+      "installationMethod": "rustup-component",
+      "platforms": {
+        "win-x64": {
+          "url": "https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-16/rust-analyzer-x86_64-pc-windows-msvc.gz",
+          "size": "15MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "gunzip",
+          "binaryName": "rust-analyzer.exe",
+          "executableBits": false
+        },
+        "win-arm64": {
+          "url": "https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-16/rust-analyzer-aarch64-pc-windows-msvc.gz",
+          "size": "14MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "gunzip",
+          "binaryName": "rust-analyzer.exe",
+          "executableBits": false
+        }
+      },
+      "fallbackInstallation": {
+        "description": "Use rustup component if available, otherwise download binary",
+        "command": "rustup component add rust-analyzer",
+        "verifyCommand": "rust-analyzer --version"
+      },
+      "configuration": {
+        "serverCommand": ["rust-analyzer"],
+        "initializationOptions": {
+          "cargo": {
+            "buildScripts": {"enable": true},
+            "sysroot": "discover"
+          },
+          "procMacro": {"enable": true},
+          "diagnostics": {"enable": true}
+        }
+      }
+    },
+    "pyright": {
+      "name": "Pyright",
+      "description": "Microsoft's static type checker and language server for Python",
+      "language": "python",
+      "tier": "core",
+      "version": "1.1.388",
+      "runtimeDependencies": ["python", "npm"],
+      "installationMethod": "npm-package",
+      "platforms": {
+        "win-x64": {
+          "packageName": "pyright",
+          "packageVersion": "1.1.388",
+          "installCommand": ["npm", "install", "-g", "pyright@1.1.388"],
+          "verifyCommand": ["pyright", "--version"],
+          "size": "25MB"
+        },
+        "win-arm64": {
+          "packageName": "pyright",
+          "packageVersion": "1.1.388",
+          "installCommand": ["npm", "install", "-g", "pyright@1.1.388"],
+          "verifyCommand": ["pyright", "--version"],
+          "size": "25MB"
+        }
+      },
+      "configuration": {
+        "serverCommand": ["python", "-m", "pyright.langserver", "--stdio"],
+        "initializationOptions": {
+          "exclude": ["**/__pycache__", "**/.venv", "**/build", "**/dist"],
+          "reportMissingImports": "error"
+        }
+      }
+    },
+    "gopls": {
+      "name": "gopls",
+      "description": "Official Go language server",
+      "language": "go",
+      "tier": "core",
+      "version": "0.17.0",
+      "runtimeDependencies": ["go"],
+      "installationMethod": "go-install",
+      "platforms": {
+        "win-x64": {
+          "url": "https://github.com/golang/tools/releases/download/gopls/v0.17.0/gopls_v0.17.0_windows_amd64.zip",
+          "size": "12MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "binaryName": "gopls.exe",
+          "executableBits": false
+        },
+        "win-arm64": {
+          "url": "https://github.com/golang/tools/releases/download/gopls/v0.17.0/gopls_v0.17.0_windows_arm64.zip",
+          "size": "11MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "binaryName": "gopls.exe",
+          "executableBits": false
+        }
+      },
+      "fallbackInstallation": {
+        "description": "Install via go install if Go toolchain is available",
+        "command": "go install golang.org/x/tools/gopls@latest",
+        "verifyCommand": "gopls version"
+      },
+      "configuration": {
+        "serverCommand": ["gopls"],
+        "initializationOptions": {}
+      }
+    },
+    "typescript-language-server": {
+      "name": "TypeScript Language Server",
+      "description": "Language server for TypeScript and JavaScript",
+      "language": "typescript",
+      "tier": "core",
+      "version": "4.3.3",
+      "runtimeDependencies": ["nodejs", "npm"],
+      "installationMethod": "npm-local",
+      "platforms": {
+        "win-x64": {
+          "packages": [
+            {
+              "name": "typescript-language-server",
+              "version": "4.3.3",
+              "installCommand": ["npm", "install", "--prefix", "./", "typescript-language-server@4.3.3"],
+              "binaryPath": "node_modules/.bin/typescript-language-server.cmd"
+            },
+            {
+              "name": "typescript",
+              "version": "5.5.4",
+              "installCommand": ["npm", "install", "--prefix", "./", "typescript@5.5.4"],
+              "binaryPath": "node_modules/.bin/tsc.cmd"
+            }
+          ],
+          "size": "45MB",
+          "verifyCommand": ["typescript-language-server", "--version"]
+        },
+        "win-arm64": {
+          "packages": [
+            {
+              "name": "typescript-language-server",
+              "version": "4.3.3",
+              "installCommand": ["npm", "install", "--prefix", "./", "typescript-language-server@4.3.3"],
+              "binaryPath": "node_modules/.bin/typescript-language-server.cmd"
+            },
+            {
+              "name": "typescript",
+              "version": "5.5.4",
+              "installCommand": ["npm", "install", "--prefix", "./", "typescript@5.5.4"],
+              "binaryPath": "node_modules/.bin/tsc.cmd"
+            }
+          ],
+          "size": "45MB",
+          "verifyCommand": ["typescript-language-server", "--version"]
+        }
+      },
+      "configuration": {
+        "serverCommand": ["typescript-language-server", "--stdio"],
+        "initializationOptions": {}
+      }
+    },
+    "clangd": {
+      "name": "clangd",
+      "description": "LLVM-based language server for C/C++",
+      "language": "cpp",
+      "tier": "popular",
+      "version": "19.1.2",
+      "runtimeDependencies": [],
+      "installationMethod": "binary-download",
+      "platforms": {
+        "win-x64": {
+          "url": "https://github.com/clangd/clangd/releases/download/19.1.2/clangd-windows-19.1.2.zip",
+          "size": "65MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "binaryName": "clangd_19.1.2/bin/clangd.exe",
+          "executableBits": false
+        },
+        "win-arm64": {
+          "url": "https://github.com/clangd/clangd/releases/download/19.1.2/clangd-windows-19.1.2.zip",
+          "size": "65MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "binaryName": "clangd_19.1.2/bin/clangd.exe",
+          "executableBits": false,
+          "emulationNote": "Uses x64 binary with ARM64 emulation - no native ARM64 Windows build available"
+        }
+      },
+      "configuration": {
+        "serverCommand": ["clangd"],
+        "initializationOptions": {}
+      }
+    },
+    "eclipse-jdtls": {
+      "name": "Eclipse JDT Language Server",
+      "description": "Java language server based on Eclipse JDT",
+      "language": "java",
+      "tier": "popular",
+      "version": "1.42.0",
+      "runtimeDependencies": ["java21"],
+      "installationMethod": "vsix-download",
+      "platforms": {
+        "win-x64": {
+          "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-win32-x64-1.42.0-561.vsix",
+          "size": "95MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "jrePath": "extension/jre/21.0.7-win32-x86_64/bin/java.exe",
+          "lombokPath": "extension/lombok/lombok-1.18.36.jar",
+          "launcherJarPath": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+          "configPath": "extension/server/config_win"
+        },
+        "win-arm64": {
+          "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-win32-x64-1.42.0-561.vsix",
+          "size": "95MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "jrePath": "extension/jre/21.0.7-win32-x86_64/bin/java.exe",
+          "lombokPath": "extension/lombok/lombok-1.18.36.jar",
+          "launcherJarPath": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+          "configPath": "extension/server/config_win"
+        }
+      },
+      "additionalDependencies": {
+        "gradle": {
+          "version": "8.14.2",
+          "url": "https://services.gradle.org/distributions/gradle-8.14.2-bin.zip",
+          "size": "120MB",
+          "extractionMethod": "zip"
+        },
+        "intellicode": {
+          "version": "1.2.30",
+          "url": "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/VisualStudioExptTeam/vsextensions/vscodeintellicode/1.2.30/vspackage",
+          "size": "8MB",
+          "extractionMethod": "zip",
+          "jarPath": "extension/dist/com.microsoft.jdtls.intellicode.core-0.7.0.jar",
+          "membersPath": "extension/dist/bundledModels/java_intellisense-members"
+        }
+      },
+      "configuration": {
+        "serverCommand": ["java", "-jar", "launcher.jar", "-configuration", "config", "-data", "workspace"],
+        "jvmArgs": [
+          "--add-modules=ALL-SYSTEM",
+          "--add-opens", "java.base/java.util=ALL-UNNAMED",
+          "--add-opens", "java.base/java.lang=ALL-UNNAMED",
+          "-Xmx3G", "-Xms100m"
+        ]
+      }
+    },
+    "csharp-language-server": {
+      "name": "Microsoft C# Language Server",
+      "description": "Official Roslyn-based C# language server",
+      "language": "csharp",
+      "tier": "popular",
+      "version": "5.0.0-1.25329.6",
+      "runtimeDependencies": ["dotnet9"],
+      "installationMethod": "nuget-package",
+      "platforms": {
+        "win-x64": {
+          "packageName": "Microsoft.CodeAnalysis.LanguageServer.win-x64",
+          "packageVersion": "5.0.0-1.25329.6",
+          "feedUrl": "https://pkgs.dev.azure.com/azure-public/vside/_packaging/vs-impl/nuget/v3/index.json",
+          "size": "35MB",
+          "binaryName": "Microsoft.CodeAnalysis.LanguageServer.dll",
+          "extractPath": "content/LanguageServer/win-x64"
+        },
+        "win-arm64": {
+          "packageName": "Microsoft.CodeAnalysis.LanguageServer.win-arm64",
+          "packageVersion": "5.0.0-1.25329.6",
+          "feedUrl": "https://pkgs.dev.azure.com/azure-public/vside/_packaging/vs-impl/nuget/v3/index.json",
+          "size": "34MB",
+          "binaryName": "Microsoft.CodeAnalysis.LanguageServer.dll",
+          "extractPath": "content/LanguageServer/win-arm64"
+        }
+      },
+      "configuration": {
+        "serverCommand": ["dotnet", "Microsoft.CodeAnalysis.LanguageServer.dll", "--logLevel=Information", "--stdio"],
+        "initializationOptions": {}
+      }
+    },
+    "bash-language-server": {
+      "name": "Bash Language Server",
+      "description": "Language server for Bash scripting",
+      "language": "bash",
+      "tier": "popular",
+      "version": "5.6.0",
+      "runtimeDependencies": ["nodejs", "npm"],
+      "installationMethod": "npm-local",
+      "platforms": {
+        "win-x64": {
+          "packageName": "bash-language-server",
+          "packageVersion": "5.6.0",
+          "installCommand": ["npm", "install", "--prefix", "./", "bash-language-server@5.6.0"],
+          "binaryPath": "node_modules/.bin/bash-language-server.cmd",
+          "size": "15MB",
+          "verifyCommand": ["bash-language-server", "--version"]
+        },
+        "win-arm64": {
+          "packageName": "bash-language-server",
+          "packageVersion": "5.6.0",
+          "installCommand": ["npm", "install", "--prefix", "./", "bash-language-server@5.6.0"],
+          "binaryPath": "node_modules/.bin/bash-language-server.cmd",
+          "size": "15MB",
+          "verifyCommand": ["bash-language-server", "--version"]
+        }
+      },
+      "configuration": {
+        "serverCommand": ["bash-language-server", "start"],
+        "initializationOptions": {}
+      }
+    },
+    "intelephense": {
+      "name": "Intelephense",
+      "description": "PHP language server with advanced IntelliSense",
+      "language": "php",
+      "tier": "popular",
+      "version": "1.14.4",
+      "runtimeDependencies": ["nodejs", "npm"],
+      "installationMethod": "npm-local",
+      "platforms": {
+        "win-x64": {
+          "packageName": "intelephense",
+          "packageVersion": "1.14.4",
+          "installCommand": ["npm", "install", "--prefix", "./", "intelephense@1.14.4"],
+          "binaryPath": "node_modules/.bin/intelephense.cmd",
+          "size": "22MB",
+          "verifyCommand": ["intelephense", "--version"]
+        },
+        "win-arm64": {
+          "packageName": "intelephense",
+          "packageVersion": "1.14.4",
+          "installCommand": ["npm", "install", "--prefix", "./", "intelephense@1.14.4"],
+          "binaryPath": "node_modules/.bin/intelephense.cmd",
+          "size": "22MB",
+          "verifyCommand": ["intelephense", "--version"]
+        }
+      },
+      "configuration": {
+        "serverCommand": ["intelephense", "--stdio"],
+        "initializationOptions": {
+          "licenceKey": "${INTELEPHENSE_LICENSE_KEY}"
+        }
+      }
+    },
+    "terraform-ls": {
+      "name": "Terraform Language Server",
+      "description": "Official HashiCorp Terraform language server",
+      "language": "terraform",
+      "tier": "popular",
+      "version": "0.36.5",
+      "runtimeDependencies": ["terraform"],
+      "installationMethod": "binary-download",
+      "platforms": {
+        "win-x64": {
+          "url": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_windows_amd64.zip",
+          "size": "18MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "binaryName": "terraform-ls.exe",
+          "executableBits": false
+        },
+        "win-arm64": {
+          "url": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_windows_arm64.zip",
+          "size": "18MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "binaryName": "terraform-ls.exe",
+          "executableBits": false
+        }
+      },
+      "configuration": {
+        "serverCommand": ["terraform-ls", "serve"],
+        "initializationOptions": {}
+      }
+    },
+    "zls": {
+      "name": "Zig Language Server",
+      "description": "Language server for the Zig programming language",
+      "language": "zig",
+      "tier": "extended",
+      "version": "0.13.0",
+      "runtimeDependencies": ["zig"],
+      "installationMethod": "binary-download",
+      "platforms": {
+        "win-x64": {
+          "url": "https://github.com/zigtools/zls/releases/download/0.13.0/zls-x86_64-windows.zip",
+          "size": "8MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "binaryName": "zls.exe",
+          "executableBits": false
+        },
+        "win-arm64": {
+          "url": "https://github.com/zigtools/zls/releases/download/0.13.0/zls-aarch64-windows.zip",
+          "size": "8MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "binaryName": "zls.exe",
+          "executableBits": false
+        }
+      },
+      "configuration": {
+        "serverCommand": ["zls"],
+        "initializationOptions": {
+          "zig_exe_path": "zig.exe",
+          "enable_build_on_save": true,
+          "semantic_tokens": "full"
+        }
+      },
+      "limitations": {
+        "windows": "Cross-file references may not work reliably on Windows"
+      }
+    },
+    "lua-language-server": {
+      "name": "Lua Language Server",
+      "description": "Feature-rich language server for Lua",
+      "language": "lua",
+      "tier": "extended",
+      "version": "3.15.0",
+      "runtimeDependencies": [],
+      "installationMethod": "binary-download",
+      "platforms": {
+        "win-x64": {
+          "url": "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-win32-x64.zip",
+          "size": "25MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "binaryName": "bin/lua-language-server.exe",
+          "executableBits": false
+        },
+        "win-arm64": {
+          "url": "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-win32-x64.zip",
+          "size": "25MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "binaryName": "bin/lua-language-server.exe",
+          "executableBits": false,
+          "emulationNote": "Uses x64 binary with ARM64 emulation - no native ARM64 Windows build available"
+        }
+      },
+      "configuration": {
+        "serverCommand": ["lua-language-server"],
+        "initializationOptions": {
+          "runtime": {"version": "Lua 5.4"},
+          "diagnostics": {"enable": true},
+          "telemetry": {"enable": false}
+        }
+      }
+    },
+    "clojure-lsp": {
+      "name": "clojure-lsp",
+      "description": "Language server for Clojure and ClojureScript",
+      "language": "clojure",
+      "tier": "extended",
+      "version": "2024.11.25-13.12.12",
+      "runtimeDependencies": ["clojure"],
+      "installationMethod": "binary-download",
+      "platforms": {
+        "win-x64": {
+          "url": "https://github.com/clojure-lsp/clojure-lsp/releases/latest/download/clojure-lsp-native-windows-amd64.zip",
+          "size": "45MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "binaryName": "clojure-lsp.exe",
+          "executableBits": false
+        },
+        "win-arm64": {
+          "url": "https://github.com/clojure-lsp/clojure-lsp/releases/latest/download/clojure-lsp-native-windows-amd64.zip",
+          "size": "45MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "binaryName": "clojure-lsp.exe",
+          "executableBits": false,
+          "emulationNote": "Uses x64 binary with ARM64 emulation - no native ARM64 Windows build available"
+        }
+      },
+      "configuration": {
+        "serverCommand": ["clojure-lsp"],
+        "initializationOptions": {
+          "dependency-scheme": "jar",
+          "text-document-sync-kind": "incremental"
+        }
+      }
+    },
+    "nixd": {
+      "name": "nixd",
+      "description": "Language server for the Nix expression language",
+      "language": "nix",
+      "tier": "extended",
+      "version": "2.3.0",
+      "runtimeDependencies": ["nix"],
+      "installationMethod": "manual-install",
+      "platforms": {
+        "win-x64": {
+          "installation": "manual",
+          "description": "Nix and nixd are not officially supported on Windows. Consider using WSL2.",
+          "alternativeApproach": "WSL2 with Linux binaries"
+        },
+        "win-arm64": {
+          "installation": "manual",
+          "description": "Nix and nixd are not officially supported on Windows. Consider using WSL2.",
+          "alternativeApproach": "WSL2 with Linux binaries"
+        }
+      },
+      "configuration": {
+        "serverCommand": ["nixd"],
+        "initializationOptions": {}
+      }
+    },
+    "sourcekit-lsp": {
+      "name": "SourceKit-LSP",
+      "description": "Apple's official language server for Swift",
+      "language": "swift",
+      "tier": "extended",
+      "version": "6.0.2",
+      "runtimeDependencies": ["swift-toolchain"],
+      "installationMethod": "toolchain-included",
+      "platforms": {
+        "win-x64": {
+          "installation": "toolchain",
+          "description": "SourceKit-LSP comes with Swift toolchain for Windows",
+          "toolchainUrl": "https://www.swift.org/install/windows/",
+          "size": "800MB"
+        },
+        "win-arm64": {
+          "installation": "not-supported",
+          "description": "Swift toolchain for Windows ARM64 is not yet available",
+          "status": "unsupported"
+        }
+      },
+      "configuration": {
+        "serverCommand": ["sourcekit-lsp"],
+        "initializationOptions": {
+          "backgroundIndexing": true
+        }
+      }
+    },
+    "erlang-ls": {
+      "name": "Erlang LS",
+      "description": "Language server for Erlang",
+      "language": "erlang",
+      "tier": "extended",
+      "version": "1.0.0",
+      "runtimeDependencies": ["erlang-otp"],
+      "installationMethod": "manual-install",
+      "platforms": {
+        "win-x64": {
+          "installation": "manual",
+          "description": "Erlang LS requires manual compilation with Erlang/OTP",
+          "repositoryUrl": "https://github.com/erlang-ls/erlang_ls",
+          "buildCommand": "rebar3 escriptize"
+        },
+        "win-arm64": {
+          "installation": "manual",
+          "description": "Erlang LS requires manual compilation with Erlang/OTP",
+          "repositoryUrl": "https://github.com/erlang-ls/erlang_ls",
+          "buildCommand": "rebar3 escriptize"
+        }
+      },
+      "configuration": {
+        "serverCommand": ["erlang_ls", "--transport", "stdio"],
+        "initializationOptions": {}
+      }
+    },
+    "ruby-lsp": {
+      "name": "Ruby LSP",
+      "description": "Modern language server for Ruby",
+      "language": "ruby",
+      "tier": "full",
+      "version": "0.20.0",
+      "runtimeDependencies": ["ruby", "bundler"],
+      "installationMethod": "gem-install",
+      "platforms": {
+        "win-x64": {
+          "packageName": "ruby-lsp",
+          "packageVersion": "0.20.0",
+          "installCommand": ["gem", "install", "ruby-lsp", "--version", "0.20.0"],
+          "size": "12MB",
+          "verifyCommand": ["ruby-lsp", "--version"]
+        },
+        "win-arm64": {
+          "packageName": "ruby-lsp",
+          "packageVersion": "0.20.0",
+          "installCommand": ["gem", "install", "ruby-lsp", "--version", "0.20.0"],
+          "size": "12MB",
+          "verifyCommand": ["ruby-lsp", "--version"]
+        }
+      },
+      "configuration": {
+        "serverCommand": ["ruby-lsp"],
+        "initializationOptions": {}
+      }
+    },
+    "solargraph": {
+      "name": "Solargraph",
+      "description": "Legacy Ruby language server (experimental)",
+      "language": "ruby",
+      "tier": "full",
+      "version": "0.50.0",
+      "runtimeDependencies": ["ruby", "bundler"],
+      "installationMethod": "gem-install",
+      "status": "experimental",
+      "platforms": {
+        "win-x64": {
+          "packageName": "solargraph",
+          "packageVersion": "0.50.0",
+          "installCommand": ["gem", "install", "solargraph", "--version", "0.50.0"],
+          "size": "8MB",
+          "verifyCommand": ["solargraph", "--version"]
+        },
+        "win-arm64": {
+          "packageName": "solargraph",
+          "packageVersion": "0.50.0",
+          "installCommand": ["gem", "install", "solargraph", "--version", "0.50.0"],
+          "size": "8MB",
+          "verifyCommand": ["solargraph", "--version"]
+        }
+      },
+      "configuration": {
+        "serverCommand": ["solargraph", "stdio"],
+        "initializationOptions": {}
+      }
+    },
+    "omnisharp": {
+      "name": "OmniSharp",
+      "description": "Legacy C# language server (experimental)",
+      "language": "csharp",
+      "tier": "full",
+      "version": "1.39.12",
+      "runtimeDependencies": ["dotnet6"],
+      "installationMethod": "binary-download",
+      "status": "experimental",
+      "platforms": {
+        "win-x64": {
+          "url": "https://github.com/OmniSharp/omnisharp-roslyn/releases/download/v1.39.12/omnisharp-win-x64.zip",
+          "size": "55MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "binaryName": "OmniSharp.exe",
+          "executableBits": false
+        },
+        "win-arm64": {
+          "url": "https://github.com/OmniSharp/omnisharp-roslyn/releases/download/v1.39.12/omnisharp-win-x64.zip",
+          "size": "55MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "binaryName": "OmniSharp.exe",
+          "executableBits": false
+        }
+      },
+      "configuration": {
+        "serverCommand": ["OmniSharp.exe", "-lsp", "--encoding", "ascii"],
+        "initializationOptions": {}
+      }
+    },
+    "jedi-language-server": {
+      "name": "Jedi Language Server",
+      "description": "Alternative Python language server using Jedi (experimental)",
+      "language": "python",
+      "tier": "full",
+      "version": "0.42.0",
+      "runtimeDependencies": ["python", "pip"],
+      "installationMethod": "pip-install",
+      "status": "experimental",
+      "platforms": {
+        "win-x64": {
+          "packageName": "jedi-language-server",
+          "packageVersion": "0.42.0",
+          "installCommand": ["pip", "install", "jedi-language-server==0.42.0"],
+          "size": "5MB",
+          "verifyCommand": ["jedi-language-server", "--version"]
+        },
+        "win-arm64": {
+          "packageName": "jedi-language-server",
+          "packageVersion": "0.42.0",
+          "installCommand": ["pip", "install", "jedi-language-server==0.42.0"],
+          "size": "5MB",
+          "verifyCommand": ["jedi-language-server", "--version"]
+        }
+      },
+      "configuration": {
+        "serverCommand": ["jedi-language-server"],
+        "initializationOptions": {}
+      }
+    },
+    "vtsls": {
+      "name": "vtsls",
+      "description": "TypeScript language server via VSCode extension (experimental)",
+      "language": "typescript",
+      "tier": "full",
+      "version": "0.2.6",
+      "runtimeDependencies": ["nodejs", "npm"],
+      "installationMethod": "npm-local",
+      "status": "experimental",
+      "platforms": {
+        "win-x64": {
+          "packageName": "@vtsls/language-server",
+          "packageVersion": "0.2.6",
+          "installCommand": ["npm", "install", "--prefix", "./", "@vtsls/language-server@0.2.6"],
+          "binaryPath": "node_modules/.bin/vtsls.cmd",
+          "size": "35MB",
+          "verifyCommand": ["vtsls", "--version"]
+        },
+        "win-arm64": {
+          "packageName": "@vtsls/language-server",
+          "packageVersion": "0.2.6",
+          "installCommand": ["npm", "install", "--prefix", "./", "@vtsls/language-server@0.2.6"],
+          "binaryPath": "node_modules/.bin/vtsls.cmd",
+          "size": "35MB",
+          "verifyCommand": ["vtsls", "--version"]
+        }
+      },
+      "configuration": {
+        "serverCommand": ["vtsls", "--stdio"],
+        "initializationOptions": {}
+      }
+    },
+    "kotlin-language-server": {
+      "name": "Kotlin Language Server",
+      "description": "Language server for Kotlin programming language",
+      "language": "kotlin",
+      "tier": "full",
+      "version": "1.3.12",
+      "runtimeDependencies": ["java17"],
+      "installationMethod": "binary-download",
+      "platforms": {
+        "win-x64": {
+          "url": "https://github.com/fwcd/kotlin-language-server/releases/download/1.3.12/server.zip",
+          "size": "85MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "binaryName": "server/bin/kotlin-language-server.bat",
+          "executableBits": false
+        },
+        "win-arm64": {
+          "url": "https://github.com/fwcd/kotlin-language-server/releases/download/1.3.12/server.zip",
+          "size": "85MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "binaryName": "server/bin/kotlin-language-server.bat",
+          "executableBits": false
+        }
+      },
+      "configuration": {
+        "serverCommand": ["kotlin-language-server.bat"],
+        "initializationOptions": {}
+      }
+    },
+    "r-language-server": {
+      "name": "R Language Server",
+      "description": "Language server for R statistical programming language",
+      "language": "r",
+      "tier": "full",
+      "version": "0.3.16",
+      "runtimeDependencies": ["r"],
+      "installationMethod": "r-package",
+      "platforms": {
+        "win-x64": {
+          "packageName": "languageserver",
+          "packageVersion": "0.3.16",
+          "installCommand": ["R", "-e", "install.packages('languageserver', repos='https://cloud.r-project.org')"],
+          "size": "15MB",
+          "verifyCommand": ["R", "-e", "packageVersion('languageserver')"]
+        },
+        "win-arm64": {
+          "packageName": "languageserver",
+          "packageVersion": "0.3.16",
+          "installCommand": ["R", "-e", "install.packages('languageserver', repos='https://cloud.r-project.org')"],
+          "size": "15MB",
+          "verifyCommand": ["R", "-e", "packageVersion('languageserver')"]
+        }
+      },
+      "configuration": {
+        "serverCommand": ["R", "--slave", "-e", "languageserver::run()"],
+        "initializationOptions": {}
+      }
+    },
+    "dart-language-server": {
+      "name": "Dart Language Server",
+      "description": "Language server for Dart programming language",
+      "language": "dart",
+      "tier": "full",
+      "version": "3.6.0",
+      "runtimeDependencies": ["dart-sdk"],
+      "installationMethod": "sdk-included",
+      "platforms": {
+        "win-x64": {
+          "installation": "sdk",
+          "description": "Dart language server comes with the Dart SDK",
+          "sdkUrl": "https://dart.dev/get-dart",
+          "binaryName": "dart.exe",
+          "size": "200MB"
+        },
+        "win-arm64": {
+          "installation": "sdk",
+          "description": "Dart language server comes with the Dart SDK",
+          "sdkUrl": "https://dart.dev/get-dart",
+          "binaryName": "dart.exe",
+          "size": "200MB"
+        }
+      },
+      "configuration": {
+        "serverCommand": ["dart", "language-server", "--protocol=lsp"],
+        "initializationOptions": {}
+      }
+    },
+    "al-language-server": {
+      "name": "AL Language Server",
+      "description": "Language server for Microsoft AL (Business Central)",
+      "language": "al",
+      "tier": "full",
+      "version": "14.0.0",
+      "runtimeDependencies": ["alc"],
+      "installationMethod": "vsix-download",
+      "platforms": {
+        "win-x64": {
+          "url": "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/ms-dynamics-smb/vsextensions/al/14.0.851618/vspackage",
+          "size": "150MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "binaryPath": "extension/bin/win32/alc.exe",
+          "configPath": "extension/al.json"
+        },
+        "win-arm64": {
+          "url": "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/ms-dynamics-smb/vsextensions/al/14.0.851618/vspackage",
+          "size": "150MB",
+          "checksumType": "sha256",
+          "checksum": "TBD",
+          "extractionMethod": "zip",
+          "binaryPath": "extension/bin/win32/alc.exe",
+          "configPath": "extension/al.json"
+        }
+      },
+      "configuration": {
+        "serverCommand": ["alc.exe", "/languageserver"],
+        "initializationOptions": {}
+      }
+    }
+  },
+  "installationScripts": {
+    "windows": {
+      "powershell": {
+        "downloadScript": "scripts/windows/download-language-servers.ps1",
+        "installScript": "scripts/windows/install-language-servers.ps1",
+        "verifyScript": "scripts/windows/verify-language-servers.ps1"
+      },
+      "batch": {
+        "downloadScript": "scripts/windows/download-language-servers.bat",
+        "installScript": "scripts/windows/install-language-servers.bat",
+        "verifyScript": "scripts/windows/verify-language-servers.bat"
+      }
+    }
+  },
+  "fallbackUrls": {
+    "github-releases-mirror": "https://github.com/serena-ai/language-servers-mirror/releases/",
+    "cdn-mirror": "https://cdn.serena.ai/language-servers/",
+    "backup-registry": "https://backup.serena.ai/registry/"
+  },
+  "arm64Support": {
+    "nativeSupport": {
+      "description": "Language servers with native Windows ARM64 binaries",
+      "servers": [
+        "rust-analyzer", "pyright", "gopls", "typescript-language-server", 
+        "csharp-language-server", "bash-language-server", "intelephense",
+        "terraform-ls", "zls", "ruby-lsp", "solargraph", "jedi-language-server", 
+        "vtsls", "kotlin-language-server", "r-language-server", "dart-language-server"
+      ],
+      "count": 16
+    },
+    "emulationRequired": {
+      "description": "Language servers using x64 binaries with ARM64 emulation",
+      "servers": [
+        {"name": "clangd", "reason": "LLVM clangd releases only provide x64 Windows binaries"},
+        {"name": "eclipse-jdtls", "reason": "Java extension VSIX includes x64 JRE runtime"},
+        {"name": "lua-language-server", "reason": "No native ARM64 Windows builds available (only macOS/Linux)"},
+        {"name": "clojure-lsp", "reason": "Native compilation only provides amd64 Windows builds"},
+        {"name": "omnisharp", "reason": "Legacy server only provides x64 Windows binaries"}
+      ],
+      "count": 5
+    },
+    "unsupported": {
+      "description": "Language servers requiring manual installation or SDK toolchains",
+      "servers": [
+        {"name": "nixd", "reason": "Nix ecosystem not officially supported on Windows"},
+        {"name": "sourcekit-lsp", "reason": "Swift toolchain for ARM64 Windows not available"},
+        {"name": "erlang-ls", "reason": "Requires manual compilation with Erlang/OTP"}
+      ],
+      "count": 3
+    },
+    "emulationPerformance": {
+      "description": "ARM64 emulation performance notes",
+      "notes": [
+        "Windows 11 ARM64 provides excellent x64 emulation with minimal performance impact",
+        "Language servers using emulation typically add 5-10% CPU overhead",
+        "Binary tools (rust-analyzer, gopls, clangd) perform better than JVM-based servers",
+        "Most users will not notice performance differences in typical development workflows"
+      ]
+    }
+  },
+  "metadata": {
+    "totalServers": 28,
+    "supportedLanguages": 22,
+    "totalDownloadSize": "1.2GB",
+    "estimatedInstallTime": "10-15 minutes",
+    "lastTested": "2025-01-16",
+    "compatibleWith": ["Windows 10", "Windows 11", "Windows Server 2019", "Windows Server 2022"],
+    "arm64Compatibility": "Fully supported with native binaries (16 servers) and x64 emulation (5 servers)"
+  }
+}

@@ -1,0 +1,324 @@
+# GitHub Actions workflow for automated releases
+# This workflow is triggered when a tag matching v*.*.* is pushed
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.0.0)'
+        required: true
+        type: string
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # Validate the release before publishing
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      
+    - name: Get version from tag or input
+      id: get_version
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION="${GITHUB_REF#refs/tags/v}"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
+        
+    - name: Verify version in pyproject.toml
+      run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
+        if ! grep -q "version = \"$VERSION\"" pyproject.toml; then
+          echo "❌ Version $VERSION not found in pyproject.toml"
+          echo "Current version in pyproject.toml:"
+          grep "version = " pyproject.toml
+          exit 1
+        fi
+        echo "✅ Version $VERSION verified in pyproject.toml"
+        
+    - name: Install dependencies
+      run: uv sync --dev
+      
+    - name: Run quality checks
+      run: |
+        echo "🔍 Running code formatting checks..."
+        uv run poe _black_check
+        uv run poe _ruff_check
+        
+        echo "🔍 Running type checks..."
+        uv run poe type-check
+        
+        echo "🧪 Running tests..."
+        uv run poe test
+
+  # Build distribution packages
+  build:
+    name: Build Distribution
+    runs-on: ubuntu-latest
+    needs: validate
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      
+    - name: Build distribution
+      run: |
+        echo "🏗️ Building distribution packages..."
+        uv build --out-dir dist/
+        
+    - name: Generate checksums
+      run: |
+        echo "🔐 Generating checksums..."
+        cd dist/
+        sha256sum *.whl *.tar.gz > checksums.txt
+        echo "Generated checksums:"
+        cat checksums.txt
+        
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: distribution-packages
+        path: dist/
+        retention-days: 30
+
+  # Test installation on multiple platforms
+  test-install:
+    name: Test Installation
+    runs-on: ${{ matrix.os }}
+    needs: build
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        
+    steps:
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: distribution-packages
+        path: dist/
+        
+    - name: Test wheel installation
+      run: |
+        echo "🧪 Testing wheel installation on ${{ matrix.os }}..."
+        python -m pip install --find-links dist/ serena-agent==${{ needs.validate.outputs.version }}
+        
+    - name: Test CLI functionality
+      run: |
+        echo "🧪 Testing CLI functionality..."
+        serena --version
+        serena --help
+
+  # Create GitHub release
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate, build, test-install]
+    permissions:
+      contents: write
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: distribution-packages
+        path: dist/
+        
+    - name: Prepare release assets
+      run: |
+        echo "📦 Preparing release assets..."
+        mkdir -p assets/
+        
+        # Copy important files
+        cp README.md LICENSE CHANGELOG.md CONTRIBUTING.md assets/ || true
+        
+        # Create version info
+        cat > assets/version-info.json << EOF
+        {
+          "version": "${{ needs.validate.outputs.version }}",
+          "build_date": "$(date -Iseconds)",
+          "git_commit": "${{ github.sha }}",
+          "git_tag": "${{ github.ref_name }}",
+          "workflow_run": "${{ github.run_id }}",
+          "python_version": "${{ env.PYTHON_VERSION }}"
+        }
+        EOF
+        
+        echo "Release assets prepared:"
+        ls -la assets/
+        ls -la dist/
+        
+    - name: Extract changelog for version
+      id: changelog
+      run: |
+        VERSION="${{ needs.validate.outputs.version }}"
+        echo "📝 Extracting changelog for version $VERSION..."
+        
+        # Extract changelog section for this version
+        awk "/^# $VERSION/,/^# [0-9]/ { if (/^# [0-9]/ && !/^# $VERSION/) exit; print }" CHANGELOG.md > version_changelog.md || true
+        
+        # If no specific version section found, use recent changes
+        if [[ ! -s version_changelog.md ]]; then
+          echo "Using recent changes from changelog..."
+          head -50 CHANGELOG.md > version_changelog.md
+        fi
+        
+        # Set multiline output
+        {
+          echo 'changelog<<EOF'
+          cat version_changelog.md
+          echo EOF
+        } >> $GITHUB_OUTPUT
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ needs.validate.outputs.version }}
+        name: Serena v${{ needs.validate.outputs.version }}
+        body: |
+          # Serena v${{ needs.validate.outputs.version }}
+          
+          ${{ steps.changelog.outputs.changelog }}
+          
+          ## Installation
+          
+          ```bash
+          pip install serena-agent==${{ needs.validate.outputs.version }}
+          ```
+          
+          ## Verification
+          
+          Verify your download using the checksums:
+          
+          ```bash
+          # Download checksums.txt and verify
+          sha256sum -c checksums.txt
+          ```
+          
+          **Full Changelog**: https://github.com/oraios/serena/compare/v${{ github.event.before }}...v${{ needs.validate.outputs.version }}
+          
+        files: |
+          dist/*
+          assets/*
+        draft: false
+        prerelease: ${{ contains(needs.validate.outputs.version, '-') }}
+        generate_release_notes: true
+
+  # Optional: Publish to PyPI
+  publish-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: [validate, build, test-install, release]
+    if: github.repository == 'oraios/serena' && !contains(needs.validate.outputs.version, '-')
+    environment:
+      name: pypi
+      url: https://pypi.org/project/serena-agent/
+    permissions:
+      id-token: write  # For trusted publishing
+      
+    steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: distribution-packages
+        path: dist/
+        
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        verbose: true
+        print-hash: true
+
+  # Optional: Publish to TestPyPI for pre-releases
+  publish-test-pypi:
+    name: Publish to TestPyPI
+    runs-on: ubuntu-latest
+    needs: [validate, build, test-install]
+    if: contains(needs.validate.outputs.version, '-')
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/serena-agent/
+    permissions:
+      id-token: write  # For trusted publishing
+      
+    steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: distribution-packages
+        path: dist/
+        
+    - name: Publish to TestPyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/
+        verbose: true
+        print-hash: true
+
+  # Notify on completion
+  notify:
+    name: Notify Release Completion
+    runs-on: ubuntu-latest
+    needs: [validate, build, test-install, release]
+    if: always()
+    
+    steps:
+    - name: Release Summary
+      run: |
+        echo "🎉 Release workflow completed!"
+        echo "Version: ${{ needs.validate.outputs.version }}"
+        echo "Status: ${{ job.status }}"
+        echo ""
+        echo "Jobs status:"
+        echo "- Validate: ${{ needs.validate.result }}"
+        echo "- Build: ${{ needs.build.result }}"
+        echo "- Test Install: ${{ needs.test-install.result }}"
+        echo "- Release: ${{ needs.release.result }}"
+        
+        if [[ "${{ needs.release.result }}" == "success" ]]; then
+          echo ""
+          echo "✅ Release v${{ needs.validate.outputs.version }} created successfully!"
+          echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/v${{ needs.validate.outputs.version }}"
+        fi

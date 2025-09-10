@@ -1,0 +1,645 @@
+name: Build Windows Portable Serena
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_tier:
+        description: 'Bundle tier selection'
+        required: true
+        default: 'essential'
+        type: choice
+        options:
+          - 'minimal'
+          - 'essential'
+          - 'complete'
+          - 'full'
+      architecture:
+        description: 'Target architecture'
+        required: true
+        default: 'x64'
+        type: choice
+        options:
+          - 'x64'
+          - 'arm64'
+          - 'both'
+      pyinstaller_debug:
+        description: 'Enable PyInstaller debug mode'
+        required: false
+        default: false
+        type: boolean
+  release:
+    types: [created]
+
+env:
+  PYTHON_VERSION: "3.11"
+  UV_VERSION: "latest"
+
+concurrency:
+  group: windows-portable-${{ github.workflow }}-${{ github.ref }}-${{ inputs.bundle_tier || 'release' }}-${{ inputs.architecture || 'x64' }}
+  cancel-in-progress: true
+
+jobs:
+  build-portable:
+    name: Build Portable (${{ matrix.arch }}, ${{ matrix.bundle_tier }})
+    runs-on: windows-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: ${{ fromJson(inputs.architecture == 'both' && '["x64", "arm64"]' || format('["{0}"]', inputs.architecture || 'x64')) }}
+        bundle_tier: ${{ fromJson(format('["{0}"]', inputs.bundle_tier || 'essential')) }}
+    
+    permissions:
+      contents: write
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: ${{ matrix.arch }}
+
+      - name: Install UV package manager
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      # Cache strategy for dependencies
+      - name: Cache UV dependencies
+        id: cache-uv-deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            .venv
+            ~/.cache/uv
+          key: uv-windows-${{ matrix.arch }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('uv.lock', 'pyproject.toml') }}
+          restore-keys: |
+            uv-windows-${{ matrix.arch }}-${{ env.PYTHON_VERSION }}-
+
+      # Prepare environment directories
+      - name: Prepare build environment
+        shell: powershell
+        run: |
+          # Create necessary directories
+          New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.serena\language_servers\static"
+          New-Item -ItemType Directory -Force -Path "build\language_servers"
+          New-Item -ItemType Directory -Force -Path "dist"
+          
+          # Set environment variables for portable build
+          echo "SERENA_PORTABLE_BUILD=1" >> $env:GITHUB_ENV
+          echo "SERENA_BUNDLE_TIER=${{ matrix.bundle_tier }}" >> $env:GITHUB_ENV
+          echo "SERENA_ARCH=${{ matrix.arch }}" >> $env:GITHUB_ENV
+
+      # Cache language servers separately for better reuse
+      - name: Cache Language Servers
+        id: cache-language-servers
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.serena/language_servers
+            build/language_servers
+          key: language-servers-windows-${{ matrix.arch }}-${{ matrix.bundle_tier }}-v2
+          restore-keys: |
+            language-servers-windows-${{ matrix.arch }}-
+            language-servers-windows-
+
+      # Set up virtual environment
+      - name: Create virtual environment
+        if: steps.cache-uv-deps.outputs.cache-hit != 'true'
+        shell: powershell
+        run: |
+          uv venv --python ${{ env.PYTHON_VERSION }}
+
+      # Install dependencies with PyInstaller
+      - name: Install dependencies
+        shell: powershell
+        run: |
+          # Install core dependencies
+          uv pip install -e ".[dev]"
+          
+          # Install PyInstaller for building
+          uv pip install pyinstaller[encryption]==6.11.1
+          
+          # Install additional dependencies for Windows portable build
+          uv pip install pywin32 pywin32-ctypes
+
+      # Download and setup language servers based on bundle tier
+      - name: Download Essential Language Servers
+        if: matrix.bundle_tier == 'essential' || matrix.bundle_tier == 'complete' || matrix.bundle_tier == 'full'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = "SilentlyContinue"
+          
+          Write-Host "Downloading essential language servers for ${{ matrix.arch }}..."
+          
+          # Define language servers for essential tier
+          $servers = @{
+            "pyright" = @{
+              "url" = "https://registry.npmjs.org/pyright/-/pyright-1.1.396.tgz"
+              "type" = "npm"
+            }
+            "typescript" = @{
+              "url" = "https://registry.npmjs.org/typescript-language-server/-/typescript-language-server-4.3.3.tgz"
+              "type" = "npm"
+            }
+            "rust-analyzer" = @{
+              "url" = "https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-16/rust-analyzer-x86_64-pc-windows-msvc.zip"
+              "url_arm64" = "https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-16/rust-analyzer-aarch64-pc-windows-msvc.zip"
+              "type" = "zip"
+            }
+            "gopls" = @{
+              "url" = "https://github.com/golang/tools/releases/download/gopls/v0.18.0/gopls-windows-amd64.zip"
+              "url_arm64" = "https://github.com/golang/tools/releases/download/gopls/v0.18.0/gopls-windows-arm64.zip"
+              "type" = "zip"
+            }
+          }
+          
+          $targetDir = "build/language_servers"
+          
+          foreach ($server in $servers.GetEnumerator()) {
+            $serverName = $server.Key
+            $serverInfo = $server.Value
+            $serverDir = Join-Path $targetDir $serverName
+            
+            if (!(Test-Path $serverDir)) {
+              New-Item -ItemType Directory -Force -Path $serverDir
+              
+              # Select appropriate URL for architecture
+              $downloadUrl = $serverInfo.url
+              if (${{ matrix.arch }} -eq "arm64" -and $serverInfo.ContainsKey("url_arm64")) {
+                $downloadUrl = $serverInfo.url_arm64
+              }
+              
+              Write-Host "Downloading $serverName from $downloadUrl"
+              
+              try {
+                $tempFile = [System.IO.Path]::GetTempFileName()
+                Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFile -UseBasicParsing
+                
+                if ($serverInfo.type -eq "zip") {
+                  Expand-Archive -Path $tempFile -DestinationPath $serverDir -Force
+                } elseif ($serverInfo.type -eq "npm") {
+                  # Extract npm tarball
+                  tar -xzf $tempFile -C $serverDir --strip-components=1
+                }
+                
+                Remove-Item $tempFile -Force
+                Write-Host "Successfully downloaded $serverName"
+              } catch {
+                Write-Warning "Failed to download $serverName : $($_.Exception.Message)"
+              }
+            } else {
+              Write-Host "Using cached $serverName"
+            }
+          }
+
+      - name: Download Complete Language Server Bundle
+        if: matrix.bundle_tier == 'complete' || matrix.bundle_tier == 'full'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = "SilentlyContinue"
+          
+          Write-Host "Downloading complete language server bundle..."
+          
+          # Additional servers for complete tier
+          $additionalServers = @{
+            "java" = @{
+              "url" = "https://download.eclipse.org/jdtls/milestones/1.41.0/jdt-language-server-1.41.0-202412191307.tar.gz"
+              "type" = "tar"
+            }
+            "omnisharp" = @{
+              "url" = "https://roslynomnisharp.blob.core.windows.net/releases/1.39.10/omnisharp-win-x64-1.39.10.zip"
+              "url_arm64" = "https://roslynomnisharp.blob.core.windows.net/releases/1.39.10/omnisharp-win-arm64-1.39.10.zip"
+              "type" = "zip"
+            }
+            "lua-ls" = @{
+              "url" = "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-win32-x64.zip"
+              "type" = "zip"
+            }
+            "bash-ls" = @{
+              "url" = "https://registry.npmjs.org/bash-language-server/-/bash-language-server-5.4.0.tgz"
+              "type" = "npm"
+            }
+          }
+          
+          $targetDir = "build/language_servers"
+          
+          foreach ($server in $additionalServers.GetEnumerator()) {
+            $serverName = $server.Key
+            $serverInfo = $server.Value
+            $serverDir = Join-Path $targetDir $serverName
+            
+            if (!(Test-Path $serverDir)) {
+              New-Item -ItemType Directory -Force -Path $serverDir
+              
+              # Select appropriate URL for architecture  
+              $downloadUrl = $serverInfo.url
+              if (${{ matrix.arch }} -eq "arm64" -and $serverInfo.ContainsKey("url_arm64")) {
+                $downloadUrl = $serverInfo.url_arm64
+              }
+              
+              Write-Host "Downloading $serverName from $downloadUrl"
+              
+              try {
+                $tempFile = [System.IO.Path]::GetTempFileName()
+                Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFile -UseBasicParsing
+                
+                if ($serverInfo.type -eq "zip") {
+                  Expand-Archive -Path $tempFile -DestinationPath $serverDir -Force
+                } elseif ($serverInfo.type -eq "tar") {
+                  tar -xzf $tempFile -C $serverDir
+                } elseif ($serverInfo.type -eq "npm") {
+                  tar -xzf $tempFile -C $serverDir --strip-components=1
+                }
+                
+                Remove-Item $tempFile -Force
+                Write-Host "Successfully downloaded $serverName"
+              } catch {
+                Write-Warning "Failed to download $serverName : $($_.Exception.Message)"
+              }
+            } else {
+              Write-Host "Using cached $serverName"
+            }
+          }
+
+      # Run quality checks
+      - name: Run code formatting check
+        shell: powershell
+        run: |
+          uv run poe lint
+
+      - name: Run type checking
+        shell: powershell
+        run: |
+          uv run poe type-check
+
+      # Build with PyInstaller
+      - name: Build portable executable
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          
+          Write-Host "Building Serena portable executable..."
+          
+          # Determine output name
+          $bundleSuffix = "${{ matrix.bundle_tier }}"
+          $archSuffix = "${{ matrix.arch }}"
+          $version = (Select-String -Path "pyproject.toml" -Pattern 'version = "([^"]+)"').Matches[0].Groups[1].Value
+          $outputName = "serena-windows-${archSuffix}-${bundleSuffix}-${version}"
+          
+          # PyInstaller arguments
+          $pyinstallerArgs = @(
+            "--name", $outputName,
+            "--onefile",
+            "--console",
+            "--clean",
+            "--noconfirm"
+          )
+          
+          # Add debug flags if requested
+          if (${{ inputs.pyinstaller_debug || 'false' }}) {
+            $pyinstallerArgs += @("--debug", "all", "--log-level", "DEBUG")
+          }
+          
+          # Include language servers in bundle
+          if (Test-Path "build/language_servers") {
+            $pyinstallerArgs += @("--add-data", "build/language_servers;language_servers")
+          }
+          
+          # Add source packages
+          $pyinstallerArgs += @(
+            "--add-data", "src/serena;serena",
+            "--add-data", "src/solidlsp;solidlsp",
+            "--add-data", "src/interprompt;interprompt"
+          )
+          
+          # Hidden imports for dynamic loading
+          $hiddenImports = @(
+            "serena.agent",
+            "serena.cli",
+            "solidlsp.ls",
+            "mcp",
+            "anthropic",
+            "requests",
+            "yaml",
+            "jinja2"
+          )
+          
+          foreach ($import in $hiddenImports) {
+            $pyinstallerArgs += @("--hidden-import", $import)
+          }
+          
+          # Entry point
+          $pyinstallerArgs += @("src/serena/cli.py")
+          
+          Write-Host "PyInstaller command: uv run pyinstaller $($pyinstallerArgs -join ' ')"
+          
+          uv run pyinstaller @pyinstallerArgs
+          
+          # Verify the executable was created
+          $exePath = "dist/${outputName}.exe"
+          if (!(Test-Path $exePath)) {
+            throw "Executable not found at $exePath"
+          }
+          
+          $fileSize = (Get-Item $exePath).Length / 1MB
+          Write-Host "Built executable: $exePath (${fileSize:N2} MB)"
+          
+          # Test the executable
+          Write-Host "Testing executable..."
+          & $exePath --version
+          
+          if ($LASTEXITCODE -ne 0) {
+            throw "Executable test failed with exit code $LASTEXITCODE"
+          }
+          
+          Write-Host "Executable test passed!"
+
+      # Create bundle with documentation and examples
+      - name: Create distribution bundle
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          
+          $bundleSuffix = "${{ matrix.bundle_tier }}"
+          $archSuffix = "${{ matrix.arch }}"
+          $version = (Select-String -Path "pyproject.toml" -Pattern 'version = "([^"]+)"').Matches[0].Groups[1].Value
+          $outputName = "serena-windows-${archSuffix}-${bundleSuffix}-${version}"
+          $bundleDir = "dist/${outputName}-bundle"
+          
+          Write-Host "Creating distribution bundle: $bundleDir"
+          
+          # Create bundle directory structure
+          New-Item -ItemType Directory -Force -Path $bundleDir
+          New-Item -ItemType Directory -Force -Path "$bundleDir/bin"
+          New-Item -ItemType Directory -Force -Path "$bundleDir/docs"
+          New-Item -ItemType Directory -Force -Path "$bundleDir/examples"
+          
+          # Copy executable
+          Copy-Item "dist/${outputName}.exe" "$bundleDir/bin/serena.exe"
+          
+          # Copy documentation
+          if (Test-Path "README.md") {
+            Copy-Item "README.md" "$bundleDir/README.md"
+          }
+          if (Test-Path "LICENSE") {
+            Copy-Item "LICENSE" "$bundleDir/LICENSE"
+          }
+          if (Test-Path "CLAUDE.md") {
+            Copy-Item "CLAUDE.md" "$bundleDir/docs/"
+          }
+          
+          # Create installation script
+          @"
+          @echo off
+          setlocal enabledelayedexpansion
+          
+          echo Serena Windows Portable Installation
+          echo ===================================
+          echo.
+          
+          set "INSTALL_DIR=%USERPROFILE%\AppData\Local\Serena"
+          set "BIN_DIR=%INSTALL_DIR%\bin"
+          
+          echo Creating installation directory: !INSTALL_DIR!
+          if not exist "!INSTALL_DIR!" mkdir "!INSTALL_DIR!"
+          if not exist "!BIN_DIR!" mkdir "!BIN_DIR!"
+          
+          echo Copying Serena executable...
+          copy /Y "bin\serena.exe" "!BIN_DIR!\serena.exe" >nul
+          
+          echo Adding to PATH...
+          powershell -Command "[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ';!BIN_DIR!', 'User')"
+          
+          echo.
+          echo Installation complete!
+          echo Restart your command prompt or PowerShell to use 'serena' command.
+          echo.
+          echo To verify installation, run: serena --version
+          echo.
+          pause
+          "@ | Out-File -FilePath "$bundleDir/install.bat" -Encoding ascii
+          
+          # Create PowerShell installation script
+          @"
+          # Serena Windows Portable Installation Script
+          Write-Host "Serena Windows Portable Installation" -ForegroundColor Green
+          Write-Host "=====================================" -ForegroundColor Green
+          Write-Host ""
+          
+          `$installDir = "`$env:USERPROFILE\AppData\Local\Serena"
+          `$binDir = "`$installDir\bin"
+          
+          Write-Host "Creating installation directory: `$installDir"
+          New-Item -ItemType Directory -Force -Path `$installDir | Out-Null
+          New-Item -ItemType Directory -Force -Path `$binDir | Out-Null
+          
+          Write-Host "Copying Serena executable..."
+          Copy-Item "bin\serena.exe" "`$binDir\serena.exe" -Force
+          
+          Write-Host "Adding to PATH..."
+          `$currentPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+          if (`$currentPath -notlike "*`$binDir*") {
+              [Environment]::SetEnvironmentVariable('Path', "`$currentPath;`$binDir", 'User')
+              Write-Host "Added `$binDir to user PATH" -ForegroundColor Yellow
+          } else {
+              Write-Host "Directory already in PATH" -ForegroundColor Yellow
+          }
+          
+          Write-Host ""
+          Write-Host "Installation complete!" -ForegroundColor Green
+          Write-Host "Restart your PowerShell or Command Prompt to use 'serena' command."
+          Write-Host ""
+          Write-Host "To verify installation, run: serena --version"
+          Write-Host ""
+          "@ | Out-File -FilePath "$bundleDir/install.ps1" -Encoding utf8
+          
+          # Create usage examples
+          @"
+          # Serena Usage Examples
+          
+          ## Basic Commands
+          
+          # Start MCP server (for Claude Desktop integration)
+          serena-mcp-server
+          
+          # Get version information  
+          serena --version
+          
+          # Get help
+          serena --help
+          
+          ## Language Server Bundle Information
+          
+          This $bundleSuffix bundle includes:
+          "@ | Out-File -FilePath "$bundleDir/examples/usage.md" -Encoding utf8
+          
+          if ($bundleSuffix -eq "essential" -or $bundleSuffix -eq "complete" -or $bundleSuffix -eq "full") {
+            Add-Content -Path "$bundleDir/examples/usage.md" -Value @"
+          - Python (Pyright)
+          - TypeScript/JavaScript
+          - Rust (rust-analyzer) 
+          - Go (gopls)
+          "@
+          }
+          
+          if ($bundleSuffix -eq "complete" -or $bundleSuffix -eq "full") {
+            Add-Content -Path "$bundleDir/examples/usage.md" -Value @"
+          - Java (Eclipse JDT)
+          - C# (OmniSharp)
+          - Lua
+          - Bash
+          "@
+          }
+          
+          if ($bundleSuffix -eq "full") {
+            Add-Content -Path "$bundleDir/examples/usage.md" -Value @"
+          - Additional language servers (28 total)
+          "@
+          }
+          
+          # Create ZIP archive
+          $zipPath = "dist/${outputName}-bundle.zip"
+          Write-Host "Creating ZIP archive: $zipPath"
+          
+          if (Test-Path $zipPath) {
+            Remove-Item $zipPath -Force
+          }
+          
+          Compress-Archive -Path "$bundleDir/*" -DestinationPath $zipPath -CompressionLevel Optimal
+          
+          $zipSize = (Get-Item $zipPath).Length / 1MB
+          Write-Host "Created bundle ZIP: $zipPath (${zipSize:N2} MB)"
+
+      # Upload artifacts
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: serena-windows-${{ matrix.arch }}-${{ matrix.bundle_tier }}
+          path: |
+            dist/*.exe
+            dist/*.zip
+          retention-days: 30
+          compression-level: 6
+
+      # Upload to release if this was triggered by a release
+      - name: Upload to Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            dist/*.exe
+            dist/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Generate build summary
+      - name: Generate build summary
+        shell: powershell
+        run: |
+          $bundleSuffix = "${{ matrix.bundle_tier }}"
+          $archSuffix = "${{ matrix.arch }}"
+          $version = (Select-String -Path "pyproject.toml" -Pattern 'version = "([^"]+)"').Matches[0].Groups[1].Value
+          $outputName = "serena-windows-${archSuffix}-${bundleSuffix}-${version}"
+          
+          Write-Host ""
+          Write-Host "## Build Summary" >> $env:GITHUB_STEP_SUMMARY
+          Write-Host "" >> $env:GITHUB_STEP_SUMMARY
+          Write-Host "- **Architecture**: ${{ matrix.arch }}" >> $env:GITHUB_STEP_SUMMARY
+          Write-Host "- **Bundle Tier**: ${{ matrix.bundle_tier }}" >> $env:GITHUB_STEP_SUMMARY
+          Write-Host "- **Version**: $version" >> $env:GITHUB_STEP_SUMMARY
+          Write-Host "" >> $env:GITHUB_STEP_SUMMARY
+          
+          if (Test-Path "dist/${outputName}.exe") {
+            $exeSize = (Get-Item "dist/${outputName}.exe").Length / 1MB
+            Write-Host "- **Executable Size**: ${exeSize:N2} MB" >> $env:GITHUB_STEP_SUMMARY
+          }
+          
+          if (Test-Path "dist/${outputName}-bundle.zip") {
+            $zipSize = (Get-Item "dist/${outputName}-bundle.zip").Length / 1MB
+            Write-Host "- **Bundle Size**: ${zipSize:N2} MB" >> $env:GITHUB_STEP_SUMMARY
+          }
+          
+          Write-Host "" >> $env:GITHUB_STEP_SUMMARY
+          Write-Host "### Language Servers Included" >> $env:GITHUB_STEP_SUMMARY
+          Write-Host "" >> $env:GITHUB_STEP_SUMMARY
+          
+          if ($bundleSuffix -eq "minimal") {
+            Write-Host "- None (minimal build)" >> $env:GITHUB_STEP_SUMMARY
+          } elseif ($bundleSuffix -eq "essential") {
+            Write-Host "- Python (Pyright)" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "- TypeScript/JavaScript" >> $env:GITHUB_STEP_SUMMARY  
+            Write-Host "- Rust (rust-analyzer)" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "- Go (gopls)" >> $env:GITHUB_STEP_SUMMARY
+          } elseif ($bundleSuffix -eq "complete") {
+            Write-Host "- Python (Pyright)" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "- TypeScript/JavaScript" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "- Rust (rust-analyzer)" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "- Go (gopls)" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "- Java (Eclipse JDT)" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "- C# (OmniSharp)" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "- Lua Language Server" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "- Bash Language Server" >> $env:GITHUB_STEP_SUMMARY
+          } elseif ($bundleSuffix -eq "full") {
+            Write-Host "- Python (Pyright)" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "- TypeScript/JavaScript" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "- Rust (rust-analyzer)" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "- Go (gopls)" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "- Java (Eclipse JDT)" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "- C# (OmniSharp)" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "- Lua Language Server" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "- Bash Language Server" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "- All 28 supported language servers" >> $env:GITHUB_STEP_SUMMARY
+          }
+
+  # Create a summary job that runs after all builds complete
+  build-summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: build-portable
+    if: always()
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate final summary
+        shell: bash
+        run: |
+          echo "# Windows Portable Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.build-portable.result }}" == "success" ]; then
+            echo "✅ **Build Status**: SUCCESS" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Build Status**: FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Artifacts Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # List all created artifacts
+          find artifacts -type f -name "*.exe" -o -name "*.zip" | while read file; do
+            size=$(du -h "$file" | cut -f1)
+            basename_file=$(basename "$file")
+            echo "- **$basename_file** ($size)" >> $GITHUB_STEP_SUMMARY
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Installation Instructions" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. Download the appropriate bundle for your architecture and needs" >> $GITHUB_STEP_SUMMARY
+          echo "2. Extract the ZIP file to a directory of your choice" >> $GITHUB_STEP_SUMMARY
+          echo "3. Run \`install.bat\` (Command Prompt) or \`install.ps1\` (PowerShell) as Administrator" >> $GITHUB_STEP_SUMMARY
+          echo "4. Restart your command prompt/PowerShell" >> $GITHUB_STEP_SUMMARY
+          echo "5. Verify installation with \`serena --version\`" >> $GITHUB_STEP_SUMMARY

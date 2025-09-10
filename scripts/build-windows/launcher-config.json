@@ -1,0 +1,262 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "serena-portable-config",
+  "title": "Serena Portable Launcher Configuration",
+  "description": "Configuration file for the Serena Portable Windows launcher",
+  "type": "object",
+  
+  "launcher": {
+    "version": "1.0.0",
+    "auto_update_check": false,
+    "log_level": "INFO",
+    "create_desktop_shortcut": false,
+    "create_start_menu_shortcut": false
+  },
+  
+  "serena": {
+    "executable_name": "serena.exe",
+    "fallback_executable_names": [
+      "serena-mcp-server.exe",
+      "serena-agent.exe"
+    ],
+    "default_arguments": [],
+    "auto_start_mcp_server": true,
+    "default_transport": "stdio",
+    "default_context": "desktop-app",
+    "default_modes": ["interactive"]
+  },
+  
+  "environment": {
+    "portable_mode": true,
+    "user_directory": ".serena-portable",
+    "config_directory": ".serena-portable",
+    "cache_directory": ".serena-portable/cache", 
+    "log_directory": ".serena-portable/logs",
+    "temp_directory": ".serena-portable/temp",
+    "variables": {
+      "SERENA_HOME": "%SERENA_PORTABLE_ROOT%\\.serena-portable",
+      "SERENA_CONFIG_DIR": "%SERENA_PORTABLE_ROOT%\\.serena-portable",
+      "SERENA_CACHE_DIR": "%SERENA_PORTABLE_ROOT%\\.serena-portable\\cache",
+      "SERENA_LOG_DIR": "%SERENA_PORTABLE_ROOT%\\.serena-portable\\logs",
+      "SERENA_PORTABLE": "1"
+    }
+  },
+  
+  "language_servers": {
+    "bundled": false,
+    "download_on_demand": true,
+    "cache_downloads": true,
+    "base_directory": "language-servers",
+    "timeout_seconds": 300,
+    "supported_languages": [
+      "python",
+      "javascript", 
+      "typescript",
+      "java",
+      "kotlin",
+      "go",
+      "rust",
+      "csharp",
+      "php",
+      "ruby",
+      "swift",
+      "clojure",
+      "elixir",
+      "terraform",
+      "bash",
+      "r",
+      "zig",
+      "lua",
+      "nix",
+      "dart",
+      "erlang",
+      "al"
+    ],
+    "configurations": {
+      "python": {
+        "server": "pyright",
+        "executable": "pyright-langserver",
+        "auto_download": true
+      },
+      "javascript": {
+        "server": "typescript-language-server", 
+        "executable": "typescript-language-server.cmd",
+        "auto_download": true
+      },
+      "typescript": {
+        "server": "typescript-language-server",
+        "executable": "typescript-language-server.cmd", 
+        "auto_download": true
+      },
+      "java": {
+        "server": "eclipse.jdt.ls",
+        "executable": "java",
+        "auto_download": true,
+        "requires_jvm": true
+      },
+      "kotlin": {
+        "server": "kotlin-language-server",
+        "executable": "kotlin-language-server.bat",
+        "auto_download": true,
+        "requires_jvm": true
+      },
+      "go": {
+        "server": "gopls",
+        "executable": "gopls.exe",
+        "auto_download": true
+      },
+      "rust": {
+        "server": "rust-analyzer", 
+        "executable": "rust-analyzer.exe",
+        "auto_download": true
+      },
+      "csharp": {
+        "server": "omnisharp",
+        "executable": "OmniSharp.exe",
+        "auto_download": true,
+        "requires_dotnet": true
+      }
+    }
+  },
+  
+  "networking": {
+    "enable_web_dashboard": true,
+    "dashboard_host": "127.0.0.1",
+    "dashboard_port": 8000,
+    "mcp_server_host": "127.0.0.1",
+    "mcp_server_port": 8001,
+    "proxy_settings": {
+      "use_system_proxy": true,
+      "http_proxy": "",
+      "https_proxy": "",
+      "no_proxy": "localhost,127.0.0.1"
+    }
+  },
+  
+  "security": {
+    "allow_code_execution": true,
+    "sandbox_mode": false,
+    "restrict_file_access": false,
+    "allowed_file_extensions": [
+      ".py", ".js", ".ts", ".java", ".kt", ".go", ".rs", 
+      ".cs", ".php", ".rb", ".swift", ".clj", ".ex", ".tf",
+      ".sh", ".r", ".zig", ".lua", ".nix", ".dart", ".erl", 
+      ".al", ".yml", ".yaml", ".json", ".xml", ".md", ".txt"
+    ],
+    "blocked_directories": [
+      "System32",
+      "Windows",
+      "Program Files",
+      "Program Files (x86)"
+    ]
+  },
+  
+  "ui": {
+    "theme": "auto",
+    "show_splash_screen": true,
+    "minimize_to_tray": false,
+    "close_to_tray": false,
+    "auto_hide_console": false,
+    "font_family": "Consolas",
+    "font_size": 12,
+    "colors": {
+      "background": "#1e1e1e",
+      "foreground": "#d4d4d4", 
+      "accent": "#007acc",
+      "success": "#4ec9b0",
+      "warning": "#ffcc02",
+      "error": "#f44747"
+    }
+  },
+  
+  "performance": {
+    "max_memory_mb": 2048,
+    "max_cpu_threads": 4,
+    "cache_size_mb": 512,
+    "gc_frequency_minutes": 30,
+    "preload_language_servers": false,
+    "parallel_operations": true,
+    "batch_size": 100
+  },
+  
+  "logging": {
+    "level": "INFO",
+    "max_file_size_mb": 10,
+    "max_backup_count": 5,
+    "log_to_file": true,
+    "log_to_console": true,
+    "include_timestamps": true,
+    "include_thread_info": false,
+    "log_lsp_communication": false,
+    "categories": {
+      "serena.agent": "INFO",
+      "serena.tools": "INFO", 
+      "solidlsp": "WARNING",
+      "mcp": "INFO",
+      "urllib3": "WARNING",
+      "requests": "WARNING"
+    }
+  },
+  
+  "backup": {
+    "auto_backup": true,
+    "backup_interval_hours": 24,
+    "max_backups": 7,
+    "backup_directory": ".serena-portable/backups",
+    "include_cache": false,
+    "include_logs": false,
+    "compress_backups": true
+  },
+  
+  "updates": {
+    "check_for_updates": false,
+    "update_channel": "stable",
+    "auto_download": false,
+    "auto_install": false,
+    "update_url": "",
+    "signature_verification": true
+  },
+  
+  "diagnostics": {
+    "enable_telemetry": false,
+    "collect_crash_reports": false,
+    "performance_monitoring": false,
+    "usage_statistics": false,
+    "error_reporting_url": "",
+    "diagnostic_data_retention_days": 7
+  },
+  
+  "compatibility": {
+    "minimum_windows_version": "10.0.0",
+    "architecture": "x64",
+    "required_vcredist": "2019",
+    "required_dotnet": "6.0",
+    "fallback_shell": "cmd",
+    "path_separator": "\\",
+    "line_ending": "CRLF"
+  },
+  
+  "advanced": {
+    "debug_mode": false,
+    "verbose_logging": false,
+    "profile_performance": false,
+    "enable_experimental_features": false,
+    "custom_python_path": "",
+    "custom_node_path": "",
+    "custom_java_path": "",
+    "timeout_multiplier": 1.0,
+    "retry_attempts": 3,
+    "cleanup_on_exit": true
+  },
+  
+  "user_preferences": {
+    "remember_window_position": true,
+    "remember_window_size": true,
+    "last_used_project": "",
+    "recent_projects": [],
+    "favorite_contexts": [],
+    "favorite_modes": [],
+    "custom_key_bindings": {},
+    "workspace_layouts": {}
+  }
+}
