@@ -172,7 +172,7 @@ jobs:
               
               # Select appropriate URL for architecture
               $downloadUrl = $serverInfo.url
-              if (${{ matrix.arch }} -eq "arm64" -and $serverInfo.ContainsKey("url_arm64")) {
+              if ("${{ matrix.arch }}" -eq "arm64" -and $serverInfo.ContainsKey("url_arm64")) {
                 $downloadUrl = $serverInfo.url_arm64
               }
               
@@ -241,7 +241,7 @@ jobs:
               
               # Select appropriate URL for architecture  
               $downloadUrl = $serverInfo.url
-              if (${{ matrix.arch }} -eq "arm64" -and $serverInfo.ContainsKey("url_arm64")) {
+              if ("${{ matrix.arch }}" -eq "arm64" -and $serverInfo.ContainsKey("url_arm64")) {
                 $downloadUrl = $serverInfo.url_arm64
               }
               
@@ -304,7 +304,7 @@ jobs:
           )
           
           # Add debug flags if requested
-          if (${{ inputs.pyinstaller_debug || 'false' }}) {
+          if ("${{ inputs.pyinstaller_debug || 'false' }}" -eq "true") {
             $pyinstallerArgs += @("--debug", "all", "--log-level", "DEBUG")
           }
           
