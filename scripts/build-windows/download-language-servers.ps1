@@ -622,7 +622,7 @@ function Show-Summary {
         Write-Host ""
         Write-Host "Successfully installed:" -ForegroundColor Green
         foreach ($server in $SuccessfulInstalls) {
-            Write-Host "  ✓ $($server.Name)" -ForegroundColor Green
+            Write-Host "  [OK] $($server.Name)" -ForegroundColor Green
         }
     }
     
@@ -630,7 +630,7 @@ function Show-Summary {
         Write-Host ""
         Write-Host "Failed to install:" -ForegroundColor Red
         foreach ($server in $FailedInstalls) {
-            Write-Host "  ✗ $($server.Name)" -ForegroundColor Red
+            Write-Host "  [FAIL] $($server.Name)" -ForegroundColor Red
         }
     }
     
