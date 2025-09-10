@@ -1,0 +1,326 @@
+name: Build Windows Portable
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_tier:
+        description: 'Bundle tier'
+        required: true
+        default: 'essential'
+        type: choice
+        options:
+          - minimal
+          - essential
+          - complete
+          - full
+      architecture:
+        description: 'Architecture'
+        required: true
+        default: 'x64'
+        type: choice
+        options:
+          - x64
+          - arm64
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  build:
+    name: Build Windows Portable
+    runs-on: windows-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: ${{ inputs.architecture }}
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .venv
+            ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ inputs.architecture }}-${{ hashFiles('uv.lock', 'pyproject.toml') }}
+          restore-keys: |
+            uv-${{ runner.os }}-${{ inputs.architecture }}-
+            uv-${{ runner.os }}-
+
+      - name: Install dependencies
+        shell: powershell
+        run: |
+          uv venv --python ${{ env.PYTHON_VERSION }}
+          uv pip install -e ".[dev]"
+          uv pip install pyinstaller==6.11.1
+
+      - name: Download language servers (Essential)
+        if: inputs.bundle_tier != 'minimal'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          Write-Host "Downloading essential language servers..."
+          
+          New-Item -ItemType Directory -Force -Path "build/language_servers"
+          
+          # Download essential servers (simplified)
+          $servers = @{
+            "pyright" = "https://registry.npmjs.org/pyright/-/pyright-1.1.405.tgz"
+            "typescript" = "https://registry.npmjs.org/typescript-language-server/-/typescript-language-server-4.4.0.tgz"
+          }
+          
+          if ("${{ inputs.architecture }}" -eq "x64") {
+            $servers["rust-analyzer"] = "https://github.com/rust-lang/rust-analyzer/releases/download/2025-08-25/rust-analyzer-x86_64-pc-windows-msvc.zip"
+            $servers["gopls"] = "https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls-windows-amd64.zip"
+          } else {
+            $servers["rust-analyzer"] = "https://github.com/rust-lang/rust-analyzer/releases/download/2025-08-25/rust-analyzer-aarch64-pc-windows-msvc.zip"
+            $servers["gopls"] = "https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls-windows-arm64.zip"
+          }
+          
+          foreach ($name in $servers.Keys) {
+            $url = $servers[$name]
+            $dir = "build/language_servers/$name"
+            
+            Write-Host "Downloading $name..."
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            
+            $tempFile = [System.IO.Path]::GetTempFileName()
+            
+            try {
+              Invoke-WebRequest -Uri $url -OutFile $tempFile -UseBasicParsing
+              
+              if ($url -like "*.zip") {
+                Expand-Archive -Path $tempFile -DestinationPath $dir -Force
+              } elseif ($url -like "*.tgz" -or $url -like "*.tar.gz") {
+                tar -xzf $tempFile -C $dir --strip-components=1
+              }
+              
+              Write-Host "[OK] Downloaded $name"
+            } catch {
+              Write-Warning "Failed to download $name: $_"
+            } finally {
+              Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+      - name: Download additional servers (Complete/Full)
+        if: inputs.bundle_tier == 'complete' || inputs.bundle_tier == 'full'
+        shell: powershell
+        run: |
+          Write-Host "Downloading additional language servers for ${{ inputs.bundle_tier }} tier..."
+          
+          $servers = @{
+            "java" = "https://download.eclipse.org/jdtls/milestones/1.50.0/jdt-language-server-1.50.0-202509041608.tar.gz"
+            "lua" = "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-win32-x64.zip"
+            "bash" = "https://registry.npmjs.org/bash-language-server/-/bash-language-server-5.6.0.tgz"
+          }
+          
+          if ("${{ inputs.architecture }}" -eq "x64") {
+            $servers["omnisharp"] = "https://roslynomnisharp.blob.core.windows.net/releases/1.39.14/omnisharp-win-x64-1.39.14.zip"
+          } else {
+            $servers["omnisharp"] = "https://roslynomnisharp.blob.core.windows.net/releases/1.39.14/omnisharp-win-arm64-1.39.14.zip"
+          }
+          
+          foreach ($name in $servers.Keys) {
+            $url = $servers[$name]
+            $dir = "build/language_servers/$name"
+            
+            if (!(Test-Path $dir)) {
+              Write-Host "Downloading $name..."
+              New-Item -ItemType Directory -Force -Path $dir | Out-Null
+              
+              $tempFile = [System.IO.Path]::GetTempFileName()
+              
+              try {
+                Invoke-WebRequest -Uri $url -OutFile $tempFile -UseBasicParsing
+                
+                if ($url -like "*.zip") {
+                  Expand-Archive -Path $tempFile -DestinationPath $dir -Force
+                } elseif ($url -like "*.tgz" -or $url -like "*.tar.gz") {
+                  tar -xzf $tempFile -C $dir --strip-components=1
+                }
+                
+                Write-Host "[OK] Downloaded $name"
+              } catch {
+                Write-Warning "Failed to download $name: $_"
+              } finally {
+                Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+              }
+            }
+          }
+
+      - name: Run tests
+        shell: powershell
+        run: |
+          uv run poe format
+          uv run poe type-check
+
+      - name: Build with PyInstaller
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          
+          Write-Host "Building Serena portable executable..."
+          
+          $version = (Select-String -Path "pyproject.toml" -Pattern 'version = "([^"]+)"').Matches[0].Groups[1].Value
+          $outputName = "serena-${{ inputs.architecture }}-${{ inputs.bundle_tier }}-${version}"
+          
+          # Create a simple spec file
+          @"
+# -*- mode: python ; coding: utf-8 -*-
+import sys
+from pathlib import Path
+
+block_cipher = None
+
+# Find paths
+spec_dir = Path(r'$PWD').absolute()
+src_path = spec_dir / 'src'
+sys.path.insert(0, str(src_path))
+
+a = Analysis(
+    [str(src_path / 'serena' / 'cli.py')],
+    pathex=[str(src_path)],
+    binaries=[],
+    datas=[
+        (str(src_path / 'serena'), 'serena'),
+        (str(src_path / 'solidlsp'), 'solidlsp'),
+        (str(src_path / 'interprompt'), 'interprompt'),
+    ],
+    hiddenimports=[
+        'serena',
+        'serena.agent',
+        'serena.cli',
+        'serena.tools',
+        'solidlsp',
+        'solidlsp.ls',
+        'interprompt',
+        'mcp',
+        'anthropic',
+        'pydantic',
+        'yaml',
+        'jinja2',
+        'flask',
+        'click',
+        'rich',
+    ],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=['tkinter', 'matplotlib', 'PIL'],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+
+# Add language servers if they exist
+ls_dir = spec_dir / 'build' / 'language_servers'
+if ls_dir.exists():
+    a.datas.append((str(ls_dir), 'language_servers'))
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    [],
+    name='$outputName',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=True,
+    disable_windowed_traceback=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+"@ | Out-File -FilePath "build.spec" -Encoding utf8
+          
+          # Run PyInstaller
+          uv run pyinstaller build.spec --clean --noconfirm
+          
+          if (Test-Path "dist/${outputName}.exe") {
+            $size = (Get-Item "dist/${outputName}.exe").Length / 1MB
+            Write-Host "[OK] Built executable: ${outputName}.exe (${size:N2} MB)"
+            
+            # Test executable
+            & "dist/${outputName}.exe" --version
+          } else {
+            throw "Build failed - executable not found"
+          }
+
+      - name: Create distribution package
+        shell: powershell
+        run: |
+          $version = (Select-String -Path "pyproject.toml" -Pattern 'version = "([^"]+)"').Matches[0].Groups[1].Value
+          $outputName = "serena-${{ inputs.architecture }}-${{ inputs.bundle_tier }}-${version}"
+          
+          $bundleDir = "dist/bundle"
+          New-Item -ItemType Directory -Force -Path "$bundleDir/bin" | Out-Null
+          
+          # Copy executable
+          Copy-Item "dist/${outputName}.exe" "$bundleDir/bin/serena.exe"
+          
+          # Copy docs
+          if (Test-Path "README.md") { Copy-Item "README.md" "$bundleDir/" }
+          if (Test-Path "LICENSE") { Copy-Item "LICENSE" "$bundleDir/" }
+          
+          # Create installer script
+          @"
+@echo off
+echo Installing Serena...
+set INSTALL_DIR=%LOCALAPPDATA%\Serena
+if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
+copy /Y bin\serena.exe "%INSTALL_DIR%\serena.exe"
+echo Installation complete!
+echo Run 'serena --version' to verify.
+pause
+"@ | Out-File -FilePath "$bundleDir/install.bat" -Encoding ascii
+          
+          # Create ZIP
+          Compress-Archive -Path "$bundleDir/*" -DestinationPath "dist/${outputName}.zip" -CompressionLevel Optimal
+          
+          $zipSize = (Get-Item "dist/${outputName}.zip").Length / 1MB
+          Write-Host "[OK] Created bundle: ${outputName}.zip (${zipSize:N2} MB)"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: serena-windows-${{ inputs.architecture }}-${{ inputs.bundle_tier }}
+          path: |
+            dist/*.exe
+            dist/*.zip
+          retention-days: 30
+
+      - name: Summary
+        shell: powershell
+        run: |
+          Write-Host "## Build Summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY
+          Write-Host "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          Write-Host "- **Architecture**: ${{ inputs.architecture }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          Write-Host "- **Bundle Tier**: ${{ inputs.bundle_tier }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          Write-Host "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          
+          Get-ChildItem dist/*.exe, dist/*.zip | ForEach-Object {
+            $size = $_.Length / 1MB
+            Write-Host "- **$($_.Name)**: ${size:N2} MB" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          }

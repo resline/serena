@@ -1,4 +1,4 @@
-name: Build Windows Portable Serena (Optimized)
+name: Build Windows Portable
 
 on:
   workflow_dispatch:
