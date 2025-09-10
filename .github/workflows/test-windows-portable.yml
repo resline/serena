@@ -67,9 +67,9 @@ jobs:
               
               try {
                 $null = [System.Management.Automation.PSParser]::Tokenize((Get-Content $script -Raw), [ref]$null)
-                Write-Host "✓ $script syntax OK" -ForegroundColor Green
+                Write-Host "[OK] $script syntax OK" -ForegroundColor Green
               } catch {
-                Write-Host "✗ $script syntax error: $_" -ForegroundColor Red
+                Write-Host "[FAIL] $script syntax error: $_" -ForegroundColor Red
                 $errors += "$script : $_"
               }
             } else {
@@ -112,9 +112,9 @@ jobs:
                   }
                 }
                 
-                Write-Host "✓ $workflow structure OK" -ForegroundColor Green
+                Write-Host "[OK] $workflow structure OK" -ForegroundColor Green
               } catch {
-                Write-Host "✗ $workflow validation error: $_" -ForegroundColor Red
+                Write-Host "[FAIL] $workflow validation error: $_" -ForegroundColor Red
                 exit 1
               }
             }
@@ -172,13 +172,13 @@ jobs:
             try {
               $response = Invoke-WebRequest -Uri $url -Method Head -TimeoutSec 10 -UseBasicParsing
               if ($response.StatusCode -eq 200) {
-                Write-Host "✓ $url" -ForegroundColor Green
+                Write-Host "[OK] $url" -ForegroundColor Green
               } else {
-                Write-Host "✗ $url (Status: $($response.StatusCode))" -ForegroundColor Red
+                Write-Host "[FAIL] $url (Status: $($response.StatusCode))" -ForegroundColor Red
                 $failedUrls += "$url (Status: $($response.StatusCode))"
               }
             } catch {
-              Write-Host "✗ $url (Error: $($_.Exception.Message))" -ForegroundColor Red
+              Write-Host "[FAIL] $url (Error: $($_.Exception.Message))" -ForegroundColor Red
               $failedUrls += "$url (Error: $($_.Exception.Message))"
             }
           }
@@ -198,7 +198,7 @@ jobs:
           
           # Check if pyproject.toml exists and is valid
           if (Test-Path "pyproject.toml") {
-            Write-Host "✓ pyproject.toml found" -ForegroundColor Green
+            Write-Host "[OK] pyproject.toml found" -ForegroundColor Green
             
             $content = Get-Content "pyproject.toml" -Raw
             
@@ -206,16 +206,16 @@ jobs:
             $requiredFields = @("name", "version", "description")
             foreach ($field in $requiredFields) {
               if ($content -match "$field\s*=") {
-                Write-Host "✓ Found $field field" -ForegroundColor Green
+                Write-Host "[OK] Found $field field" -ForegroundColor Green
               } else {
-                Write-Host "✗ Missing $field field" -ForegroundColor Red
+                Write-Host "[FAIL] Missing $field field" -ForegroundColor Red
                 exit 1
               }
             }
             
             # Check for entry points or scripts
             if ($content -match "scripts" -or $content -match "entry-points") {
-              Write-Host "✓ Entry points/scripts configuration found" -ForegroundColor Green
+              Write-Host "[OK] Entry points/scripts configuration found" -ForegroundColor Green
             }
             
             # Look for main module files
@@ -223,19 +223,19 @@ jobs:
             $foundModule = $false
             foreach ($module in $mainModules) {
               if (Test-Path $module) {
-                Write-Host "✓ Found main module: $module" -ForegroundColor Green
+                Write-Host "[OK] Found main module: $module" -ForegroundColor Green
                 $foundModule = $true
                 break
               }
             }
             
             if (-not $foundModule) {
-              Write-Host "✗ No main module found in expected locations" -ForegroundColor Red
+              Write-Host "[FAIL] No main module found in expected locations" -ForegroundColor Red
               exit 1
             }
             
           } else {
-            Write-Host "✗ pyproject.toml not found" -ForegroundColor Red
+            Write-Host "[FAIL] pyproject.toml not found" -ForegroundColor Red
             exit 1
           }
 
@@ -278,7 +278,7 @@ jobs:
           
           $buildScript = "scripts/build-windows/build-portable.ps1"
           if (-not (Test-Path $buildScript)) {
-            Write-Host "✗ Build script not found: $buildScript" -ForegroundColor Red
+            Write-Host "[FAIL] Build script not found: $buildScript" -ForegroundColor Red
             exit 1
           }
           
@@ -286,13 +286,13 @@ jobs:
           try {
             # This should not fail - just tests parameter binding
             $null = & $buildScript -WhatIf -Tier ${{ matrix.tier }} -Architecture ${{ matrix.arch }} -SkipTests -SkipLanguageServers -Verbose:$false 2>$null
-            Write-Host "✓ Build script accepts parameters correctly" -ForegroundColor Green
+            Write-Host "[OK] Build script accepts parameters correctly" -ForegroundColor Green
           } catch {
             if ($_.Exception.Message -match "WhatIf") {
               # WhatIf not supported is OK, means parameters were accepted
-              Write-Host "✓ Build script parameters validated (WhatIf not supported)" -ForegroundColor Green
+              Write-Host "[OK] Build script parameters validated (WhatIf not supported)" -ForegroundColor Green
             } else {
-              Write-Host "✗ Build script parameter error: $_" -ForegroundColor Red
+              Write-Host "[FAIL] Build script parameter error: $_" -ForegroundColor Red
               exit 1
             }
           }
@@ -306,23 +306,23 @@ jobs:
             # Quick dependency sync test
             uv sync --dev --dry-run
             if ($LASTEXITCODE -eq 0) {
-              Write-Host "✓ Dependencies can be resolved" -ForegroundColor Green
+              Write-Host "[OK] Dependencies can be resolved" -ForegroundColor Green
             } else {
-              Write-Host "✗ Dependency resolution failed" -ForegroundColor Red
+              Write-Host "[FAIL] Dependency resolution failed" -ForegroundColor Red
               exit 1
             }
             
             # Test PyInstaller installation simulation
             uv add --dry-run pyinstaller
             if ($LASTEXITCODE -eq 0) {
-              Write-Host "✓ PyInstaller can be installed" -ForegroundColor Green
+              Write-Host "[OK] PyInstaller can be installed" -ForegroundColor Green
             } else {
-              Write-Host "✗ PyInstaller installation test failed" -ForegroundColor Red  
+              Write-Host "[FAIL] PyInstaller installation test failed" -ForegroundColor Red  
               exit 1
             }
             
           } catch {
-            Write-Host "✗ Dependency test failed: $_" -ForegroundColor Red
+            Write-Host "[FAIL] Dependency test failed: $_" -ForegroundColor Red
             exit 1
           }
 
@@ -336,18 +336,18 @@ jobs:
           uv pip install -e "."
           
           # Test basic imports
-          uv run python -c "import serena; print('✓ Serena imports successfully')"
+          uv run python -c "import serena; print('[OK] Serena imports successfully')"
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "✗ Basic import test failed" -ForegroundColor Red
+            Write-Host "[FAIL] Basic import test failed" -ForegroundColor Red
             exit 1
           }
           
           # Test CLI help
           uv run python -m serena --help > nul 2>&1
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "✓ CLI help works" -ForegroundColor Green
+            Write-Host "[OK] CLI help works" -ForegroundColor Green
           } else {
-            Write-Host "✗ CLI help failed" -ForegroundColor Red
+            Write-Host "[FAIL] CLI help failed" -ForegroundColor Red
             exit 1
           }
 
@@ -383,9 +383,9 @@ jobs:
           Write-Host "Running code formatting check..." -ForegroundColor Green
           uv run poe lint
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "✓ Code formatting check passed" -ForegroundColor Green
+            Write-Host "[OK] Code formatting check passed" -ForegroundColor Green
           } else {
-            Write-Host "✗ Code formatting issues found" -ForegroundColor Red
+            Write-Host "[FAIL] Code formatting issues found" -ForegroundColor Red
             exit 1
           }
 
@@ -395,9 +395,9 @@ jobs:
           Write-Host "Running type checking..." -ForegroundColor Green
           uv run poe type-check
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "✓ Type checking passed" -ForegroundColor Green
+            Write-Host "[OK] Type checking passed" -ForegroundColor Green
           } else {
-            Write-Host "✗ Type checking failed" -ForegroundColor Red
+            Write-Host "[FAIL] Type checking failed" -ForegroundColor Red
             exit 1
           }
 
@@ -419,16 +419,16 @@ jobs:
           
           $testScript = "scripts/build-windows/test-portable.ps1"
           if (-not (Test-Path $testScript)) {
-            Write-Host "✗ Test script not found: $testScript" -ForegroundColor Red
+            Write-Host "[FAIL] Test script not found: $testScript" -ForegroundColor Red
             exit 1
           }
           
           # Test help parameter
           try {
             $helpOutput = & $testScript -? 2>&1
-            Write-Host "✓ Test script help output works" -ForegroundColor Green
+            Write-Host "[OK] Test script help output works" -ForegroundColor Green
           } catch {
-            Write-Host "✗ Test script help failed: $_" -ForegroundColor Red
+            Write-Host "[FAIL] Test script help failed: $_" -ForegroundColor Red
             exit 1
           }
           
@@ -446,9 +446,9 @@ jobs:
           # Test with dummy package (should fail gracefully)
           try {
             $result = & $testScript -PackagePath "$testDir/$testPackage" -Quick -Timeout 5 2>&1
-            Write-Host "✓ Test script handles dummy package gracefully" -ForegroundColor Green
+            Write-Host "[OK] Test script handles dummy package gracefully" -ForegroundColor Green
           } catch {
-            Write-Host "✓ Test script properly rejects invalid package (expected behavior)" -ForegroundColor Green
+            Write-Host "[OK] Test script properly rejects invalid package (expected behavior)" -ForegroundColor Green
           }
           
           # Cleanup

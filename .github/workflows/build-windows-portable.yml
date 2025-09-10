@@ -107,7 +107,7 @@ jobs:
                 tar -xzf $tempFile -C $dir --strip-components=1
               }
               
-              Write-Host "✓ Downloaded $name"
+              Write-Host "[OK] Downloaded $name"
             } catch {
               Write-Warning "Failed to download $name: $_"
             } finally {
@@ -152,7 +152,7 @@ jobs:
                   tar -xzf $tempFile -C $dir --strip-components=1
                 }
                 
-                Write-Host "✓ Downloaded $name"
+                Write-Host "[OK] Downloaded $name"
               } catch {
                 Write-Warning "Failed to download $name: $_"
               } finally {
@@ -260,7 +260,7 @@ exe = EXE(
           
           if (Test-Path "dist/${outputName}.exe") {
             $size = (Get-Item "dist/${outputName}.exe").Length / 1MB
-            Write-Host "✓ Built executable: ${outputName}.exe (${size:N2} MB)"
+            Write-Host "[OK] Built executable: ${outputName}.exe (${size:N2} MB)"
             
             # Test executable
             & "dist/${outputName}.exe" --version
@@ -300,7 +300,7 @@ pause
           Compress-Archive -Path "$bundleDir/*" -DestinationPath "dist/${outputName}.zip" -CompressionLevel Optimal
           
           $zipSize = (Get-Item "dist/${outputName}.zip").Length / 1MB
-          Write-Host "✓ Created bundle: ${outputName}.zip (${zipSize:N2} MB)"
+          Write-Host "[OK] Created bundle: ${outputName}.zip (${zipSize:N2} MB)"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
