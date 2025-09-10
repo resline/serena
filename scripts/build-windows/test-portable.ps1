@@ -51,6 +51,7 @@
     .\test-portable.ps1 -PackagePath ".\serena-complete-arm64" -Tier complete -Architecture arm64 -SkipPerformance
 #>
 
+[CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)]
     [string]$PackagePath,
@@ -69,9 +70,7 @@ param(
     
     [switch]$SkipPerformance,
     
-    [switch]$SkipCompatibility,
-    
-    [switch]$Verbose
+    [switch]$SkipCompatibility
 )
 
 Set-StrictMode -Version Latest
