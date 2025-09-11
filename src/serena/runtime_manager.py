@@ -3,15 +3,15 @@ Runtime Manager for Serena Portable
 Manages embedded portable runtimes (Node.js, .NET, Java) for offline functionality.
 """
 
-import os
-import sys
 import json
-import shutil
-import subprocess
-from pathlib import Path
-from typing import Optional, Any
-from dataclasses import dataclass
 import logging
+import os
+import subprocess
+import sys
+from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
