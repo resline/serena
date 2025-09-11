@@ -342,16 +342,22 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: language_servers_essential
-          key: ${{ needs.download-language-servers.outputs.essential-cache-key }}
-          fail-on-cache-miss: true
+          key: language-servers-essential-v3-${{ hashFiles('scripts/build-windows/language-servers-manifest.json') }}
+          restore-keys: |
+            language-servers-essential-v3-
+            language-servers-essential-
+          fail-on-cache-miss: false
       
       - name: Restore Additional Language Servers
         if: matrix.bundle_tier == 'complete' || matrix.bundle_tier == 'full'
         uses: actions/cache/restore@v4
         with:
           path: language_servers_additional
-          key: ${{ needs.download-language-servers.outputs.additional-cache-key }}
-          fail-on-cache-miss: true
+          key: language-servers-additional-v3-${{ hashFiles('scripts/build-windows/language-servers-manifest.json') }}
+          restore-keys: |
+            language-servers-additional-v3-
+            language-servers-additional-
+          fail-on-cache-miss: false
 
       # Set up virtual environment
       - name: Create virtual environment
