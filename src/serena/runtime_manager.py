@@ -3,15 +3,15 @@ Runtime Manager for Serena Portable
 Manages embedded portable runtimes (Node.js, .NET, Java) for offline functionality.
 """
 
-import os
-import sys
 import json
-import shutil
-import subprocess
-from pathlib import Path
-from typing import Optional, Dict, Any, List
-from dataclasses import dataclass
 import logging
+import os
+import subprocess
+import sys
+from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -19,24 +19,25 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RuntimeInfo:
     """Information about an embedded runtime."""
+
     name: str
     path: Path
     executable: str
     version: str
-    required_for: List[str]
+    required_for: list[str]
     is_available: bool = False
 
 
 class PortableRuntimeManager:
     """Manages portable runtime environments for offline operation."""
-    
+
     def __init__(self):
         """Initialize the runtime manager."""
         self.app_dir = self._get_app_directory()
         self.runtimes_dir = self.app_dir / "runtimes"
         self.config_file = self.runtimes_dir / "runtime-config.json"
         self.offline_mode = os.environ.get("SERENA_OFFLINE_MODE", "0") == "1"
-        self.runtimes: Dict[str, RuntimeInfo] = {}
+        self.runtimes: dict[str, RuntimeInfo] = {}
         
         # Initialize runtime information
         self._initialize_runtimes()
@@ -88,7 +89,7 @@ class PortableRuntimeManager:
         # Load runtime config if available
         if self.config_file.exists():
             try:
-                with open(self.config_file, 'r') as f:
+                with open(self.config_file) as f:
                     config = json.load(f)
                     self._update_from_config(config)
             except Exception as e:
@@ -97,7 +98,7 @@ class PortableRuntimeManager:
         # Check runtime availability
         self._check_runtime_availability()
     
-    def _update_from_config(self, config: Dict[str, Any]):
+    def _update_from_config(self, config: dict[str, Any]):
         """Update runtime information from configuration."""
         if "runtimes" in config:
             for runtime_name, runtime_config in config["runtimes"].items():
@@ -227,18 +228,33 @@ class PortableRuntimeManager:
         
         try:
             if runtime_name == "nodejs":
-                result = subprocess.run([str(exe_path), "--version"], 
-                                      capture_output=True, text=True, timeout=5)
+                result = subprocess.run(
+                    [str(exe_path), "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                )
                 return result.returncode == 0 and "v" in result.stdout
                 
             elif runtime_name == "dotnet":
-                result = subprocess.run([str(exe_path), "--list-runtimes"], 
-                                      capture_output=True, text=True, timeout=5)
+                result = subprocess.run(
+                    [str(exe_path), "--list-runtimes"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                )
                 return result.returncode == 0 and "Microsoft" in result.stdout
                 
             elif runtime_name == "java":
-                result = subprocess.run([str(exe_path), "-version"], 
-                                      capture_output=True, text=True, timeout=5)
+                result = subprocess.run(
+                    [str(exe_path), "-version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                )
                 return result.returncode == 0
                 
         except Exception as e:
@@ -247,7 +263,7 @@ class PortableRuntimeManager:
         
         return False
     
-    def get_language_server_command(self, server_name: str) -> Optional[List[str]]:
+    def get_language_server_command(self, server_name: str) -> Optional[list[str]]:
         """Get the command to run a language server with portable runtime."""
         # Map language servers to their runtime requirements
         server_runtime_map = {
@@ -295,7 +311,6 @@ class PortableRuntimeManager:
                 
         elif server_name == "eclipse-jdtls":
             # Java language server with launcher JAR
-            launcher_jar = self.app_dir / "language_servers" / "java" / "plugins" / "org.eclipse.equinox.launcher_*.jar"
             launcher_jars = list(Path(self.app_dir / "language_servers" / "java" / "plugins").glob("org.eclipse.equinox.launcher_*.jar"))
             if launcher_jars:
                 return [runtime_exe, "-jar", str(launcher_jars[0]), "-configuration", "config", "-data", "workspace"]
@@ -307,7 +322,7 @@ class PortableRuntimeManager:
         command = self.get_language_server_command(server_name)
         return command is not None
     
-    def get_status_report(self) -> Dict[str, Any]:
+    def get_status_report(self) -> dict[str, Any]:
         """Get a status report of all runtimes and their availability."""
         report = {
             "offline_mode": self.offline_mode,
@@ -341,16 +356,10 @@ class PortableRuntimeManager:
         return report
 
 
-# Global instance
-_runtime_manager: Optional[PortableRuntimeManager] = None
-
-
+@lru_cache(maxsize=1)
 def get_runtime_manager() -> PortableRuntimeManager:
-    """Get or create the global runtime manager instance."""
-    global _runtime_manager
-    if _runtime_manager is None:
-        _runtime_manager = PortableRuntimeManager()
-    return _runtime_manager
+    """Get or create the cached runtime manager instance."""
+    return PortableRuntimeManager()
 
 
 def setup_offline_runtime(runtime_name: str) -> Dict[str, str]:
@@ -359,7 +368,7 @@ def setup_offline_runtime(runtime_name: str) -> Dict[str, str]:
     return manager.setup_runtime_environment(runtime_name)
 
 
-def get_offline_language_server_command(server_name: str) -> Optional[List[str]]:
+def get_offline_language_server_command(server_name: str) -> Optional[list[str]]:
     """Convenience function to get an offline language server command."""
     manager = get_runtime_manager()
     return manager.get_language_server_command(server_name)
