@@ -802,3 +802,11 @@ Write-Host ""
           echo "3. Run \`install.bat\` (Command Prompt) or \`install.ps1\` (PowerShell) as Administrator" >> $GITHUB_STEP_SUMMARY
           echo "4. Restart your command prompt/PowerShell" >> $GITHUB_STEP_SUMMARY
           echo "5. Verify installation with \`serena --version\`" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Bundle Types" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **minimal**: Core Serena functionality only" >> $GITHUB_STEP_SUMMARY
+          echo "- **essential**: Core + Python, TypeScript, Rust, Go language servers" >> $GITHUB_STEP_SUMMARY
+          echo "- **complete**: Essential + Java, C#, Lua, Bash language servers" >> $GITHUB_STEP_SUMMARY
+          echo "- **full**: All 28+ supported language servers included" >> $GITHUB_STEP_SUMMARY
