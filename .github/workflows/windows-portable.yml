@@ -472,13 +472,13 @@ jobs:
           
           # Verify downloads
           if (Test-Path "build\runtimes\nodejs") {
-            Write-Host "✓ Node.js portable downloaded" -ForegroundColor Green
+            Write-Host "[OK] Node.js portable downloaded" -ForegroundColor Green
           }
           if (Test-Path "build\runtimes\dotnet") {
-            Write-Host "✓ .NET Runtime portable downloaded" -ForegroundColor Green
+            Write-Host "[OK] .NET Runtime portable downloaded" -ForegroundColor Green
           }
           if (Test-Path "build\runtimes\java") {
-            Write-Host "✓ Java Runtime portable downloaded" -ForegroundColor Green
+            Write-Host "[OK] Java Runtime portable downloaded" -ForegroundColor Green
           }
           
           # Display total size
@@ -508,7 +508,7 @@ jobs:
                       
                       $output = Invoke-Expression $check.Command 2>&1
                       if ($LASTEXITCODE -eq 0) {
-                          Write-Host "✓ $($check.Name) passed" -ForegroundColor Green
+                          Write-Host "[OK] $($check.Name) passed" -ForegroundColor Green
                           $success = $true
                       } else {
                           throw "$($check.Name) failed with exit code $LASTEXITCODE"
@@ -516,7 +516,7 @@ jobs:
                   } catch {
                       $retryCount++
                       if ($retryCount -gt $maxRetries) {
-                          Write-Error "❌ $($check.Name) failed after $($maxRetries + 1) attempts"
+                          Write-Error "[FAIL] $($check.Name) failed after $($maxRetries + 1) attempts"
                           Write-Host "Last output:" -ForegroundColor Yellow
                           Write-Host $output
                           exit 1
