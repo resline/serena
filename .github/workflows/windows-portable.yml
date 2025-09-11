@@ -326,6 +326,7 @@ jobs:
           # Create necessary directories
           New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.serena\language_servers\static"
           New-Item -ItemType Directory -Force -Path "build\language_servers"
+          New-Item -ItemType Directory -Force -Path "build\runtimes"
           New-Item -ItemType Directory -Force -Path "build\pyinstaller"
           New-Item -ItemType Directory -Force -Path "dist"
           
@@ -333,6 +334,7 @@ jobs:
           echo "SERENA_PORTABLE_BUILD=1" >> $env:GITHUB_ENV
           echo "SERENA_BUNDLE_TIER=${{ matrix.bundle_tier }}" >> $env:GITHUB_ENV
           echo "SERENA_ARCH=${{ matrix.arch }}" >> $env:GITHUB_ENV
+          echo "RUNTIMES_DIR=${{ github.workspace }}\build\runtimes" >> $env:GITHUB_ENV
 
       # Restore cached language servers from download job
       - name: Restore Essential Language Servers
@@ -448,6 +450,34 @@ jobs:
           } else {
             Write-Warning "Additional language servers cache not found"
           }
+
+      # Download and setup portable runtimes for offline functionality
+      - name: Download portable runtimes
+        if: matrix.bundle_tier != 'minimal'
+        shell: powershell
+        run: |
+          Write-Host "Downloading portable runtimes for offline functionality..." -ForegroundColor Green
+          
+          # Run the download script
+          & "${{ github.workspace }}\scripts\build-windows\download-runtimes.ps1" `
+            -RuntimeTier "${{ matrix.bundle_tier }}" `
+            -Architecture "${{ matrix.arch }}" `
+            -OutputPath "build\runtimes"
+          
+          # Verify downloads
+          if (Test-Path "build\runtimes\nodejs") {
+            Write-Host "✓ Node.js portable downloaded" -ForegroundColor Green
+          }
+          if (Test-Path "build\runtimes\dotnet") {
+            Write-Host "✓ .NET Runtime portable downloaded" -ForegroundColor Green
+          }
+          if (Test-Path "build\runtimes\java") {
+            Write-Host "✓ Java Runtime portable downloaded" -ForegroundColor Green
+          }
+          
+          # Display total size
+          $totalSize = (Get-ChildItem "build\runtimes" -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
+          Write-Host "Total runtime size: $([Math]::Round($totalSize, 2)) MB" -ForegroundColor Cyan
 
       # Run quality checks with retry logic
       - name: Run code quality checks
