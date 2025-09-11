@@ -473,6 +473,30 @@ jobs:
           
           Write-Host "Build will continue without embedded runtimes" -ForegroundColor Cyan
 
+      # Download portable runtimes (enabled)
+      - name: Download portable runtimes (enabled)
+        if: matrix.bundle_tier != 'minimal'
+        shell: powershell
+        run: |
+          Write-Host "Downloading portable runtimes (enabled step)..." -ForegroundColor Green
+          $tier = "${{ matrix.bundle_tier }}"
+          $arch = "${{ matrix.arch }}"
+          $out  = "build/runtimes"
+          
+          if (-not (Test-Path "scripts/build-windows/download-runtimes.ps1")) {
+            Write-Error "download-runtimes.ps1 not found"
+            exit 1
+          }
+          
+          & powershell -ExecutionPolicy Bypass -File "scripts/build-windows/download-runtimes.ps1" -RuntimeTier $tier -Architecture $arch -OutputPath $out
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Runtime download failed with exit code $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
+          
+          Write-Host "Runtimes directory populated:" -ForegroundColor Green
+          Get-ChildItem -Recurse -Depth 2 $out | Select-Object FullName | ForEach-Object { Write-Host $_.FullName }
+
       # Run quality checks with retry logic
       - name: Run code quality checks
         shell: powershell
