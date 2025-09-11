@@ -178,82 +178,82 @@ jobs:
           $outputName = "serena-${{ inputs.architecture }}-${{ inputs.bundle_tier }}-${version}"
           
           # Create a simple spec file
-          @"
-# -*- mode: python ; coding: utf-8 -*-
-import sys
-from pathlib import Path
-
-block_cipher = None
-
-# Find paths
-spec_dir = Path(r'$PWD').absolute()
-src_path = spec_dir / 'src'
-sys.path.insert(0, str(src_path))
-
-a = Analysis(
-    [str(src_path / 'serena' / 'cli.py')],
-    pathex=[str(src_path)],
-    binaries=[],
-    datas=[
-        (str(src_path / 'serena'), 'serena'),
-        (str(src_path / 'solidlsp'), 'solidlsp'),
-        (str(src_path / 'interprompt'), 'interprompt'),
-    ],
-    hiddenimports=[
-        'serena',
-        'serena.agent',
-        'serena.cli',
-        'serena.tools',
-        'solidlsp',
-        'solidlsp.ls',
-        'interprompt',
-        'mcp',
-        'anthropic',
-        'pydantic',
-        'yaml',
-        'jinja2',
-        'flask',
-        'click',
-        'rich',
-    ],
-    hookspath=[],
-    hooksconfig={},
-    runtime_hooks=[],
-    excludes=['tkinter', 'matplotlib', 'PIL'],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
-    noarchive=False,
-)
-
-# Add language servers if they exist
-ls_dir = spec_dir / 'build' / 'language_servers'
-if ls_dir.exists():
-    a.datas.append((str(ls_dir), 'language_servers'))
-
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    [],
-    name='$outputName',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=False,
-    upx_exclude=[],
-    runtime_tmpdir=None,
-    console=True,
-    disable_windowed_traceback=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-)
-"@ | Out-File -FilePath "build.spec" -Encoding utf8
+          $specContent = '# -*- mode: python ; coding: utf-8 -*-' + "`n" +
+            'import sys' + "`n" +
+            'from pathlib import Path' + "`n" +
+            '' + "`n" +
+            'block_cipher = None' + "`n" +
+            '' + "`n" +
+            '# Find paths' + "`n" +
+            'spec_dir = Path(r''$PWD'').absolute()' + "`n" +
+            'src_path = spec_dir / ''src''' + "`n" +
+            'sys.path.insert(0, str(src_path))' + "`n" +
+            '' + "`n" +
+            'a = Analysis(' + "`n" +
+            '    [str(src_path / ''serena'' / ''cli.py'')],' + "`n" +
+            '    pathex=[str(src_path)],' + "`n" +
+            '    binaries=[],' + "`n" +
+            '    datas=[' + "`n" +
+            '        (str(src_path / ''serena''), ''serena''),' + "`n" +
+            '        (str(src_path / ''solidlsp''), ''solidlsp''),' + "`n" +
+            '        (str(src_path / ''interprompt''), ''interprompt''),' + "`n" +
+            '    ],' + "`n" +
+            '    hiddenimports=[' + "`n" +
+            '        ''serena'',' + "`n" +
+            '        ''serena.agent'',' + "`n" +
+            '        ''serena.cli'',' + "`n" +
+            '        ''serena.tools'',' + "`n" +
+            '        ''solidlsp'',' + "`n" +
+            '        ''solidlsp.ls'',' + "`n" +
+            '        ''interprompt'',' + "`n" +
+            '        ''mcp'',' + "`n" +
+            '        ''anthropic'',' + "`n" +
+            '        ''pydantic'',' + "`n" +
+            '        ''yaml'',' + "`n" +
+            '        ''jinja2'',' + "`n" +
+            '        ''flask'',' + "`n" +
+            '        ''click'',' + "`n" +
+            '        ''rich'',' + "`n" +
+            '    ],' + "`n" +
+            '    hookspath=[],' + "`n" +
+            '    hooksconfig={},' + "`n" +
+            '    runtime_hooks=[],' + "`n" +
+            '    excludes=[''tkinter'', ''matplotlib'', ''PIL''],' + "`n" +
+            '    win_no_prefer_redirects=False,' + "`n" +
+            '    win_private_assemblies=False,' + "`n" +
+            '    cipher=block_cipher,' + "`n" +
+            '    noarchive=False,' + "`n" +
+            ')' + "`n" +
+            '' + "`n" +
+            '# Add language servers if they exist' + "`n" +
+            'ls_dir = spec_dir / ''build'' / ''language_servers''' + "`n" +
+            'if ls_dir.exists():' + "`n" +
+            '    a.datas.append((str(ls_dir), ''language_servers''))' + "`n" +
+            '' + "`n" +
+            'pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)' + "`n" +
+            '' + "`n" +
+            'exe = EXE(' + "`n" +
+            '    pyz,' + "`n" +
+            '    a.scripts,' + "`n" +
+            '    a.binaries,' + "`n" +
+            '    a.zipfiles,' + "`n" +
+            '    a.datas,' + "`n" +
+            '    [],' + "`n" +
+            '    name=''$outputName'',' + "`n" +
+            '    debug=False,' + "`n" +
+            '    bootloader_ignore_signals=False,' + "`n" +
+            '    strip=False,' + "`n" +
+            '    upx=False,' + "`n" +
+            '    upx_exclude=[],' + "`n" +
+            '    runtime_tmpdir=None,' + "`n" +
+            '    console=True,' + "`n" +
+            '    disable_windowed_traceback=False,' + "`n" +
+            '    target_arch=None,' + "`n" +
+            '    codesign_identity=None,' + "`n" +
+            '    entitlements_file=None,' + "`n" +
+            ')'
+          
+          $specContent | Out-File -FilePath "build.spec" -Encoding utf8
           
           # Run PyInstaller
           uv run pyinstaller build.spec --clean --noconfirm
@@ -285,16 +285,15 @@ exe = EXE(
           if (Test-Path "LICENSE") { Copy-Item "LICENSE" "$bundleDir/" }
           
           # Create installer script
-          @"
-@echo off
-echo Installing Serena...
-set INSTALL_DIR=%LOCALAPPDATA%\Serena
-if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
-copy /Y bin\serena.exe "%INSTALL_DIR%\serena.exe"
-echo Installation complete!
-echo Run 'serena --version' to verify.
-pause
-"@ | Out-File -FilePath "$bundleDir/install.bat" -Encoding ascii
+          $installContent = '@echo off' + "`n" +
+                           'echo Installing Serena...' + "`n" +
+                           'set INSTALL_DIR=%LOCALAPPDATA%\Serena' + "`n" +
+                           'if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"' + "`n" +
+                           'copy /Y bin\serena.exe "%INSTALL_DIR%\serena.exe"' + "`n" +
+                           'echo Installation complete!' + "`n" +
+                           'echo Run ''serena --version'' to verify.' + "`n" +
+                           'pause'
+          $installContent | Out-File -FilePath "$bundleDir/install.bat" -Encoding ascii
           
           # Create ZIP
           Compress-Archive -Path "$bundleDir/*" -DestinationPath "dist/${outputName}.zip" -CompressionLevel Optimal
