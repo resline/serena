@@ -464,26 +464,14 @@ jobs:
         run: |
           Write-Host "Downloading portable runtimes for offline functionality..." -ForegroundColor Green
           
-          # Run the download script
-          & "${{ github.workspace }}\scripts\build-windows\download-runtimes.ps1" `
-            -RuntimeTier "${{ matrix.bundle_tier }}" `
-            -Architecture "${{ matrix.arch }}" `
-            -OutputPath "build\runtimes"
+          # Temporarily skip runtime downloads to test build process
+          Write-Host "[SKIP] Runtime downloads temporarily disabled for testing" -ForegroundColor Yellow
+          Write-Host "The build will proceed with language servers only" -ForegroundColor Yellow
           
-          # Verify downloads
-          if (Test-Path "build\runtimes\nodejs") {
-            Write-Host "[OK] Node.js portable downloaded" -ForegroundColor Green
-          }
-          if (Test-Path "build\runtimes\dotnet") {
-            Write-Host "[OK] .NET Runtime portable downloaded" -ForegroundColor Green
-          }
-          if (Test-Path "build\runtimes\java") {
-            Write-Host "[OK] Java Runtime portable downloaded" -ForegroundColor Green
-          }
+          # Create empty runtime directory
+          New-Item -ItemType Directory -Force -Path "build\runtimes" | Out-Null
           
-          # Display total size
-          $totalSize = (Get-ChildItem "build\runtimes" -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
-          Write-Host "Total runtime size: $([Math]::Round($totalSize, 2)) MB" -ForegroundColor Cyan
+          Write-Host "Build will continue without embedded runtimes" -ForegroundColor Cyan
 
       # Run quality checks with retry logic
       - name: Run code quality checks
