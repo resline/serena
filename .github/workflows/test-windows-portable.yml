@@ -404,7 +404,7 @@ jobs:
         run: |
           Write-Host "Running code formatting check..." -ForegroundColor Green
           # Use python -m to ensure we're using the right environment
-          uv run python -m poethepoet lint
+          uv run poe lint
           if ($LASTEXITCODE -eq 0) {
             Write-Host "[OK] Code formatting check passed" -ForegroundColor Green
           } else {
@@ -416,7 +416,7 @@ jobs:
         shell: powershell
         run: |
           Write-Host "Running type checking..." -ForegroundColor Green
-          uv run python -m poethepoet type-check
+          uv run poe type-check
           if ($LASTEXITCODE -eq 0) {
             Write-Host "[OK] Type checking passed" -ForegroundColor Green
           } else {
