@@ -360,8 +360,8 @@ jobs:
             exit 1
           }
           
-          # Test CLI help (PowerShell-safe redirection)
-          uv run python -m serena --help > $null 2>&1
+          # Test CLI help (call entry-point script)
+          uv run serena --help > $null 2>&1
           if ($LASTEXITCODE -eq 0) {
             Write-Host "[OK] CLI help works" -ForegroundColor Green
           } else {
