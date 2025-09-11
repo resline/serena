@@ -233,7 +233,8 @@ jobs:
 
   build-portable:
     name: Build Portable (${{ matrix.arch }}, ${{ matrix.bundle_tier }})
-    runs-on: windows-latest
+    # Pin to windows-2022 for stability during Server 2025 migration (Sept 2025)
+    runs-on: windows-2022
     timeout-minutes: 60
     needs: download-language-servers
     strategy:
@@ -328,6 +329,19 @@ jobs:
           uv pip install pyinstaller==6.11.1
           uv pip install pywin32 pywin32-ctypes
 
+      # Ensure dev tools are installed (fallback for quality checks)
+      - name: Ensure dev tools are installed
+        shell: powershell
+        run: |
+          # Verify and install critical dev dependencies
+          $tools = @('black', 'ruff', 'mypy', 'pytest', 'poethepoet')
+          foreach ($tool in $tools) {
+            if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+              Write-Host "Installing missing tool: $tool" -ForegroundColor Yellow
+              uv pip install $tool
+            }
+          }
+
       # Setup language servers from cached downloads
       - name: Setup Essential Language Servers
         if: matrix.bundle_tier == 'essential' || matrix.bundle_tier == 'complete' || matrix.bundle_tier == 'full'
@@ -393,40 +407,31 @@ jobs:
             Write-Warning "Additional language servers cache not found"
           }
 
-      # Run quality checks in parallel
+      # Run quality checks sequentially
       - name: Run code quality checks
         shell: powershell
         run: |
-          # Run linting and type checking in parallel using background jobs
-          $lintJob = Start-Job -ScriptBlock { 
-            Set-Location "$using:PWD"; 
-            & uv run poe lint 
+          Write-Host "Running code quality checks..." -ForegroundColor Green
+
+          # Run lint check
+          Write-Host "Running lint check..." -ForegroundColor Cyan
+          uv run poe lint
+          if ($LASTEXITCODE -ne 0) {
+              Write-Error "Lint check failed with exit code $LASTEXITCODE"
+              exit 1
           }
-          $typeJob = Start-Job -ScriptBlock { 
-            Set-Location "$using:PWD"; 
-            & uv run poe type-check 
+          Write-Host "✓ Lint check passed" -ForegroundColor Green
+
+          # Run type check
+          Write-Host "Running type check..." -ForegroundColor Cyan
+          uv run poe type-check
+          if ($LASTEXITCODE -ne 0) {
+              Write-Error "Type check failed with exit code $LASTEXITCODE"
+              exit 1
           }
-          
-          # Wait for both jobs to complete
-          Wait-Job $lintJob, $typeJob | Out-Null
-          
-          # Get results and check for failures
-          $lintResult = Receive-Job $lintJob
-          $typeResult = Receive-Job $typeJob
-          
-          $lintFailed = $lintJob.State -eq "Failed"
-          $typeFailed = $typeJob.State -eq "Failed"
-          
-          Remove-Job $lintJob, $typeJob
-          
-          Write-Host "Lint results:"
-          Write-Host $lintResult
-          Write-Host "Type check results:"
-          Write-Host $typeResult
-          
-          if ($lintFailed -or $typeFailed) {
-            throw "Quality checks failed"
-          }
+          Write-Host "✓ Type check passed" -ForegroundColor Green
+
+          Write-Host "All quality checks passed successfully!" -ForegroundColor Green
 
       # Build with PyInstaller
       - name: Build portable executable
@@ -722,7 +727,7 @@ jobs:
           echo "- 🗂️ **Enhanced caching strategy** - Better cache hit rates and reuse" >> $GITHUB_STEP_SUMMARY
           echo "- 🔧 **Optimized PyInstaller flags** - Smaller executables with better performance" >> $GITHUB_STEP_SUMMARY
           echo "- 🔄 **Network retry logic** - Robust handling of download failures" >> $GITHUB_STEP_SUMMARY
-          echo "- ⏱️ **Parallel quality checks** - Faster linting and type checking" >> $GITHUB_STEP_SUMMARY
+          echo "- ⏱️ **Sequential quality checks** - Reliable linting and type checking" >> $GITHUB_STEP_SUMMARY
           echo "- 📦 **Efficient bundle creation** - Parallel file operations" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Artifacts Created" >> $GITHUB_STEP_SUMMARY
