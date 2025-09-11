@@ -233,7 +233,8 @@ jobs:
 
   build-portable:
     name: Build Portable (${{ matrix.arch }}, ${{ matrix.bundle_tier }})
-    runs-on: windows-latest
+    # Pin to windows-2022 for stability during Server 2025 migration (Sept 2025)
+    runs-on: windows-2022
     timeout-minutes: 60
     needs: download-language-servers
     strategy:
