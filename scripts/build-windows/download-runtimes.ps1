@@ -39,7 +39,7 @@ $ProgressPreference = 'SilentlyContinue'
 
 # Runtime versions
 $NODEJS_VERSION = '20.11.1'
-$DOTNET_VERSION = '9.0.0'
+$DOTNET_VERSION = '9.0.6'
 $JAVA_VERSION = '21'
 
 # Create output directory
@@ -199,7 +199,7 @@ function Download-DotNetPortable {
     Write-Host "`n=== Downloading .NET Runtime Portable v$DOTNET_VERSION ===" -ForegroundColor Yellow
     
     $dotnetArch = if ($Architecture -eq 'arm64') { 'arm64' } else { 'x64' }
-    $dotnetUrl = "https://download.visualstudio.microsoft.com/download/pr/9454f7dc-b98e-4b64-b96b-4d2d6d3b5d50/6995e68c33f18b6e7caf3a35cc69ad00/dotnet-runtime-$DOTNET_VERSION-win-$dotnetArch.zip"
+    $dotnetUrl = "https://builds.dotnet.microsoft.com/dotnet/Runtime/$DOTNET_VERSION/dotnet-runtime-$DOTNET_VERSION-win-$dotnetArch.zip"
     $dotnetZip = Join-Path $OutputPath "dotnet-$dotnetArch.zip"
     $dotnetDir = Join-Path $OutputPath "dotnet"
     
