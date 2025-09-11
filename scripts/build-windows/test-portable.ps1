@@ -35,6 +35,9 @@
 .PARAMETER SkipCompatibility
     Skip Windows version compatibility checks
 
+.PARAMETER Help
+    Show this help information
+
 .PARAMETER Verbose
     Show detailed output from tests
 
@@ -49,12 +52,18 @@
     
 .EXAMPLE
     .\test-portable.ps1 -PackagePath ".\serena-complete-arm64" -Tier complete -Architecture arm64 -SkipPerformance
+    
+.EXAMPLE
+    .\test-portable.ps1 -Help
+    Display detailed help information
 #>
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory=$true)]
-    [string]$PackagePath,
+    [Parameter(Mandatory=$false)]
+    [string]$PackagePath = "",
+    
+    [switch]$Help,
     
     [string]$TestOutputDir = ".\test-results",
     
@@ -72,6 +81,12 @@ param(
     
     [switch]$SkipCompatibility
 )
+
+# Handle help request
+if ($Help -or [string]::IsNullOrEmpty($PackagePath)) {
+    Get-Help $MyInvocation.MyCommand.Definition -Full
+    exit 0
+}
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"

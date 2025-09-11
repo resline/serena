@@ -448,7 +448,7 @@ jobs:
           
           # Test help parameter
           try {
-            $helpOutput = & $testScript -? 2>&1
+            $helpOutput = & $testScript -Help 2>&1 | Out-String
             Write-Host "[OK] Test script help output works" -ForegroundColor Green
           } catch {
             Write-Host "[FAIL] Test script help failed: $_" -ForegroundColor Red
