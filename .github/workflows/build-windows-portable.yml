@@ -109,7 +109,7 @@ jobs:
               
               Write-Host "[OK] Downloaded $name"
             } catch {
-              Write-Warning "Failed to download $name: $_"
+              Write-Warning "Failed to download $name: $($_.Exception.Message)"
             } finally {
               Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
             }
@@ -154,7 +154,7 @@ jobs:
                 
                 Write-Host "[OK] Downloaded $name"
               } catch {
-                Write-Warning "Failed to download $name: $_"
+                Write-Warning "Failed to download $name: $($_.Exception.Message)"
               } finally {
                 Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
               }
