@@ -9,7 +9,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Any
 from dataclasses import dataclass
 import logging
 
@@ -19,24 +19,25 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RuntimeInfo:
     """Information about an embedded runtime."""
+
     name: str
     path: Path
     executable: str
     version: str
-    required_for: List[str]
+    required_for: list[str]
     is_available: bool = False
 
 
 class PortableRuntimeManager:
     """Manages portable runtime environments for offline operation."""
-    
+
     def __init__(self):
         """Initialize the runtime manager."""
         self.app_dir = self._get_app_directory()
         self.runtimes_dir = self.app_dir / "runtimes"
         self.config_file = self.runtimes_dir / "runtime-config.json"
         self.offline_mode = os.environ.get("SERENA_OFFLINE_MODE", "0") == "1"
-        self.runtimes: Dict[str, RuntimeInfo] = {}
+        self.runtimes: dict[str, RuntimeInfo] = {}
         
         # Initialize runtime information
         self._initialize_runtimes()
@@ -88,7 +89,7 @@ class PortableRuntimeManager:
         # Load runtime config if available
         if self.config_file.exists():
             try:
-                with open(self.config_file, 'r') as f:
+                with open(self.config_file) as f:
                     config = json.load(f)
                     self._update_from_config(config)
             except Exception as e:
@@ -97,7 +98,7 @@ class PortableRuntimeManager:
         # Check runtime availability
         self._check_runtime_availability()
     
-    def _update_from_config(self, config: Dict[str, Any]):
+    def _update_from_config(self, config: dict[str, Any]):
         """Update runtime information from configuration."""
         if "runtimes" in config:
             for runtime_name, runtime_config in config["runtimes"].items():
@@ -133,7 +134,7 @@ class PortableRuntimeManager:
         exe_path = runtime.path / runtime.executable
         return str(exe_path) if exe_path.exists() else None
     
-    def setup_runtime_environment(self, runtime_name: str) -> Dict[str, str]:
+    def setup_runtime_environment(self, runtime_name: str) -> dict[str, str]:
         """Setup environment variables for a specific runtime."""
         env = os.environ.copy()
         
@@ -247,7 +248,7 @@ class PortableRuntimeManager:
         
         return False
     
-    def get_language_server_command(self, server_name: str) -> Optional[List[str]]:
+    def get_language_server_command(self, server_name: str) -> Optional[list[str]]:
         """Get the command to run a language server with portable runtime."""
         # Map language servers to their runtime requirements
         server_runtime_map = {
@@ -295,7 +296,6 @@ class PortableRuntimeManager:
                 
         elif server_name == "eclipse-jdtls":
             # Java language server with launcher JAR
-            launcher_jar = self.app_dir / "language_servers" / "java" / "plugins" / "org.eclipse.equinox.launcher_*.jar"
             launcher_jars = list(Path(self.app_dir / "language_servers" / "java" / "plugins").glob("org.eclipse.equinox.launcher_*.jar"))
             if launcher_jars:
                 return [runtime_exe, "-jar", str(launcher_jars[0]), "-configuration", "config", "-data", "workspace"]
@@ -307,7 +307,7 @@ class PortableRuntimeManager:
         command = self.get_language_server_command(server_name)
         return command is not None
     
-    def get_status_report(self) -> Dict[str, Any]:
+    def get_status_report(self) -> dict[str, Any]:
         """Get a status report of all runtimes and their availability."""
         report = {
             "offline_mode": self.offline_mode,
@@ -353,13 +353,13 @@ def get_runtime_manager() -> PortableRuntimeManager:
     return _runtime_manager
 
 
-def setup_offline_runtime(runtime_name: str) -> Dict[str, str]:
+def setup_offline_runtime(runtime_name: str) -> dict[str, str]:
     """Convenience function to setup a runtime environment."""
     manager = get_runtime_manager()
     return manager.setup_runtime_environment(runtime_name)
 
 
-def get_offline_language_server_command(server_name: str) -> Optional[List[str]]:
+def get_offline_language_server_command(server_name: str) -> Optional[list[str]]:
     """Convenience function to get an offline language server command."""
     manager = get_runtime_manager()
     return manager.get_language_server_command(server_name)
