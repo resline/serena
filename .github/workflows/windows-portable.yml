@@ -27,6 +27,33 @@ on:
         required: false
         default: false
         type: boolean
+      upload_artifacts:
+        description: 'Upload build artifacts'
+        required: false
+        default: true
+        type: boolean
+  workflow_call:
+    inputs:
+      bundle_tier:
+        description: 'Bundle tier selection'
+        required: false
+        default: 'essential'
+        type: string
+      architecture:
+        description: 'Target architecture'
+        required: false
+        default: 'x64'
+        type: string
+      pyinstaller_debug:
+        description: 'Enable PyInstaller debug mode'
+        required: false
+        default: false
+        type: boolean
+      upload_artifacts:
+        description: 'Upload build artifacts'
+        required: false
+        default: true
+        type: boolean
   release:
     types: [created]
 
@@ -258,6 +285,21 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.arch }}
 
+      - name: Install Windows-specific dependencies
+        shell: powershell
+        run: |
+          Write-Host "Installing Windows-specific dependencies..." -ForegroundColor Green
+          
+          # Install critical Windows dependencies first
+          python -m pip install --upgrade pip wheel setuptools
+          python -m pip install pywin32 pywin32-ctypes
+          
+          # Verify installation
+          python -c "import win32api; print('pywin32 installed successfully')"
+          python -c "import ctypes; print('ctypes available')"
+          
+          Write-Host "Windows dependencies installed successfully" -ForegroundColor Green
+
       - name: Install UV package manager
         uses: astral-sh/setup-uv@v6
         with:
@@ -407,29 +449,47 @@ jobs:
             Write-Warning "Additional language servers cache not found"
           }
 
-      # Run quality checks sequentially
+      # Run quality checks with retry logic
       - name: Run code quality checks
         shell: powershell
         run: |
+          # Run code quality checks with retry logic
           Write-Host "Running code quality checks..." -ForegroundColor Green
 
-          # Run lint check
-          Write-Host "Running lint check..." -ForegroundColor Cyan
-          uv run poe lint
-          if ($LASTEXITCODE -ne 0) {
-              Write-Error "Lint check failed with exit code $LASTEXITCODE"
-              exit 1
-          }
-          Write-Host "✓ Lint check passed" -ForegroundColor Green
+          $checks = @(
+              @{Name="Lint"; Command="uv run poe lint"},
+              @{Name="Type Check"; Command="uv run poe type-check"}
+          )
 
-          # Run type check
-          Write-Host "Running type check..." -ForegroundColor Cyan
-          uv run poe type-check
-          if ($LASTEXITCODE -ne 0) {
-              Write-Error "Type check failed with exit code $LASTEXITCODE"
-              exit 1
+          foreach ($check in $checks) {
+              $maxRetries = 2
+              $retryCount = 0
+              $success = $false
+              
+              while ($retryCount -le $maxRetries -and -not $success) {
+                  try {
+                      Write-Host "Running $($check.Name) (attempt $($retryCount + 1)/$($maxRetries + 1))..." -ForegroundColor Cyan
+                      
+                      $output = Invoke-Expression $check.Command 2>&1
+                      if ($LASTEXITCODE -eq 0) {
+                          Write-Host "✓ $($check.Name) passed" -ForegroundColor Green
+                          $success = $true
+                      } else {
+                          throw "$($check.Name) failed with exit code $LASTEXITCODE"
+                      }
+                  } catch {
+                      $retryCount++
+                      if ($retryCount -gt $maxRetries) {
+                          Write-Error "❌ $($check.Name) failed after $($maxRetries + 1) attempts"
+                          Write-Host "Last output:" -ForegroundColor Yellow
+                          Write-Host $output
+                          exit 1
+                      }
+                      Write-Warning "Retry $retryCount/$maxRetries after 5 seconds..."
+                      Start-Sleep -Seconds 5
+                  }
+              }
           }
-          Write-Host "✓ Type check passed" -ForegroundColor Green
 
           Write-Host "All quality checks passed successfully!" -ForegroundColor Green
 
@@ -440,6 +500,15 @@ jobs:
           $ErrorActionPreference = "Stop"
           
           Write-Host "Building Serena portable executable..."
+          
+          # Diagnostic information
+          Write-Host "=== Build Environment ===" -ForegroundColor Cyan
+          Write-Host "Python Version: $(python --version)"
+          Write-Host "UV Version: $(uv --version)"
+          Write-Host "Working Directory: $(Get-Location)"
+          Write-Host "Project Root: ${{ github.workspace }}"
+          Write-Host "Language Servers Dir: build/language_servers"
+          Write-Host "=========================" -ForegroundColor Cyan
           
           # Determine output name
           $bundleSuffix = "${{ matrix.bundle_tier }}"
@@ -467,6 +536,9 @@ jobs:
             "--specpath", "build"
           )
           
+          # Add verbose logging flags
+          $pyinstallerArgs += @("--log-level", "INFO")
+          
           # Add debug flags if requested
           if ("${{ inputs.pyinstaller_debug || 'false' }}" -eq "true") {
             $pyinstallerArgs += @("--debug", "all", "--log-level", "DEBUG")
@@ -475,6 +547,10 @@ jobs:
           # Include language servers in bundle
           if (Test-Path "build/language_servers") {
             $pyinstallerArgs += @("--add-data", "build/language_servers;language_servers")
+            Write-Host "Language servers found - will be included in bundle" -ForegroundColor Green
+            Get-ChildItem "build/language_servers" | ForEach-Object { Write-Host "  - $($_.Name)" -ForegroundColor Gray }
+          } else {
+            Write-Host "No language servers found in build/language_servers" -ForegroundColor Yellow
           }
           
           # Add source packages
@@ -511,7 +587,23 @@ jobs:
           # Set memory optimizations for PyInstaller
           $env:PYINSTALLER_COMPILE_BOOTLOADER = "1"
           
-          uv run pyinstaller @pyinstallerArgs
+          Write-Host "Starting PyInstaller build process..." -ForegroundColor Green
+          try {
+            $output = uv run pyinstaller @pyinstallerArgs 2>&1 | Tee-Object -Variable buildOutput
+            Write-Host $buildOutput
+            
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "PyInstaller failed with exit code: $LASTEXITCODE"
+              Write-Host "PyInstaller output:" -ForegroundColor Red
+              Write-Host $buildOutput
+              exit 1
+            }
+          } catch {
+            Write-Error "PyInstaller execution failed: $_"
+            Write-Host "Build output:" -ForegroundColor Red
+            Write-Host $buildOutput
+            exit 1
+          }
           
           # Verify the executable was created
           $exePath = "dist/${outputName}.exe"
@@ -609,8 +701,9 @@ jobs:
           $zipSize = (Get-Item $zipPath).Length / 1MB
           Write-Host "Created bundle ZIP: $zipPath (${zipSize:N2} MB)"
 
-      # Upload artifacts
+      # Upload artifacts (only if enabled)
       - name: Upload build artifacts
+        if: inputs.upload_artifacts != false
         uses: actions/upload-artifact@v4
         with:
           name: serena-windows-${{ matrix.arch }}-${{ matrix.bundle_tier }}

@@ -55,6 +55,15 @@ param(
     [string]$Architecture = "x64"
 )
 
+# Auto-adjust output directory if path would be too long
+$maxPathLength = 260
+if ($OutputDir.Length -gt ($maxPathLength - 100)) {
+    $fallbackDir = ".\dist\sp"  # Short path fallback
+    Write-Warning "Output directory path too long ($($OutputDir.Length) chars)"
+    Write-Warning "Using fallback directory: $fallbackDir"
+    $OutputDir = $fallbackDir
+}
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -172,17 +181,39 @@ function Initialize-BuildEnvironment {
     # Change to repository root
     Push-Location $RepoRoot
     
+    # Check for potential path length issues
+    Write-Info "Checking path lengths..."
+    $maxPathLength = 260  # Windows MAX_PATH limitation
+    $pathsToCheck = @($OutputDir, $TempDir, $LanguageServersDir, $BuildDir)
+    
+    foreach ($path in $pathsToCheck) {
+        if ($path.Length -gt ($maxPathLength - 50)) {  # Leave some buffer for filenames
+            Write-Warning "Path may be too long for Windows: $path (Length: $($path.Length))"
+            Write-Warning "Consider using a shorter output directory to avoid path length issues"
+        }
+    }
+    
     # Clean directories if requested
     if ($Clean) {
         Write-Info "Cleaning output directories..."
         Remove-Item $OutputDir -Recurse -Force -ErrorAction SilentlyContinue
     }
     
-    # Create necessary directories
+    # Create necessary directories with error handling for long paths
     @($OutputDir, $TempDir, $LanguageServersDir, $BuildDir) | ForEach-Object {
         if (-not (Test-Path $_)) {
             Write-Info "Creating directory: $_"
-            New-Item -ItemType Directory -Path $_ -Force | Out-Null
+            try {
+                New-Item -ItemType Directory -Path $_ -Force | Out-Null
+            } catch {
+                if ($_.Exception.Message -like "*path*too*long*" -or $_.Exception.HResult -eq -2147024843) {
+                    Write-Error "Path too long for Windows filesystem: $_"
+                    Write-Error "Try using a shorter output directory path"
+                    throw
+                } else {
+                    throw
+                }
+            }
         }
     }
     
@@ -199,6 +230,27 @@ function Install-Dependencies {
     }
     
     try {
+        # Verify Windows dependencies first
+        Write-Info "Verifying Windows dependencies..." 
+        try {
+            python -c "import win32api, pywintypes" 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "Windows dependencies missing, installing..."
+                python -m pip install --upgrade pip wheel setuptools
+                python -m pip install pywin32 pywin32-ctypes
+                
+                # Verify installation worked
+                python -c "import win32api; print('pywin32 installed successfully')"
+                if ($LASTEXITCODE -ne 0) { throw "Failed to install pywin32" }
+            } else {
+                Write-Success "Windows dependencies already available"
+            }
+        } catch {
+            Write-Warning "Error checking Windows dependencies, installing anyway..."
+            python -m pip install --upgrade pip wheel setuptools
+            python -m pip install pywin32 pywin32-ctypes
+        }
+        
         Write-Info "Syncing dependencies with uv..."
         & uv sync --dev
         if ($LASTEXITCODE -ne 0) { throw "uv sync failed" }
@@ -272,132 +324,32 @@ function Get-LanguageServers {
     }
 }
 
-function Create-PyInstallerSpec {
+function Get-PyInstallerSpec {
     param([string]$ProjectVersion)
     
-    Write-Step "Creating PyInstaller specification..."
+    Write-Step "Preparing PyInstaller configuration..."
     
-    # Build spec content with proper variable interpolation using expandable here-string
-    # First, normalize the path for Python (forward slashes and escape backslashes)
-    $normalizedLSDir = $LanguageServersDir -replace '\\', '/'
-    
-    $specContent = @"
-# -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_all
-
-# Collect all data and hidden imports for Serena
-datas = [
-    ('src/serena/resources', 'serena/resources'),
-    ('src/solidlsp', 'solidlsp'),
-]
-
-# Add language servers if they exist
-import os
-ls_dir = r'$normalizedLSDir'
-if os.path.exists(ls_dir):
-    datas.append((ls_dir, 'language-servers'))
-
-# Hidden imports for various components
-hiddenimports = [
-    'serena',
-    'serena.agent',
-    'serena.cli',
-    'serena.mcp',
-    'solidlsp',
-    'solidlsp.ls',
-    'solidlsp.language_servers',
-    'mcp',
-    'anthropic',
-    'requests',
-    'yaml',
-    'ruamel.yaml',
-    'jinja2',
-    'pathspec',
-    'psutil',
-    'tqdm',
-    'tiktoken',
-    'pydantic',
-    'dotenv',
-]
-
-# Collect all files from main packages
-tmp_ret = collect_all('serena')
-datas += tmp_ret[0]
-hiddenimports += tmp_ret[1]
-
-tmp_ret = collect_all('solidlsp')
-datas += tmp_ret[0]
-hiddenimports += tmp_ret[1]
-
-# Binary excludes to reduce size
-binaries = []
-
-a = Analysis(
-    ['src/serena/cli.py'],
-    pathex=['src'],
-    binaries=binaries,
-    datas=datas,
-    hiddenimports=hiddenimports,
-    hookspath=[],
-    hooksconfig={},
-    runtime_hooks=[],
-    excludes=['tkinter', 'test', 'unittest', 'matplotlib'],
-    noarchive=False,
-)
-
-pyz = PYZ(a.pure, a.zipped_data, cipher=None)
-
-exe = EXE(
-    pyz,
-    a.scripts,
-    [],
-    exclude_binaries=True,
-    name='serena',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    console=True,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch='$Architecture',
-    codesign_identity=None,
-    entitlements_file=None,
-    version='version_info.py' if os.path.exists('version_info.py') else None,
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='serena',
-)
-"@
-
-    $specPath = Join-Path $BuildDir "serena.spec"
-    try {
-        Set-Content -Path $specPath -Value $specContent -Encoding UTF8
-        
-        if (-not (Test-Path $specPath)) {
-            throw "Spec file was not created successfully"
-        }
-        
-        # Verify the content was written correctly
-        $writtenContent = Get-Content $specPath -Raw
-        if (-not $writtenContent -or $writtenContent.Length -lt 100) {
-            throw "Spec file content appears to be incomplete"
-        }
-        
-        Write-Success "PyInstaller spec created: $specPath"
-        return $specPath
-    } catch {
-        Write-Error "Failed to create PyInstaller spec: $_"
-        throw
+    # Use existing comprehensive spec file instead of generating
+    $specFile = Join-Path $PSScriptRoot ".." ".." "scripts" "pyinstaller" "serena.spec"
+    if (-not (Test-Path $specFile)) {
+        throw "PyInstaller spec file not found: $specFile"
     }
+
+    Write-Success "Using existing spec file: $specFile"
+
+    # Set environment variables for PyInstaller
+    $env:SERENA_VERSION = $ProjectVersion
+    $env:SERENA_BUILD_TIER = $Tier
+    $env:LANGUAGE_SERVERS_DIR = $LanguageServersDir
+    $env:PROJECT_ROOT = $RepoRoot
+    
+    Write-Info "Environment variables set:"
+    Write-Info "  SERENA_VERSION: $ProjectVersion"
+    Write-Info "  SERENA_BUILD_TIER: $Tier"
+    Write-Info "  LANGUAGE_SERVERS_DIR: $LanguageServersDir"
+    Write-Info "  PROJECT_ROOT: $RepoRoot"
+    
+    return $specFile
 }
 
 function Create-VersionInfo {
@@ -480,42 +432,93 @@ function Build-WithPyInstaller {
     Write-Step "Building with PyInstaller..."
     
     try {
-        $distPath = Join-Path $BuildDir "dist"
-        $workPath = Join-Path $BuildDir "work"
+        # Run PyInstaller from project root
+        Push-Location $RepoRoot
+        
+        # Diagnostic information
+        Write-Host "=== Build Environment ===" -ForegroundColor Cyan
+        Write-Host "Python Version: $(python --version)"
+        Write-Host "UV Version: $(uv --version)"
+        Write-Host "Working Directory: $(Get-Location)"
+        Write-Host "Project Root: $RepoRoot"
+        Write-Host "Language Servers Dir: $LanguageServersDir"
+        Write-Host "=========================" -ForegroundColor Cyan
         
         Write-Info "Starting PyInstaller build..."
         Write-Info "Spec file: $SpecPath"
-        Write-Info "Dist path: $distPath"
-        Write-Info "Work path: $workPath"
+        Write-Info "Working directory: $RepoRoot"
         
-        Write-Info "Running PyInstaller with parameters:"
-        Write-Info "  Spec: $SpecPath"
-        Write-Info "  Dist: $distPath"
-        Write-Info "  Work: $workPath"
-        
-        & uv run pyinstaller `
-            --distpath $distPath `
-            --workpath $workPath `
-            --clean `
-            --noconfirm `
-            $SpecPath
-            
-        if ($LASTEXITCODE -ne 0) { 
-            Write-Error "PyInstaller exited with code: $LASTEXITCODE"
-            throw "PyInstaller build failed with exit code $LASTEXITCODE" 
+        # Check if language servers directory exists and show contents
+        if (Test-Path $LanguageServersDir) {
+            Write-Info "Language servers found - will be included in bundle:"
+            Get-ChildItem $LanguageServersDir | ForEach-Object { Write-Info "  - $($_.Name)" }
+        } else {
+            Write-Warning "No language servers found at: $LanguageServersDir"
         }
         
-        $builtAppPath = Join-Path $distPath "serena"
+        $pyInstallerArgs = @(
+            $SpecPath,
+            "--clean",
+            "--noconfirm",
+            "--distpath", "dist",
+            "--workpath", "build",
+            "--log-level", "DEBUG"
+        )
+        
+        Write-Info "Running PyInstaller with args: $($pyInstallerArgs -join ' ')"
+        Write-Info "Starting PyInstaller build process..."
+        
+        $pyinstallerOutput = & uv run pyinstaller @pyInstallerArgs 2>&1
+        
+        # Display the output
+        Write-Host "PyInstaller Output:" -ForegroundColor Yellow
+        $pyinstallerOutput | ForEach-Object { Write-Host $_ }
+        
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "PyInstaller failed with exit code $LASTEXITCODE"
+            Write-Error "Build output:"
+            $pyinstallerOutput | ForEach-Object { Write-Error $_ }
+            throw "PyInstaller failed with exit code $LASTEXITCODE"
+        }
+        
+        # Verify output - check for the main serena-mcp-server executable
+        $builtAppPath = Join-Path "dist" "serena-mcp-server"
+        $exePath = Join-Path $builtAppPath "serena-mcp-server.exe"
+        
         if (-not (Test-Path $builtAppPath)) {
-            throw "Built application not found at: $builtAppPath"
+            Write-Error "Built application directory not found: $builtAppPath"
+            Write-Error "Contents of dist directory:"
+            if (Test-Path "dist") {
+                Get-ChildItem "dist" | ForEach-Object { Write-Error "  - $($_.Name)" }
+            } else {
+                Write-Error "Dist directory does not exist"
+            }
+            throw "Built application directory not found: $builtAppPath"
         }
         
+        if (-not (Test-Path $exePath)) {
+            Write-Error "PyInstaller did not create expected executable: $exePath"
+            Write-Error "Contents of built app directory:"
+            Get-ChildItem $builtAppPath | ForEach-Object { Write-Error "  - $($_.Name)" }
+            throw "PyInstaller did not create expected executable: $exePath"
+        }
+        
+        # Show build statistics
+        $appSize = (Get-ChildItem $builtAppPath -Recurse | Measure-Object -Property Length -Sum).Sum
+        $appSizeMB = [math]::Round($appSize / 1MB, 1)
+        Write-Info "Build size: $appSizeMB MB"
+        
+        Write-Success "Successfully created executable: $exePath"
         Write-Success "PyInstaller build completed: $builtAppPath"
         return $builtAppPath
         
     } catch {
         Write-Error "PyInstaller build failed: $_"
-        exit 1
+        Write-Error "Error details: $($_.Exception.Message)"
+        Write-Error "Stack trace: $($_.ScriptStackTrace)"
+        throw
+    } finally {
+        Pop-Location
     }
 }
 
@@ -709,7 +712,7 @@ try {
     Get-LanguageServers
     
     $versionInfoPath = Create-VersionInfo -ProjectVersion $projectVersion
-    $specPath = Create-PyInstallerSpec -ProjectVersion $projectVersion
+    $specPath = Get-PyInstallerSpec -ProjectVersion $projectVersion
     $builtAppPath = Build-WithPyInstaller -SpecPath $specPath -ProjectVersion $projectVersion
     $package = Create-PortablePackage -BuiltAppPath $builtAppPath -ProjectVersion $projectVersion
     
