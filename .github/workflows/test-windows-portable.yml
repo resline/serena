@@ -403,25 +403,47 @@ jobs:
           Write-Host "[OK] Dependencies installed" -ForegroundColor Green
           
           Write-Host "Verifying development tools..." -ForegroundColor Cyan
-          $tools = @(
-              @{Name = 'black'; Command = 'black --version'},
-              @{Name = 'ruff'; Command = 'ruff --version'},
-              @{Name = 'mypy'; Command = 'mypy --version'}
-          )
-
-          foreach ($tool in $tools) {
-              Write-Host "Checking $($tool.Name)..." -ForegroundColor Yellow
-              try {
-                  $output = uv run $tool.Command 2>&1
-                  if ($LASTEXITCODE -eq 0) {
-                      Write-Host "✓ $($tool.Name) is available" -ForegroundColor Green
-                  } else {
-                      throw "Tool check failed with exit code $LASTEXITCODE"
-                  }
-              } catch {
-                  Write-Host "✗ $($tool.Name) verification failed: $_" -ForegroundColor Red
-                  exit 1
+          
+          # Check black
+          Write-Host "Checking black..." -ForegroundColor Yellow
+          try {
+              $output = uv run black --version 2>&1
+              if ($LASTEXITCODE -eq 0) {
+                  Write-Host "✓ black is available" -ForegroundColor Green
+              } else {
+                  throw "Tool check failed with exit code $LASTEXITCODE"
               }
+          } catch {
+              Write-Host "✗ black verification failed: $_" -ForegroundColor Red
+              exit 1
+          }
+          
+          # Check ruff
+          Write-Host "Checking ruff..." -ForegroundColor Yellow
+          try {
+              $output = uv run ruff --version 2>&1
+              if ($LASTEXITCODE -eq 0) {
+                  Write-Host "✓ ruff is available" -ForegroundColor Green
+              } else {
+                  throw "Tool check failed with exit code $LASTEXITCODE"
+              }
+          } catch {
+              Write-Host "✗ ruff verification failed: $_" -ForegroundColor Red
+              exit 1
+          }
+          
+          # Check mypy
+          Write-Host "Checking mypy..." -ForegroundColor Yellow
+          try {
+              $output = uv run mypy --version 2>&1
+              if ($LASTEXITCODE -eq 0) {
+                  Write-Host "✓ mypy is available" -ForegroundColor Green
+              } else {
+                  throw "Tool check failed with exit code $LASTEXITCODE"
+              }
+          } catch {
+              Write-Host "✗ mypy verification failed: $_" -ForegroundColor Red
+              exit 1
           }
           Write-Host "All development tools verified successfully!" -ForegroundColor Green
 

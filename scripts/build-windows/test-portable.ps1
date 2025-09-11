@@ -606,7 +606,7 @@ function Test-PackageStructure {
     # Check for language servers directory
     $lsDir = Join-Path $script:ResolvedPackagePath "language-servers"
     if (Test-Path $lsDir) {
-        $lsCount = (Get-ChildItem $lsDir -Directory).Count
+        $lsCount = @(Get-ChildItem $lsDir -Directory).Count
         Add-TestResult -Name "Language Servers Directory" -Status "Pass" -Details "$lsCount language server directories found"
     } else {
         if ($script:ExpectedLanguageServers.Count -gt 0) {
