@@ -314,7 +314,11 @@ class PortableRuntimeManager:
 
     def get_status_report(self) -> dict[str, Any]:
         """Get a status report of all runtimes and their availability."""
-        report: dict[str, Any] = {"offline_mode": self.offline_mode, "runtimes": {}, "language_servers": {}}
+        report: dict[str, Any] = {
+            "offline_mode": self.offline_mode,
+            "runtimes": {},
+            "language_servers": {},
+        }
 
         # Runtime status
         for name, runtime in self.runtimes.items():
