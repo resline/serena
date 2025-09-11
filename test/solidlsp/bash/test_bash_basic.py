@@ -25,7 +25,7 @@ class TestBashLanguageServerBasics:
     def test_bash_request_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test request_document_symbols for bash files."""
         # Test getting symbols from main.sh
-        all_symbols, root_symbols = language_server.request_document_symbols("main.sh", include_body=False)
+        all_symbols, _root_symbols = language_server.request_document_symbols("main.sh", include_body=False)
 
         # Extract function symbols (LSP Symbol Kind 12)
         function_symbols = [symbol for symbol in all_symbols if symbol.get("kind") == 12]
@@ -41,7 +41,7 @@ class TestBashLanguageServerBasics:
     def test_bash_request_document_symbols_with_body(self, language_server: SolidLanguageServer) -> None:
         """Test request_document_symbols with body extraction."""
         # Test with include_body=True
-        all_symbols, root_symbols = language_server.request_document_symbols("main.sh", include_body=True)
+        all_symbols, _root_symbols = language_server.request_document_symbols("main.sh", include_body=True)
 
         function_symbols = [symbol for symbol in all_symbols if symbol.get("kind") == 12]
 
