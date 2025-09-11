@@ -402,16 +402,28 @@ jobs:
           }
           Write-Host "[OK] Dependencies installed" -ForegroundColor Green
           
-          # Ensure dev tools are available
-          Write-Host "Verifying dev tools..." -ForegroundColor Yellow
-          $tools = @('black', 'ruff', 'mypy')
+          Write-Host "Verifying development tools..." -ForegroundColor Cyan
+          $tools = @(
+              @{Name = 'black'; Command = 'black --version'},
+              @{Name = 'ruff'; Command = 'ruff --version'},
+              @{Name = 'mypy'; Command = 'mypy --version'}
+          )
+
           foreach ($tool in $tools) {
-            $result = uv run python -c "import $tool" 2>&1
-            if ($LASTEXITCODE -ne 0) {
-              Write-Host "Installing missing tool: $tool" -ForegroundColor Yellow
-              uv pip install $tool
-            }
+              Write-Host "Checking $($tool.Name)..." -ForegroundColor Yellow
+              try {
+                  $output = uv run $tool.Command 2>&1
+                  if ($LASTEXITCODE -eq 0) {
+                      Write-Host "✓ $($tool.Name) is available" -ForegroundColor Green
+                  } else {
+                      throw "Tool check failed with exit code $LASTEXITCODE"
+                  }
+              } catch {
+                  Write-Host "✗ $($tool.Name) verification failed: $_" -ForegroundColor Red
+                  exit 1
+              }
           }
+          Write-Host "All development tools verified successfully!" -ForegroundColor Green
 
       - name: Run formatting check
         shell: powershell
@@ -492,27 +504,77 @@ jobs:
             }
           }
           
-          # Create a dummy package structure for testing
-          $testDir = "test-dummy-package"
-          $testPackage = "dummy-serena-package"
-          New-Item -ItemType Directory -Path $testDir -Force
-          New-Item -ItemType Directory -Path "$testDir/$testPackage" -Force
+          # Create dummy package for testing
+          $dummyPackageDir = "${{ runner.temp }}/test-package"
+          New-Item -ItemType Directory -Path $dummyPackageDir -Force | Out-Null
           
-          # Create minimal test files
-          "echo 'Dummy version 1.0.0'" | Out-File "$testDir/$testPackage/serena.exe" -Encoding ascii
-          "echo dummy readme" | Out-File "$testDir/$testPackage/README.txt" -Encoding ascii
-          "@echo off`necho dummy launcher" | Out-File "$testDir/$testPackage/serena.bat" -Encoding ascii
+          # Create main executable that responds to commands
+          @'
+@echo off
+if "%1"=="--version" (
+    echo Serena Portable Mock v1.0.0
+    exit /b 0
+)
+if "%1"=="serena-mcp-server" (
+    echo Starting MCP server mock...
+    timeout /t 2 >nul
+    exit /b 0
+)
+echo Serena Portable Mock - Test Executable
+exit /b 0
+'@ | Out-File -FilePath "$dummyPackageDir/serena.exe" -Encoding ASCII
+          
+          # Create proper launcher script with environment variables
+          @'
+@echo off
+set SERENA_PORTABLE=1
+set SERENA_HOME=%~dp0\.serena-portable
+echo Launching Serena Portable...
+"%~dp0\serena.exe" %*
+'@ | Out-File -FilePath "$dummyPackageDir/serena.bat" -Encoding ASCII
+          
+          # Create _internal directory with mock dependencies (PyInstaller structure)
+          $internalDir = "$dummyPackageDir/_internal"
+          New-Item -ItemType Directory -Path $internalDir -Force | Out-Null
+          
+          # Add 60+ mock dependency files to simulate real PyInstaller bundle
+          for ($i = 1; $i -le 65; $i++) {
+              $extensions = @('.pyd', '.dll', '.py', '.so')
+              $ext = $extensions[$i % 4]
+              "Mock dependency file $i" | Out-File -FilePath "$internalDir/dep_$i$ext" -Encoding ASCII
+          }
+          
+          # Create README with expected sections
+          @'
+# Serena Portable Edition
+
+## Quick Start
+1. Run serena.bat to start
+2. Configuration stored in .serena-portable
+
+## Requirements
+- Windows 10 or later
+- No Python installation required
+
+## Version
+1.0.0 (Test Build)
+'@ | Out-File -FilePath "$dummyPackageDir/README.txt" -Encoding UTF8
+          
+          # Create language-servers directory (empty for minimal tier)
+          New-Item -ItemType Directory -Path "$dummyPackageDir/language-servers" -Force | Out-Null
+          
+          Write-Host "Created test package at: $dummyPackageDir" -ForegroundColor Green
           
           # Test with dummy package (should fail gracefully)
           try {
-            $result = & $testScript -PackagePath "$testDir/$testPackage" -Quick -Timeout 5 2>&1
+            $result = & $testScript -PackagePath "$dummyPackageDir" -Quick -Timeout 10 2>&1
             Write-Host "[OK] Test script handles dummy package gracefully" -ForegroundColor Green
           } catch {
             Write-Host "[OK] Test script properly rejects invalid package (expected behavior)" -ForegroundColor Green
           }
           
           # Cleanup
-          Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item $dummyPackageDir -Recurse -Force -ErrorAction SilentlyContinue
 
   # Generate test report
   test-summary:

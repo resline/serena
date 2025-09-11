@@ -58,7 +58,7 @@ class TestBashLanguageServerBasics:
     def test_bash_utils_functions(self, language_server: SolidLanguageServer) -> None:
         """Test function detection in utils.sh file."""
         # Test with utils.sh as well
-        utils_all_symbols, utils_root_symbols = language_server.request_document_symbols("utils.sh", include_body=False)
+        utils_all_symbols, _utils_root_symbols = language_server.request_document_symbols("utils.sh", include_body=False)
 
         utils_function_symbols = [symbol for symbol in utils_all_symbols if symbol.get("kind") == 12]
         utils_function_names = [symbol["name"] for symbol in utils_function_symbols]
@@ -84,12 +84,12 @@ class TestBashLanguageServerBasics:
     def test_bash_function_syntax_patterns(self, language_server: SolidLanguageServer) -> None:
         """Test that LSP detects different bash function syntax patterns correctly."""
         # Test main.sh (has both 'function' keyword and traditional syntax)
-        main_all_symbols, main_root_symbols = language_server.request_document_symbols("main.sh", include_body=False)
+        main_all_symbols, _main_root_symbols = language_server.request_document_symbols("main.sh", include_body=False)
         main_functions = [symbol for symbol in main_all_symbols if symbol.get("kind") == 12]
         main_function_names = [func["name"] for func in main_functions]
 
         # Test utils.sh (all use 'function' keyword)
-        utils_all_symbols, utils_root_symbols = language_server.request_document_symbols("utils.sh", include_body=False)
+        utils_all_symbols, _utils_root_symbols = language_server.request_document_symbols("utils.sh", include_body=False)
         utils_functions = [symbol for symbol in utils_all_symbols if symbol.get("kind") == 12]
         utils_function_names = [func["name"] for func in utils_functions]
 
