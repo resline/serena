@@ -39,7 +39,8 @@ jobs:
   # Quick syntax and validation tests
   syntax-validation:
     name: Syntax & URL Validation
-    runs-on: windows-latest
+    # Pin to windows-2022 for stability during Server 2025 migration (Sept 2025)
+    runs-on: windows-2022
     timeout-minutes: 10
     
     steps:
@@ -243,7 +244,8 @@ jobs:
   # Matrix testing for different scenarios
   build-matrix-test:
     name: Build Matrix Test (${{ matrix.bundle_tier }}, ${{ matrix.arch }})
-    runs-on: windows-latest
+    # Pin to windows-2022 for stability during Server 2025 migration (Sept 2025)
+    runs-on: windows-2022
     timeout-minutes: 15
     needs: syntax-validation
     if: github.event.inputs.test_level == 'full' || contains(github.event_name, 'push')
@@ -370,7 +372,8 @@ jobs:
   # Quick format and lint checks
   quality-check:
     name: Quality Check
-    runs-on: windows-latest
+    # Pin to windows-2022 for stability during Server 2025 migration (Sept 2025)
+    runs-on: windows-2022
     timeout-minutes: 10
     needs: syntax-validation
     
@@ -427,7 +430,8 @@ jobs:
   # Test the test script itself
   test-script-validation:
     name: Test Script Validation
-    runs-on: windows-latest
+    # Pin to windows-2022 for stability during Server 2025 migration (Sept 2025)
+    runs-on: windows-2022
     timeout-minutes: 5
     needs: syntax-validation
     
@@ -547,7 +551,8 @@ jobs:
   # Actual build job - runs only when manually triggered with build option
   build-standalone:
     name: Build Windows Standalone
-    runs-on: windows-latest
+    # Pin to windows-2022 for stability during Server 2025 migration (Sept 2025)
+    runs-on: windows-2022
     timeout-minutes: 60
     # Only run when manually triggered and test_level is 'build'
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.test_level == 'build'
