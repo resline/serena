@@ -410,26 +410,26 @@ jobs:
           Write-Host "Checking black..." -ForegroundColor Yellow
           uv run black --version
           if ($LASTEXITCODE -ne 0) {
-              Write-Host "✗ black verification failed" -ForegroundColor Red
+              Write-Host "[FAIL] black verification failed" -ForegroundColor Red
               exit 1
           }
-          Write-Host "✓ black is available" -ForegroundColor Green
+          Write-Host "[OK] black is available" -ForegroundColor Green
           
           Write-Host "Checking ruff..." -ForegroundColor Yellow  
           uv run ruff --version
           if ($LASTEXITCODE -ne 0) {
-              Write-Host "✗ ruff verification failed" -ForegroundColor Red
+              Write-Host "[FAIL] ruff verification failed" -ForegroundColor Red
               exit 1
           }
-          Write-Host "✓ ruff is available" -ForegroundColor Green
+          Write-Host "[OK] ruff is available" -ForegroundColor Green
           
           Write-Host "Checking mypy..." -ForegroundColor Yellow
           uv run mypy --version
           if ($LASTEXITCODE -ne 0) {
-              Write-Host "✗ mypy verification failed" -ForegroundColor Red  
+              Write-Host "[FAIL] mypy verification failed" -ForegroundColor Red  
               exit 1
           }
-          Write-Host "✓ mypy is available" -ForegroundColor Green
+          Write-Host "[OK] mypy is available" -ForegroundColor Green
 
       - name: Run formatting check
         shell: powershell
@@ -526,7 +526,7 @@ jobs:
             '    exit /b 0' + "`n" +
             ')' + "`n" +
             'echo Serena Portable Mock - Test Executable' + "`n" +
-            'exit /b 0'
+            'exit /b 0' + "`n"
           $batchContent | Out-File -FilePath "$dummyPackageDir/serena.exe" -Encoding ASCII
           
           # Create proper launcher script with environment variables
@@ -534,7 +534,7 @@ jobs:
             'set SERENA_PORTABLE=1' + "`n" +
             'set SERENA_HOME=%~dp0\.serena-portable' + "`n" +
             'echo Launching Serena Portable...' + "`n" +
-            '"%~dp0\serena.exe" %*'
+            '"%~dp0\serena.exe" %*' + "`n"
           $launcherContent | Out-File -FilePath "$dummyPackageDir/serena.bat" -Encoding ASCII
           
           # Create _internal directory with mock dependencies (PyInstaller structure)
@@ -557,7 +557,7 @@ jobs:
             '- Windows 10 or later' + "`n" +
             '- No Python installation required' + "`n`n" +
             '## Version' + "`n" +
-            '1.0.0 (Test Build)'
+            '1.0.0 (Test Build)' + "`n"
           $readmeContent | Out-File -FilePath "$dummyPackageDir/README.txt" -Encoding UTF8
           
           # Create language-servers directory (empty for minimal tier)
@@ -567,7 +567,7 @@ jobs:
           
           # Test with dummy package (should fail gracefully)
           Write-Host "Running test script on dummy package (some failures expected)..." -ForegroundColor Yellow
-          & $testScript -Path "$dummyPackageDir" -Tier minimal -SkipPerformance -Timeout 10
+          & $testScript -PackagePath "$dummyPackageDir" -Tier minimal -SkipPerformance -Timeout 10
           $testExitCode = $LASTEXITCODE
           Write-Host "Test script completed with exit code: $testExitCode" -ForegroundColor Cyan
           # Don't fail on test failures for dummy package - only fail if script couldn't run at all
