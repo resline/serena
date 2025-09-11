@@ -107,7 +107,7 @@ function Test-Arm64Support {
     $hasArm64 = $arm64Supported | Where-Object { $ServerName -like "*$_*" }
     
     if (-not $hasArm64) {
-        Write-Warning "$ServerName: No native ARM64 support available, will use x64 with emulation"
+        Write-Warning "${ServerName}: No native ARM64 support available, will use x64 with emulation"
         return $false  # Will use emulation
     }
     
