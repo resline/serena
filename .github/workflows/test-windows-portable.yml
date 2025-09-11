@@ -430,8 +430,6 @@ jobs:
               exit 1
           }
           Write-Host "✓ mypy is available" -ForegroundColor Green
-          
-          Write-Host "All development tools verified successfully!" -ForegroundColor Green
 
       - name: Run formatting check
         shell: powershell
@@ -568,11 +566,17 @@ jobs:
           Write-Host "Created test package at: $dummyPackageDir" -ForegroundColor Green
           
           # Test with dummy package (should fail gracefully)
-          try {
-            $result = & $testScript -PackagePath "$dummyPackageDir" -Quick -Timeout 10 2>&1
-            Write-Host "[OK] Test script handles dummy package gracefully" -ForegroundColor Green
-          } catch {
-            Write-Host "[OK] Test script properly rejects invalid package (expected behavior)" -ForegroundColor Green
+          Write-Host "Running test script on dummy package (some failures expected)..." -ForegroundColor Yellow
+          & $testScript -Path "$dummyPackageDir" -Tier minimal -SkipPerformance -Timeout 10
+          $testExitCode = $LASTEXITCODE
+          Write-Host "Test script completed with exit code: $testExitCode" -ForegroundColor Cyan
+          # Don't fail on test failures for dummy package - only fail if script couldn't run at all
+          if ($testExitCode -eq 0 -or $testExitCode -eq 1) {
+              Write-Host "Test script executed successfully (dummy package test failures are expected)" -ForegroundColor Green
+              exit 0
+          } else {
+              Write-Host "Test script failed to execute properly" -ForegroundColor Red
+              exit 1
           }
           
           # Cleanup
