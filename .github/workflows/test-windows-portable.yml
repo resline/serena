@@ -401,17 +401,35 @@ jobs:
             exit 1
           }
           Write-Host "[OK] Dependencies installed" -ForegroundColor Green
+
+      - name: Verify development tools
+        shell: powershell  
+        run: |
+          Write-Host "Verifying development tools..." -ForegroundColor Cyan
           
-          # Ensure dev tools are available
-          Write-Host "Verifying dev tools..." -ForegroundColor Yellow
-          $tools = @('black', 'ruff', 'mypy')
-          foreach ($tool in $tools) {
-            $result = uv run python -c "import $tool" 2>&1
-            if ($LASTEXITCODE -ne 0) {
-              Write-Host "Installing missing tool: $tool" -ForegroundColor Yellow
-              uv pip install $tool
-            }
+          Write-Host "Checking black..." -ForegroundColor Yellow
+          uv run black --version
+          if ($LASTEXITCODE -ne 0) {
+              Write-Host "[FAIL] black verification failed" -ForegroundColor Red
+              exit 1
           }
+          Write-Host "[OK] black is available" -ForegroundColor Green
+          
+          Write-Host "Checking ruff..." -ForegroundColor Yellow  
+          uv run ruff --version
+          if ($LASTEXITCODE -ne 0) {
+              Write-Host "[FAIL] ruff verification failed" -ForegroundColor Red
+              exit 1
+          }
+          Write-Host "[OK] ruff is available" -ForegroundColor Green
+          
+          Write-Host "Checking mypy..." -ForegroundColor Yellow
+          uv run mypy --version
+          if ($LASTEXITCODE -ne 0) {
+              Write-Host "[FAIL] mypy verification failed" -ForegroundColor Red  
+              exit 1
+          }
+          Write-Host "[OK] mypy is available" -ForegroundColor Green
 
       - name: Run formatting check
         shell: powershell
@@ -492,27 +510,77 @@ jobs:
             }
           }
           
-          # Create a dummy package structure for testing
-          $testDir = "test-dummy-package"
-          $testPackage = "dummy-serena-package"
-          New-Item -ItemType Directory -Path $testDir -Force
-          New-Item -ItemType Directory -Path "$testDir/$testPackage" -Force
+          # Create dummy package for testing
+          $dummyPackageDir = "${{ runner.temp }}/test-package"
+          New-Item -ItemType Directory -Path $dummyPackageDir -Force | Out-Null
           
-          # Create minimal test files
-          "echo 'Dummy version 1.0.0'" | Out-File "$testDir/$testPackage/serena.exe" -Encoding ascii
-          "echo dummy readme" | Out-File "$testDir/$testPackage/README.txt" -Encoding ascii
-          "@echo off`necho dummy launcher" | Out-File "$testDir/$testPackage/serena.bat" -Encoding ascii
+          # Create main executable that responds to commands
+          $batchContent = '@echo off' + "`n" + 
+            'if "%1"=="--version" (' + "`n" +
+            '    echo Serena Portable Mock v1.0.0' + "`n" +
+            '    exit /b 0' + "`n" +
+            ')' + "`n" +
+            'if "%1"=="serena-mcp-server" (' + "`n" +
+            '    echo Starting MCP server mock...' + "`n" +
+            '    timeout /t 2 >nul' + "`n" +
+            '    exit /b 0' + "`n" +
+            ')' + "`n" +
+            'echo Serena Portable Mock - Test Executable' + "`n" +
+            'exit /b 0' + "`n"
+          $batchContent | Out-File -FilePath "$dummyPackageDir/serena.exe" -Encoding ASCII
+          
+          # Create proper launcher script with environment variables
+          $launcherContent = '@echo off' + "`n" +
+            'set SERENA_PORTABLE=1' + "`n" +
+            'set SERENA_HOME=%~dp0\.serena-portable' + "`n" +
+            'echo Launching Serena Portable...' + "`n" +
+            '"%~dp0\serena.exe" %*' + "`n"
+          $launcherContent | Out-File -FilePath "$dummyPackageDir/serena.bat" -Encoding ASCII
+          
+          # Create _internal directory with mock dependencies (PyInstaller structure)
+          $internalDir = "$dummyPackageDir/_internal"
+          New-Item -ItemType Directory -Path $internalDir -Force | Out-Null
+          
+          # Add 60+ mock dependency files to simulate real PyInstaller bundle
+          for ($i = 1; $i -le 65; $i++) {
+              $extensions = @('.pyd', '.dll', '.py', '.so')
+              $ext = $extensions[$i % 4]
+              "Mock dependency file $i" | Out-File -FilePath "$internalDir/dep_$i$ext" -Encoding ASCII
+          }
+          
+          # Create README with expected sections
+          $readmeContent = '# Serena Portable Edition' + "`n`n" +
+            '## Quick Start' + "`n" +
+            '1. Run serena.bat to start' + "`n" +
+            '2. Configuration stored in .serena-portable' + "`n`n" +
+            '## Requirements' + "`n" +
+            '- Windows 10 or later' + "`n" +
+            '- No Python installation required' + "`n`n" +
+            '## Version' + "`n" +
+            '1.0.0 (Test Build)' + "`n"
+          $readmeContent | Out-File -FilePath "$dummyPackageDir/README.txt" -Encoding UTF8
+          
+          # Create language-servers directory (empty for minimal tier)
+          New-Item -ItemType Directory -Path "$dummyPackageDir/language-servers" -Force | Out-Null
+          
+          Write-Host "Created test package at: $dummyPackageDir" -ForegroundColor Green
           
           # Test with dummy package (should fail gracefully)
-          try {
-            $result = & $testScript -PackagePath "$testDir/$testPackage" -Quick -Timeout 5 2>&1
-            Write-Host "[OK] Test script handles dummy package gracefully" -ForegroundColor Green
-          } catch {
-            Write-Host "[OK] Test script properly rejects invalid package (expected behavior)" -ForegroundColor Green
+          Write-Host "Running test script on dummy package (some failures expected)..." -ForegroundColor Yellow
+          & $testScript -PackagePath "$dummyPackageDir" -Tier minimal -SkipPerformance -Timeout 10
+          $testExitCode = $LASTEXITCODE
+          Write-Host "Test script completed with exit code: $testExitCode" -ForegroundColor Cyan
+          # Don't fail on test failures for dummy package - only fail if script couldn't run at all
+          if ($testExitCode -eq 0 -or $testExitCode -eq 1) {
+              Write-Host "Test script executed successfully (dummy package test failures are expected)" -ForegroundColor Green
+              exit 0
+          } else {
+              Write-Host "Test script failed to execute properly" -ForegroundColor Red
+              exit 1
           }
           
           # Cleanup
-          Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item $dummyPackageDir -Recurse -Force -ErrorAction SilentlyContinue
 
   # Generate test report
   test-summary:
