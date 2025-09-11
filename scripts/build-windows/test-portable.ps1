@@ -84,7 +84,70 @@ param(
 
 # Handle help request
 if ($Help -or [string]::IsNullOrEmpty($PackagePath)) {
-    Get-Help $MyInvocation.MyCommand.Definition -Full
+    Write-Output @"
+NAME
+    test-portable.ps1
+    
+SYNOPSIS
+    Tests a Serena portable Windows package.
+    
+DESCRIPTION
+    This script validates a portable Windows build of Serena by running various tests
+    including extraction, execution, language server validation, and cleanup.
+    
+PARAMETERS
+    -PackagePath <String>
+        Path to the portable package file (.zip or .7z)
+        Required unless -Help is specified
+        
+    -TestOutputDir <String>
+        Directory for test results
+        Default: .\test-results
+        
+    -Timeout <Int32>
+        Timeout in seconds for each test
+        Default: 60
+        
+    -Quick
+        Run only essential tests
+        
+    -SkipExtraction
+        Skip extraction if package is already extracted
+        
+    -SkipExecution
+        Skip execution tests
+        
+    -SkipLanguageServers
+        Skip language server validation
+        
+    -SkipCleanup
+        Skip cleanup after tests
+        
+    -Verbose
+        Enable verbose output
+        
+    -Help
+        Display this help message
+        
+EXAMPLES
+    .\test-portable.ps1 -PackagePath ".\serena-portable.zip"
+        Test a portable package with default settings
+        
+    .\test-portable.ps1 -PackagePath ".\serena.7z" -Quick
+        Run quick tests on a 7z package
+        
+    .\test-portable.ps1 -PackagePath ".\dist\serena-portable.zip" -Verbose
+        Test with verbose output
+        
+    .\test-portable.ps1 -Help
+        Display this help message
+        
+NOTES
+    Exit codes:
+    0 - All tests passed
+    1 - One or more tests failed
+    2 - Critical error occurred
+"@
     exit 0
 }
 
