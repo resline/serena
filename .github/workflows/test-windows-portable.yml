@@ -242,7 +242,7 @@ jobs:
 
   # Matrix testing for different scenarios
   build-matrix-test:
-    name: Build Matrix Test (${{ matrix.tier }}, ${{ matrix.arch }})
+    name: Build Matrix Test (${{ matrix.bundle_tier }}, ${{ matrix.arch }})
     runs-on: windows-latest
     timeout-minutes: 15
     needs: syntax-validation
@@ -251,10 +251,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tier: ['minimal', 'essential']
+        bundle_tier: ['minimal', 'essential']
         arch: ['x64']
         include:
-          - tier: 'complete'
+          - bundle_tier: 'complete'
             arch: 'x64'
     
     steps:
@@ -275,7 +275,7 @@ jobs:
       - name: Test build script parameters
         shell: powershell
         run: |
-          Write-Host "Testing build script with tier: ${{ matrix.tier }}, arch: ${{ matrix.arch }}" -ForegroundColor Green
+          Write-Host "Testing build script with tier: ${{ matrix.bundle_tier }}, arch: ${{ matrix.arch }}" -ForegroundColor Green
           
           $buildScript = "scripts/build-windows/build-portable.ps1"
           if (-not (Test-Path $buildScript)) {
@@ -286,7 +286,7 @@ jobs:
           # Test parameter validation without actually building
           try {
             # This should not fail - just tests parameter binding
-            $null = & $buildScript -WhatIf -Tier ${{ matrix.tier }} -Architecture ${{ matrix.arch }} -SkipTests -SkipLanguageServers -Verbose:$false 2>$null
+            $null = & $buildScript -WhatIf -Tier ${{ matrix.bundle_tier }} -Architecture ${{ matrix.arch }} -SkipTests -SkipLanguageServers -Verbose:$false 2>$null
             Write-Host "[OK] Build script accepts parameters correctly" -ForegroundColor Green
           } catch {
             if ($_.Exception.Message -match "WhatIf") {

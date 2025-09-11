@@ -71,25 +71,25 @@
       "description": "Official Rust language server providing IDE features",
       "language": "rust",
       "tier": "core",
-      "version": "2024-12-16",
+      "version": "latest",
       "runtimeDependencies": ["rustc", "cargo"],
       "installationMethod": "rustup-component",
       "platforms": {
         "win-x64": {
-          "url": "https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-16/rust-analyzer-x86_64-pc-windows-msvc.gz",
+          "url": "https://github.com/rust-lang/rust-analyzer/releases/latest/download/rust-analyzer-x86_64-pc-windows-msvc.zip",
           "size": "15MB",
           "checksumType": "sha256",
           "checksum": "TBD",
-          "extractionMethod": "gunzip",
+          "extractionMethod": "zip",
           "binaryName": "rust-analyzer.exe",
           "executableBits": false
         },
         "win-arm64": {
-          "url": "https://github.com/rust-lang/rust-analyzer/releases/download/2024-12-16/rust-analyzer-aarch64-pc-windows-msvc.gz",
+          "url": "https://github.com/rust-lang/rust-analyzer/releases/latest/download/rust-analyzer-aarch64-pc-windows-msvc.zip",
           "size": "14MB",
           "checksumType": "sha256",
           "checksum": "TBD",
-          "extractionMethod": "gunzip",
+          "extractionMethod": "zip",
           "binaryName": "rust-analyzer.exe",
           "executableBits": false
         }
@@ -148,12 +148,12 @@
       "description": "Official Go language server",
       "language": "go",
       "tier": "core",
-      "version": "0.17.0",
+      "version": "0.20.0",
       "runtimeDependencies": ["go"],
       "installationMethod": "go-install",
       "platforms": {
         "win-x64": {
-          "url": "https://github.com/golang/tools/releases/download/gopls/v0.17.0/gopls_v0.17.0_windows_amd64.zip",
+          "url": "https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls_v0.20.0_windows_amd64.zip",
           "size": "12MB",
           "checksumType": "sha256",
           "checksum": "TBD",
@@ -162,7 +162,7 @@
           "executableBits": false
         },
         "win-arm64": {
-          "url": "https://github.com/golang/tools/releases/download/gopls/v0.17.0/gopls_v0.17.0_windows_arm64.zip",
+          "url": "https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls_v0.20.0_windows_arm64.zip",
           "size": "11MB",
           "checksumType": "sha256",
           "checksum": "TBD",
@@ -271,27 +271,27 @@
       "description": "Java language server based on Eclipse JDT",
       "language": "java",
       "tier": "popular",
-      "version": "1.42.0",
+      "version": "1.50.0",
       "runtimeDependencies": ["java21"],
       "installationMethod": "vsix-download",
       "platforms": {
         "win-x64": {
-          "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-win32-x64-1.42.0-561.vsix",
+          "url": "https://download.eclipse.org/jdtls/milestones/1.50.0/jdt-language-server-1.50.0-202409261450.tar.gz",
           "size": "95MB",
           "checksumType": "sha256",
           "checksum": "TBD",
-          "extractionMethod": "zip",
+          "extractionMethod": "tar.gz",
           "jrePath": "extension/jre/21.0.7-win32-x86_64/bin/java.exe",
           "lombokPath": "extension/lombok/lombok-1.18.36.jar",
           "launcherJarPath": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
           "configPath": "extension/server/config_win"
         },
         "win-arm64": {
-          "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-win32-x64-1.42.0-561.vsix",
+          "url": "https://download.eclipse.org/jdtls/milestones/1.50.0/jdt-language-server-1.50.0-202409261450.tar.gz",
           "size": "95MB",
           "checksumType": "sha256",
           "checksum": "TBD",
-          "extractionMethod": "zip",
+          "extractionMethod": "tar.gz",
           "jrePath": "extension/jre/21.0.7-win32-x86_64/bin/java.exe",
           "lombokPath": "extension/lombok/lombok-1.18.36.jar",
           "launcherJarPath": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
