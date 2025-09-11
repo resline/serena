@@ -826,6 +826,17 @@ for subgroup in (mode, context, project, config, tools, prompts):
     top_level.add_command(subgroup)
 
 
+def main() -> None:
+    """Entry point for PyInstaller compatibility."""
+    import sys
+
+    try:
+        sys.exit(top_level.main(standalone_mode=False))
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def get_help() -> str:
     """Retrieve the help text for the top-level Serena CLI."""
     return top_level.get_help(click.Context(top_level, info_name="serena"))

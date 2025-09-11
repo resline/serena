@@ -147,7 +147,7 @@ $LanguageServers = @{
         @{
             Name = "Go Language Server (gopls)"
             Language = "go"
-            Url = "https://github.com/golang/tools/releases/latest/download/gopls.windows-amd64.zip"
+            Url = "https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls_v0.20.0_windows_amd64.zip"
             Archive = "zip"
             Binary = "gopls.exe"
             Commands = $null
@@ -159,7 +159,7 @@ $LanguageServers = @{
         @{
             Name = "Java Language Server (Eclipse JDT-LS)"
             Language = "java"
-            Url = "https://download.eclipse.org/jdtls/milestones/1.38.0/jdt-language-server-1.38.0-202408291433.tar.gz"
+            Url = "https://download.eclipse.org/jdtls/milestones/1.50.0/jdt-language-server-1.50.0-202409261450.tar.gz"
             Archive = "tar.gz"
             Binary = "bin/jdtls"
             Commands = $null
@@ -255,7 +255,7 @@ $LanguageServers = @{
             Url = $null # R package
             Archive = $null
             Binary = "R.exe"
-            Commands = @('R -e "install.packages(\"languageserver\")"')
+            Commands = @("R -e `"install.packages('languageserver')`"")
             Checksum = $null
         },
         @{
@@ -582,6 +582,7 @@ function Install-LanguageServer {
         
         # Download the file
         if (-not (Invoke-DownloadFile -Url $actualUrl -OutputPath $downloadPath -ExpectedChecksum $Server.Checksum)) {
+            Write-Error "Failed to download $($Server.Name) from $actualUrl"
             return $false
         }
         
@@ -589,6 +590,7 @@ function Install-LanguageServer {
         if ($Server.Archive -and $Server.Archive -ne "exe") {
             $extractDir = Join-Path $languageDir "extracted"
             if (-not (Expand-Archive-Safe -Path $downloadPath -DestinationPath $extractDir -ArchiveType $Server.Archive)) {
+                Write-Error "Failed to extract $($Server.Name) archive: $downloadPath"
                 return $false
             }
             

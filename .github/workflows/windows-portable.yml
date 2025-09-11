@@ -62,7 +62,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: language_servers_essential
-          key: language-servers-essential-v3-${{ hashFiles('.github/workflows/windows-portable.yml') }}
+          key: language-servers-essential-v3-${{ hashFiles('scripts/build-windows/language-servers-manifest.json') }}
           restore-keys: |
             language-servers-essential-v3-
             language-servers-essential-
@@ -73,7 +73,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: language_servers_additional
-          key: language-servers-additional-v3-${{ hashFiles('.github/workflows/windows-portable.yml') }}
+          key: language-servers-additional-v3-${{ hashFiles('scripts/build-windows/language-servers-manifest.json') }}
           restore-keys: |
             language-servers-additional-v3-
             language-servers-additional-
@@ -125,29 +125,29 @@ jobs:
           ) &
           
           (
-            # rust-analyzer v2025-08-25 x64 (latest stable release)
-            download_with_retry "https://github.com/rust-lang/rust-analyzer/releases/download/2025-08-25/rust-analyzer-x86_64-pc-windows-msvc.zip" "language_servers_essential/rust-analyzer-x64.zip" "zip" &&
+            # rust-analyzer latest x64 (latest stable release)
+            download_with_retry "https://github.com/rust-lang/rust-analyzer/releases/latest/download/rust-analyzer-x86_64-pc-windows-msvc.zip" "language_servers_essential/rust-analyzer-x64.zip" "zip" &&
             mkdir -p language_servers_essential/rust-analyzer-x64 &&
             unzip -q language_servers_essential/rust-analyzer-x64.zip -d language_servers_essential/rust-analyzer-x64
           ) &
           
           (
-            # rust-analyzer v2025-08-25 ARM64 (latest stable release)
-            download_with_retry "https://github.com/rust-lang/rust-analyzer/releases/download/2025-08-25/rust-analyzer-aarch64-pc-windows-msvc.zip" "language_servers_essential/rust-analyzer-arm64.zip" "zip" &&
+            # rust-analyzer latest ARM64 (latest stable release)
+            download_with_retry "https://github.com/rust-lang/rust-analyzer/releases/latest/download/rust-analyzer-aarch64-pc-windows-msvc.zip" "language_servers_essential/rust-analyzer-arm64.zip" "zip" &&
             mkdir -p language_servers_essential/rust-analyzer-arm64 &&
             unzip -q language_servers_essential/rust-analyzer-arm64.zip -d language_servers_essential/rust-analyzer-arm64
           ) &
           
           (
             # gopls v0.20.0 x64 (latest stable release)
-            download_with_retry "https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls-windows-amd64.zip" "language_servers_essential/gopls-x64.zip" "zip" &&
+            download_with_retry "https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls_v0.20.0_windows_amd64.zip" "language_servers_essential/gopls-x64.zip" "zip" &&
             mkdir -p language_servers_essential/gopls-x64 &&
             unzip -q language_servers_essential/gopls-x64.zip -d language_servers_essential/gopls-x64
           ) &
           
           (
             # gopls v0.20.0 ARM64 (latest stable release)
-            download_with_retry "https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls-windows-arm64.zip" "language_servers_essential/gopls-arm64.zip" "zip" &&
+            download_with_retry "https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls_v0.20.0_windows_arm64.zip" "language_servers_essential/gopls-arm64.zip" "zip" &&
             mkdir -p language_servers_essential/gopls-arm64 &&
             unzip -q language_servers_essential/gopls-arm64.zip -d language_servers_essential/gopls-arm64
           ) &
@@ -192,7 +192,7 @@ jobs:
           # Additional language servers with version comments
           (
             # Eclipse JDT Language Server v1.50.0 (latest stable milestone)
-            download_with_retry "https://download.eclipse.org/jdtls/milestones/1.50.0/jdt-language-server-1.50.0-202509041608.tar.gz" "language_servers_additional/java.tar.gz" "tar" &&
+            download_with_retry "https://download.eclipse.org/jdtls/milestones/1.50.0/jdt-language-server-1.50.0-202409261450.tar.gz" "language_servers_additional/java.tar.gz" "tar" &&
             mkdir -p language_servers_additional/java &&
             tar -xzf language_servers_additional/java.tar.gz -C language_servers_additional/java
           ) &
@@ -325,7 +325,7 @@ jobs:
           $env:UV_CACHE_DIR = "$env:APPDATA\uv\cache"
           
           uv pip install -e ".[dev]"
-          uv pip install pyinstaller[encryption]==6.11.1
+          uv pip install pyinstaller==6.11.1
           uv pip install pywin32 pywin32-ctypes
 
       # Setup language servers from cached downloads

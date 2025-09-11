@@ -277,6 +277,10 @@ function Create-PyInstallerSpec {
     
     Write-Step "Creating PyInstaller specification..."
     
+    # Build spec content with proper variable interpolation using expandable here-string
+    # First, normalize the path for Python (forward slashes and escape backslashes)
+    $normalizedLSDir = $LanguageServersDir -replace '\\', '/'
+    
     $specContent = @"
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
@@ -289,7 +293,7 @@ datas = [
 
 # Add language servers if they exist
 import os
-ls_dir = r'$LanguageServersDir'
+ls_dir = r'$normalizedLSDir'
 if os.path.exists(ls_dir):
     datas.append((ls_dir, 'language-servers'))
 
@@ -375,10 +379,25 @@ coll = COLLECT(
 "@
 
     $specPath = Join-Path $BuildDir "serena.spec"
-    Set-Content -Path $specPath -Value $specContent -Encoding UTF8
-    
-    Write-Success "PyInstaller spec created: $specPath"
-    return $specPath
+    try {
+        Set-Content -Path $specPath -Value $specContent -Encoding UTF8
+        
+        if (-not (Test-Path $specPath)) {
+            throw "Spec file was not created successfully"
+        }
+        
+        # Verify the content was written correctly
+        $writtenContent = Get-Content $specPath -Raw
+        if (-not $writtenContent -or $writtenContent.Length -lt 100) {
+            throw "Spec file content appears to be incomplete"
+        }
+        
+        Write-Success "PyInstaller spec created: $specPath"
+        return $specPath
+    } catch {
+        Write-Error "Failed to create PyInstaller spec: $_"
+        throw
+    }
 }
 
 function Create-VersionInfo {
@@ -393,6 +412,7 @@ function Create-VersionInfo {
     $micro = if ($versionParts.Length -gt 2) { [int]($versionParts[2] -replace '[^\d].*') } else { 0 }
     $build = 0
     
+    # Build version info content with proper variable interpolation
     $versionInfoContent = @"
 # UTF-8
 #
@@ -430,10 +450,25 @@ VSVersionInfo(
 "@
 
     $versionPath = Join-Path $RepoRoot "version_info.py"
-    Set-Content -Path $versionPath -Value $versionInfoContent -Encoding UTF8
-    
-    Write-Success "Version info created: $versionPath"
-    return $versionPath
+    try {
+        Set-Content -Path $versionPath -Value $versionInfoContent -Encoding UTF8
+        
+        if (-not (Test-Path $versionPath)) {
+            throw "Version info file was not created successfully"
+        }
+        
+        # Verify the content was written correctly
+        $writtenContent = Get-Content $versionPath -Raw
+        if (-not $writtenContent -or $writtenContent.Length -lt 100) {
+            throw "Version info file content appears to be incomplete"
+        }
+        
+        Write-Success "Version info created: $versionPath"
+        return $versionPath
+    } catch {
+        Write-Error "Failed to create version info: $_"
+        throw
+    }
 }
 
 function Build-WithPyInstaller {
@@ -453,6 +488,11 @@ function Build-WithPyInstaller {
         Write-Info "Dist path: $distPath"
         Write-Info "Work path: $workPath"
         
+        Write-Info "Running PyInstaller with parameters:"
+        Write-Info "  Spec: $SpecPath"
+        Write-Info "  Dist: $distPath"
+        Write-Info "  Work: $workPath"
+        
         & uv run pyinstaller `
             --distpath $distPath `
             --workpath $workPath `
@@ -460,7 +500,10 @@ function Build-WithPyInstaller {
             --noconfirm `
             $SpecPath
             
-        if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed" }
+        if ($LASTEXITCODE -ne 0) { 
+            Write-Error "PyInstaller exited with code: $LASTEXITCODE"
+            throw "PyInstaller build failed with exit code $LASTEXITCODE" 
+        }
         
         $builtAppPath = Join-Path $distPath "serena"
         if (-not (Test-Path $builtAppPath)) {
