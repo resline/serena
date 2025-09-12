@@ -362,7 +362,7 @@ def get_runtime_manager() -> PortableRuntimeManager:
     return PortableRuntimeManager()
 
 
-def setup_offline_runtime(runtime_name: str) -> Dict[str, str]:
+def setup_offline_runtime(runtime_name: str) -> dict[str, str]:
     """Convenience function to setup a runtime environment."""
     manager = get_runtime_manager()
     return manager.setup_runtime_environment(runtime_name)
