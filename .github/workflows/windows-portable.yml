@@ -481,46 +481,53 @@ jobs:
           Write-Host "Runtimes directory populated:" -ForegroundColor Green
           Get-ChildItem -Recurse -Depth 2 $out | Select-Object FullName | ForEach-Object { Write-Host $_.FullName }
 
-      # Run quality checks with retry logic
+      # Run quality checks with Windows-optimized UV commands
       - name: Run code quality checks
         shell: powershell
         run: |
-          # Run code quality checks with retry logic
           Write-Host "Running code quality checks..." -ForegroundColor Green
-
-          $checks = @(
-              @{Name="Lint"; Command="uv run poe lint"},
-              @{Name="Type Check"; Command="uv run poe type-check"}
-          )
-
-          foreach ($check in $checks) {
-              $maxRetries = 2
-              $retryCount = 0
-              $success = $false
-              
-              while ($retryCount -le $maxRetries -and -not $success) {
-                  try {
-                      Write-Host "Running $($check.Name) (attempt $($retryCount + 1)/$($maxRetries + 1))..." -ForegroundColor Cyan
-                      
-                      $output = Invoke-Expression $check.Command 2>&1
-                      if ($LASTEXITCODE -eq 0) {
-                          Write-Host "[OK] $($check.Name) passed" -ForegroundColor Green
-                          $success = $true
-                      } else {
-                          throw "$($check.Name) failed with exit code $LASTEXITCODE"
-                      }
-                  } catch {
-                      $retryCount++
-                      if ($retryCount -gt $maxRetries) {
-                          Write-Error "[FAIL] $($check.Name) failed after $($maxRetries + 1) attempts"
-                          Write-Host "Last output:" -ForegroundColor Yellow
-                          Write-Host $output
-                          exit 1
-                      }
-                      Write-Warning "Retry $retryCount/$maxRetries after 5 seconds..."
-                      Start-Sleep -Seconds 5
-                  }
-              }
+          
+          # Ensure virtual environment is activated for UV commands
+          $env:VIRTUAL_ENV = ".venv"
+          
+          # Use direct UV commands with explicit error handling for Windows compatibility
+          Write-Host "Running black formatting check..." -ForegroundColor Cyan
+          try {
+            uv run black --check src scripts test
+            if ($LASTEXITCODE -ne 0) { 
+              Write-Host "[FAIL] Black formatting check failed" -ForegroundColor Red
+              exit 1
+            }
+            Write-Host "[OK] Black formatting check passed" -ForegroundColor Green
+          } catch {
+            Write-Host "[FAIL] Black execution failed: $_" -ForegroundColor Red
+            exit 1
+          }
+          
+          Write-Host "Running ruff linting check..." -ForegroundColor Cyan
+          try {
+            uv run ruff check src scripts test
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "[FAIL] Ruff linting check failed" -ForegroundColor Red  
+              exit 1
+            }
+            Write-Host "[OK] Ruff linting check passed" -ForegroundColor Green
+          } catch {
+            Write-Host "[FAIL] Ruff execution failed: $_" -ForegroundColor Red
+            exit 1
+          }
+          
+          Write-Host "Running mypy type checking..." -ForegroundColor Cyan
+          try {
+            uv run mypy src/serena
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "[FAIL] MyPy type checking failed" -ForegroundColor Red
+              exit 1
+            }
+            Write-Host "[OK] MyPy type checking passed" -ForegroundColor Green
+          } catch {
+            Write-Host "[FAIL] MyPy execution failed: $_" -ForegroundColor Red
+            exit 1
           }
 
           Write-Host "All quality checks passed successfully!" -ForegroundColor Green
