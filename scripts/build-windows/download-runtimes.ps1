@@ -262,8 +262,15 @@ function Download-JavaPortable {
         # Verify Java works
         $javaExe = Join-Path $javaDir "bin\java.exe"
         if (Test-Path $javaExe) {
-            $javaVersion = & $javaExe -version 2>&1 | Select-String "version"
-            Write-Host "Java Runtime installed: $javaVersion" -ForegroundColor Green
+            try {
+                # Java outputs version to stderr, capture it properly
+                $javaVersionOutput = & cmd /c "`"$javaExe`" -version 2>&1"
+                $javaVersion = $javaVersionOutput | Select-String "version" | Select-Object -First 1
+                Write-Host "Java Runtime installed: $javaVersion" -ForegroundColor Green
+            }
+            catch {
+                Write-Host "Java Runtime installed at: $javaDir" -ForegroundColor Green
+            }
         }
         else {
             Write-Warning "Java executable not found after extraction"
