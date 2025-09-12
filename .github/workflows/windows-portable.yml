@@ -179,6 +179,13 @@ jobs:
             unzip -q language_servers_essential/gopls-arm64.zip -d language_servers_essential/gopls-arm64
           ) &
           
+          (
+            # Eclipse JDT Language Server v1.50.0 (latest stable milestone)
+            download_with_retry "https://download.eclipse.org/jdtls/milestones/1.50.0/jdt-language-server-1.50.0-202409261450.tar.gz" "language_servers_essential/java.tar.gz" "tar" &&
+            mkdir -p language_servers_essential/java &&
+            tar -xzf language_servers_essential/java.tar.gz -C language_servers_essential/java
+          ) &
+          
           # Wait for all downloads to complete
           wait
           
@@ -217,13 +224,6 @@ jobs:
           }
           
           # Additional language servers with version comments
-          (
-            # Eclipse JDT Language Server v1.50.0 (latest stable milestone)
-            download_with_retry "https://download.eclipse.org/jdtls/milestones/1.50.0/jdt-language-server-1.50.0-202409261450.tar.gz" "language_servers_additional/java.tar.gz" "tar" &&
-            mkdir -p language_servers_additional/java &&
-            tar -xzf language_servers_additional/java.tar.gz -C language_servers_additional/java
-          ) &
-          
           (
             # OmniSharp-Roslyn v1.39.14 (latest stable release)
             download_with_retry "https://roslynomnisharp.blob.core.windows.net/releases/1.39.14/omnisharp-win-x64-1.39.14.zip" "language_servers_additional/omnisharp-x64.zip" "zip" &&
@@ -834,11 +834,11 @@ jobs:
           $usageContent = "# Serena Usage Examples`n`n## Basic Commands`n`n# Start MCP server (for Claude Desktop integration)`nserena-mcp-server`n`n# Get version information`nserena --version`n`n# Get help`nserena --help`n`n## Language Server Bundle Information`n`nThis $bundleSuffix bundle includes:`n"
           
           if ($bundleSuffix -eq "essential" -or $bundleSuffix -eq "complete" -or $bundleSuffix -eq "full") {
-            $usageContent += "- Python (Pyright)`n- TypeScript/JavaScript`n- Rust (rust-analyzer)`n- Go (gopls)`n"
+            $usageContent += "- Python (Pyright)`n- TypeScript/JavaScript`n- Rust (rust-analyzer)`n- Go (gopls)`n- Java (Eclipse JDT)`n"
           }
           
           if ($bundleSuffix -eq "complete" -or $bundleSuffix -eq "full") {
-            $usageContent += "- Java (Eclipse JDT)`n- C# (OmniSharp)`n- Lua`n- Bash`n"
+            $usageContent += "- C# (OmniSharp)`n- Lua`n- Bash`n"
           }
           
           if ($bundleSuffix -eq "full") {
@@ -925,6 +925,7 @@ jobs:
               Write-Host "- TypeScript/JavaScript" >> $env:GITHUB_STEP_SUMMARY  
               Write-Host "- Rust (rust-analyzer)" >> $env:GITHUB_STEP_SUMMARY
               Write-Host "- Go (gopls)" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "- Java (Eclipse JDT)" >> $env:GITHUB_STEP_SUMMARY
             }
             "complete" { 
               Write-Host "- Python (Pyright)" >> $env:GITHUB_STEP_SUMMARY
@@ -1006,6 +1007,6 @@ jobs:
           echo "## Bundle Types" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **minimal**: Core Serena functionality only" >> $GITHUB_STEP_SUMMARY
-          echo "- **essential**: Core + Python, TypeScript, Rust, Go language servers" >> $GITHUB_STEP_SUMMARY
-          echo "- **complete**: Essential + Java, C#, Lua, Bash language servers" >> $GITHUB_STEP_SUMMARY
+          echo "- **essential**: Core + Python, TypeScript, Rust, Go, Java language servers" >> $GITHUB_STEP_SUMMARY
+          echo "- **complete**: Essential + C#, Lua, Bash language servers" >> $GITHUB_STEP_SUMMARY
           echo "- **full**: All 28+ supported language servers included" >> $GITHUB_STEP_SUMMARY
