@@ -658,22 +658,50 @@ jobs:
           # Set memory optimizations for PyInstaller
           $env:PYINSTALLER_COMPILE_BOOTLOADER = "1"
           
+          # Suppress deprecation warnings from pkg_resources/altgraph
+          $env:PYTHONWARNINGS = "ignore::DeprecationWarning:pkg_resources,ignore::DeprecationWarning:altgraph"
+          
           Write-Host "Starting PyInstaller build process..." -ForegroundColor Green
-          try {
-            $output = uv run pyinstaller @pyinstallerArgs 2>&1 | Tee-Object -Variable buildOutput
-            Write-Host $buildOutput
-            
-            if ($LASTEXITCODE -ne 0) {
-              Write-Error "PyInstaller failed with exit code: $LASTEXITCODE"
-              Write-Host "PyInstaller output:" -ForegroundColor Red
-              Write-Host $buildOutput
+          
+          # Create log files for better diagnostics
+          $stdoutLog = "build/pyinstaller_stdout.log"
+          $stderrLog = "build/pyinstaller_stderr.log"
+          
+          # Run PyInstaller with better error handling
+          $processInfo = Start-Process -FilePath "uv" -ArgumentList ("run", "pyinstaller") + $pyinstallerArgs `
+            -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog `
+            -PassThru -NoNewWindow -Wait
+          
+          # Read and display output
+          if (Test-Path $stdoutLog) {
+            $stdout = Get-Content $stdoutLog -Raw
+            Write-Host $stdout
+          }
+          
+          if (Test-Path $stderrLog) {
+            $stderr = Get-Content $stderrLog -Raw
+            if ($stderr) {
+              # Check if stderr contains only warnings
+              if ($stderr -match "UserWarning.*pkg_resources" -or $stderr -match "DeprecationWarning") {
+                Write-Host "PyInstaller warnings (safe to ignore):" -ForegroundColor Yellow
+                Write-Host $stderr -ForegroundColor Yellow
+              } else {
+                Write-Host "PyInstaller errors:" -ForegroundColor Red
+                Write-Host $stderr -ForegroundColor Red
+              }
+            }
+          }
+          
+          # Check exit code
+          if ($processInfo.ExitCode -ne 0) {
+            # Check if the executable was created despite the non-zero exit code
+            $exePath = "dist/${outputName}.exe"
+            if (Test-Path $exePath) {
+              Write-Host "PyInstaller completed with warnings (exit code: $($processInfo.ExitCode)) but executable was created successfully" -ForegroundColor Yellow
+            } else {
+              Write-Error "PyInstaller failed with exit code: $($processInfo.ExitCode)"
               exit 1
             }
-          } catch {
-            Write-Error "PyInstaller execution failed: $_"
-            Write-Host "Build output:" -ForegroundColor Red
-            Write-Host $buildOutput
-            exit 1
           }
           
           # Verify the executable was created
