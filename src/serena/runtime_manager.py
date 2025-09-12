@@ -31,7 +31,7 @@ class RuntimeInfo:
 class PortableRuntimeManager:
     """Manages portable runtime environments for offline operation."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the runtime manager."""
         self.app_dir = self._get_app_directory()
         self.runtimes_dir = self.app_dir / "runtimes"
@@ -56,7 +56,7 @@ class PortableRuntimeManager:
             # Running in normal Python environment
             return Path(__file__).parent.parent.parent
 
-    def _initialize_runtimes(self):
+    def _initialize_runtimes(self) -> None:
         """Initialize runtime information from config or defaults."""
         # Default runtime definitions
         self.runtimes = {
@@ -98,7 +98,7 @@ class PortableRuntimeManager:
         # Check runtime availability
         self._check_runtime_availability()
 
-    def _update_from_config(self, config: dict[str, Any]):
+    def _update_from_config(self, config: dict[str, Any]) -> None:
         """Update runtime information from configuration."""
         if "runtimes" in config:
             for runtime_name, runtime_config in config["runtimes"].items():
@@ -111,7 +111,7 @@ class PortableRuntimeManager:
                     if "version" in runtime_config:
                         runtime.version = runtime_config["version"]
 
-    def _check_runtime_availability(self):
+    def _check_runtime_availability(self) -> None:
         """Check which runtimes are actually available."""
         for runtime_name, runtime in self.runtimes.items():
             exe_path = runtime.path / runtime.executable
@@ -324,11 +324,18 @@ class PortableRuntimeManager:
 
     def get_status_report(self) -> dict[str, Any]:
         """Get a status report of all runtimes and their availability."""
-        report = {"offline_mode": self.offline_mode, "runtimes": {}, "language_servers": {}}
+        # Initialize typed dictionaries to satisfy static type checkers
+        runtimes: dict[str, Any] = {}
+        language_servers: dict[str, Any] = {}
+        report: dict[str, Any] = {
+            "offline_mode": self.offline_mode,
+            "runtimes": runtimes,
+            "language_servers": language_servers,
+        }
 
         # Runtime status
         for name, runtime in self.runtimes.items():
-            report["runtimes"][name] = {
+            runtimes[name] = {
                 "available": runtime.is_available,
                 "version": runtime.version,
                 "path": str(runtime.path) if runtime.is_available else None,
@@ -348,7 +355,7 @@ class PortableRuntimeManager:
         ]
 
         for server in servers:
-            report["language_servers"][server] = {
+            language_servers[server] = {
                 "offline_capable": self.is_offline_capable(server),
                 "command": self.get_language_server_command(server),
             }
