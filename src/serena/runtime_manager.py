@@ -31,7 +31,7 @@ class RuntimeInfo:
 class PortableRuntimeManager:
     """Manages portable runtime environments for offline operation."""
 
-    def __init__(self) -> None:
+    def __init__(self):
         """Initialize the runtime manager."""
         self.app_dir = self._get_app_directory()
         self.runtimes_dir = self.app_dir / "runtimes"
@@ -48,7 +48,7 @@ class PortableRuntimeManager:
             # Running in PyInstaller bundle
             if hasattr(sys, "_MEIPASS"):
                 # PyInstaller >= 3.3
-                return Path(sys._MEIPASS)  # type: ignore[attr-defined]
+                return Path(sys._MEIPASS)
             else:
                 # PyInstaller < 3.3
                 return Path(os.path.dirname(sys.executable))
@@ -56,7 +56,7 @@ class PortableRuntimeManager:
             # Running in normal Python environment
             return Path(__file__).parent.parent.parent
 
-    def _initialize_runtimes(self) -> None:
+    def _initialize_runtimes(self):
         """Initialize runtime information from config or defaults."""
         # Default runtime definitions
         self.runtimes = {
@@ -65,12 +65,7 @@ class PortableRuntimeManager:
                 path=self.runtimes_dir / "nodejs",
                 executable="node.exe" if sys.platform == "win32" else "node",
                 version="20.11.1",
-                required_for=[
-                    "pyright",
-                    "typescript-language-server",
-                    "bash-language-server",
-                    "intelephense",
-                ],
+                required_for=["pyright", "typescript-language-server", "bash-language-server", "intelephense"],
                 is_available=False,
             ),
             "dotnet": RuntimeInfo(
@@ -97,13 +92,13 @@ class PortableRuntimeManager:
                 with open(self.config_file) as f:
                     config = json.load(f)
                     self._update_from_config(config)
-            except Exception as e:  # pragma: no cover - non-critical
+            except Exception as e:
                 logger.warning(f"Failed to load runtime config: {e}")
 
         # Check runtime availability
         self._check_runtime_availability()
 
-    def _update_from_config(self, config: dict[str, Any]) -> None:
+    def _update_from_config(self, config: dict[str, Any]):
         """Update runtime information from configuration."""
         if "runtimes" in config:
             for runtime_name, runtime_config in config["runtimes"].items():
@@ -116,55 +111,68 @@ class PortableRuntimeManager:
                     if "version" in runtime_config:
                         runtime.version = runtime_config["version"]
 
-    def _check_runtime_availability(self) -> None:
+    def _check_runtime_availability(self):
         """Check which runtimes are actually available."""
-        for runtime in self.runtimes.values():
+        for runtime_name, runtime in self.runtimes.items():
             exe_path = runtime.path / runtime.executable
             runtime.is_available = exe_path.exists()
+
             if runtime.is_available:
-                logger.info("Portable %s found at: %s", runtime.name, exe_path)
+                logger.info(f"Portable {runtime.name} found at: {exe_path}")
             else:
-                logger.debug("Portable %s not found at: %s", runtime.name, exe_path)
+                logger.debug(f"Portable {runtime.name} not found at: {exe_path}")
 
     def get_runtime_executable(self, runtime_name: str) -> Optional[str]:
         """Get the full path to a runtime executable if available."""
-        runtime = self.runtimes.get(runtime_name)
-        if not runtime or not runtime.is_available:
+        if runtime_name not in self.runtimes:
             return None
+
+        runtime = self.runtimes[runtime_name]
+        if not runtime.is_available:
+            return None
+
         exe_path = runtime.path / runtime.executable
         return str(exe_path) if exe_path.exists() else None
 
     def setup_runtime_environment(self, runtime_name: str) -> dict[str, str]:
         """Setup environment variables for a specific runtime."""
         env = os.environ.copy()
-        runtime = self.runtimes.get(runtime_name)
-        if not runtime or not runtime.is_available:
+
+        if runtime_name not in self.runtimes or not self.runtimes[runtime_name].is_available:
             return env
+
+        runtime = self.runtimes[runtime_name]
 
         if runtime_name == "nodejs":
             # Add Node.js to PATH
             node_bin = str(runtime.path)
             env["PATH"] = f"{node_bin}{os.pathsep}{env.get('PATH', '')}"
+
             # Set npm cache for offline packages
             npm_cache = self.runtimes_dir / "npm-cache"
             if npm_cache.exists():
                 env["NODE_PATH"] = str(npm_cache)
                 env["npm_config_cache"] = str(npm_cache)
                 env["npm_config_offline"] = "true"
-            logger.debug("Node.js environment configured with PATH: %s", node_bin)
+
+            logger.debug(f"Node.js environment configured with PATH: {node_bin}")
+
         elif runtime_name == "dotnet":
             # Add .NET to PATH
             dotnet_bin = str(runtime.path)
             env["PATH"] = f"{dotnet_bin}{os.pathsep}{env.get('PATH', '')}"
             env["DOTNET_ROOT"] = str(runtime.path)
             env["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1"
-            logger.debug(".NET environment configured with DOTNET_ROOT: %s", runtime.path)
+
+            logger.debug(f".NET environment configured with DOTNET_ROOT: {runtime.path}")
+
         elif runtime_name == "java":
             # Add Java to PATH
             java_bin = str(runtime.path / "bin")
             env["PATH"] = f"{java_bin}{os.pathsep}{env.get('PATH', '')}"
             env["JAVA_HOME"] = str(runtime.path)
-            logger.debug("Java environment configured with JAVA_HOME: %s", runtime.path)
+
+            logger.debug(f"Java environment configured with JAVA_HOME: {runtime.path}")
 
         return env
 
@@ -180,10 +188,12 @@ class PortableRuntimeManager:
             npm_cache / package_name / "node_modules" / package_name,
             npm_cache / "node_modules" / package_name,
         ]
+
         for path in possible_paths:
             if path.exists():
-                logger.debug("Found npm package %s at: %s", package_name, path)
+                logger.debug(f"Found npm package {package_name} at: {path}")
                 return path
+
         return None
 
     def get_npm_binary(self, package_name: str, binary_name: str) -> Optional[str]:
@@ -201,18 +211,21 @@ class PortableRuntimeManager:
             package_path / ".bin" / binary_name,
             package_path / binary_name,
         ]
+
         for path in possible_paths:
             if path.exists():
                 return str(path)
+
         return None
 
     def verify_runtime(self, runtime_name: str) -> bool:
         """Verify that a runtime is working correctly."""
-        runtime = self.runtimes.get(runtime_name)
-        if not runtime or not runtime.is_available:
+        if runtime_name not in self.runtimes or not self.runtimes[runtime_name].is_available:
             return False
 
+        runtime = self.runtimes[runtime_name]
         exe_path = runtime.path / runtime.executable
+
         try:
             if runtime_name == "nodejs":
                 result = subprocess.run(
@@ -223,6 +236,7 @@ class PortableRuntimeManager:
                     check=False,
                 )
                 return result.returncode == 0 and "v" in result.stdout
+
             elif runtime_name == "dotnet":
                 result = subprocess.run(
                     [str(exe_path), "--list-runtimes"],
@@ -232,6 +246,7 @@ class PortableRuntimeManager:
                     check=False,
                 )
                 return result.returncode == 0 and "Microsoft" in result.stdout
+
             elif runtime_name == "java":
                 result = subprocess.run(
                     [str(exe_path), "-version"],
@@ -241,8 +256,9 @@ class PortableRuntimeManager:
                     check=False,
                 )
                 return result.returncode == 0
-        except Exception as e:  # pragma: no cover - external process
-            logger.error("Failed to verify %s: %s", runtime.name, e)
+
+        except Exception as e:
+            logger.error(f"Failed to verify {runtime.name}: {e}")
             return False
 
         return False
@@ -274,37 +290,31 @@ class PortableRuntimeManager:
             pyright_bin = self.get_npm_binary("pyright", "pyright-langserver")
             if pyright_bin:
                 return [runtime_exe, pyright_bin, "--stdio"]
-            return [runtime_exe, "-m", "pyright.langserver", "--stdio"]
-        if server_name == "typescript-language-server":
+            else:
+                return [runtime_exe, "-m", "pyright.langserver", "--stdio"]
+
+        elif server_name == "typescript-language-server":
             tsls_bin = self.get_npm_binary("typescript-language-server", "typescript-language-server")
             if tsls_bin:
                 return [runtime_exe, tsls_bin, "--stdio"]
-        if server_name == "bash-language-server":
+
+        elif server_name == "bash-language-server":
             bash_ls_bin = self.get_npm_binary("bash-language-server", "bash-language-server")
             if bash_ls_bin:
                 return [runtime_exe, bash_ls_bin, "start"]
-        if server_name == "csharp-language-server":
+
+        elif server_name == "csharp-language-server":
             # Assuming the C# language server DLL is bundled
             dll_path = self.app_dir / "language_servers" / "csharp" / "Microsoft.CodeAnalysis.LanguageServer.dll"
             if dll_path.exists():
                 return [runtime_exe, str(dll_path), "--stdio"]
-        if server_name == "eclipse-jdtls":
+
+        elif server_name == "eclipse-jdtls":
             # Java language server with launcher JAR
-            launcher_jars = list(
-                (self.app_dir / "language_servers" / "java" / "plugins").glob(
-                    "org.eclipse.equinox.launcher_*.jar"
-                )
-            )
+            launcher_jars = list(Path(self.app_dir / "language_servers" / "java" / "plugins").glob("org.eclipse.equinox.launcher_*.jar"))
             if launcher_jars:
-                return [
-                    runtime_exe,
-                    "-jar",
-                    str(launcher_jars[0]),
-                    "-configuration",
-                    "config",
-                    "-data",
-                    "workspace",
-                ]
+                return [runtime_exe, "-jar", str(launcher_jars[0]), "-configuration", "config", "-data", "workspace"]
+
         return None
 
     def is_offline_capable(self, server_name: str) -> bool:
@@ -314,11 +324,7 @@ class PortableRuntimeManager:
 
     def get_status_report(self) -> dict[str, Any]:
         """Get a status report of all runtimes and their availability."""
-        report: dict[str, Any] = {
-            "offline_mode": self.offline_mode,
-            "runtimes": {},
-            "language_servers": {},
-        }
+        report = {"offline_mode": self.offline_mode, "runtimes": {}, "language_servers": {}}
 
         # Runtime status
         for name, runtime in self.runtimes.items():
@@ -340,6 +346,7 @@ class PortableRuntimeManager:
             "eclipse-jdtls",
             "kotlin-language-server",
         ]
+
         for server in servers:
             report["language_servers"][server] = {
                 "offline_capable": self.is_offline_capable(server),
@@ -355,7 +362,7 @@ def get_runtime_manager() -> PortableRuntimeManager:
     return PortableRuntimeManager()
 
 
-def setup_offline_runtime(runtime_name: str) -> dict[str, str]:
+def setup_offline_runtime(runtime_name: str) -> Dict[str, str]:
     """Convenience function to setup a runtime environment."""
     manager = get_runtime_manager()
     return manager.setup_runtime_environment(runtime_name)
