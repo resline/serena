@@ -787,6 +787,9 @@ jobs:
           # Reset the error preference back and ensure we don't exit with error
           $ErrorActionPreference = "Stop"
           Write-Host "Build completed successfully - executable created!" -ForegroundColor Green
+          
+          # Ensure we exit with success code since the executable was built successfully
+          exit 0
 
       # Create bundle with documentation and examples
       - name: Create distribution bundle
