@@ -840,3 +840,13 @@ def main() -> None:
 def get_help() -> str:
     """Retrieve the help text for the top-level Serena CLI."""
     return top_level.get_help(click.Context(top_level, info_name="serena"))
+
+
+# Entry point for PyInstaller executable
+if __name__ == "__main__":
+    # When run directly as an executable, default to starting the MCP server
+    # This ensures serena.exe works properly when built with PyInstaller
+    import sys
+    
+    # Call the Click command directly - it will handle the arguments
+    sys.exit(start_mcp_server.main(standalone_mode=False))
