@@ -840,3 +840,10 @@ def main() -> None:
 def get_help() -> str:
     """Retrieve the help text for the top-level Serena CLI."""
     return top_level.get_help(click.Context(top_level, info_name="serena"))
+
+
+# Entry point for PyInstaller executable
+if __name__ == "__main__":
+    # When run directly as an executable, run the main CLI
+    # This ensures serena.exe works properly when built with PyInstaller
+    main()
