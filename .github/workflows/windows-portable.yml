@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       bundle_tier:
-        description: 'Bundle tier selection'
+        description: 'Bundle tier selection (use "all" to build all tiers)'
         required: true
-        default: 'essential'
+        default: 'all'
         type: choice
         options:
+          - 'all'
           - 'minimal'
           - 'essential'
           - 'complete'
@@ -35,9 +36,9 @@ on:
   workflow_call:
     inputs:
       bundle_tier:
-        description: 'Bundle tier selection'
+        description: 'Bundle tier selection (use "all" to build all tiers)'
         required: false
-        default: 'essential'
+        default: 'all'
         type: string
       architecture:
         description: 'Target architecture'
@@ -268,7 +269,7 @@ jobs:
       fail-fast: false
       matrix:
         arch: ${{ fromJson(inputs.architecture == 'both' && '["x64", "arm64"]' || format('["{0}"]', inputs.architecture || 'x64')) }}
-        bundle_tier: ${{ fromJson(format('["{0}"]', inputs.bundle_tier || 'essential')) }}
+        bundle_tier: ${{ fromJson(inputs.bundle_tier == 'all' && '["essential", "complete", "full"]' || (inputs.bundle_tier && format('["{0}"]', inputs.bundle_tier) || '["essential", "complete", "full"]')) }}
     
     permissions:
       contents: write
