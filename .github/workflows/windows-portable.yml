@@ -798,23 +798,23 @@ jobs:
           
           Write-Host "Creating distribution bundle: $bundleDir"
           
-          # Create bundle directory structure in parallel
+          # Create bundle directory structure
           $directories = @("$bundleDir", "$bundleDir/bin", "$bundleDir/docs", "$bundleDir/examples")
-          $directories | ForEach-Object -Parallel {
+          $directories | ForEach-Object {
             New-Item -ItemType Directory -Force -Path $_ | Out-Null
           }
           
           # Copy executable
           Copy-Item "dist/${outputName}.exe" "$bundleDir/bin/serena.exe"
           
-          # Copy documentation files in parallel
+          # Copy documentation files
           $docFiles = @(
             @{ Source = "README.md"; Dest = "$bundleDir/README.md" },
             @{ Source = "LICENSE"; Dest = "$bundleDir/LICENSE" },
             @{ Source = "CLAUDE.md"; Dest = "$bundleDir/docs/" }
           )
           
-          $docFiles | ForEach-Object -Parallel {
+          $docFiles | ForEach-Object {
             if (Test-Path $_.Source) {
               Copy-Item $_.Source $_.Dest
             }
