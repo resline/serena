@@ -436,6 +436,11 @@ jobs:
               Copy-Item "language_servers_essential/gopls-$archSuffix" "$targetDir/gopls" -Recurse -Force
             }
             
+            # Copy Java (Eclipse JDT) - now part of essential tier
+            if (Test-Path "language_servers_essential/java") {
+              Copy-Item "language_servers_essential/java" "$targetDir/java" -Recurse -Force
+            }
+            
             Write-Host "Essential language servers setup completed"
           } else {
             Write-Warning "Essential language servers cache not found"
@@ -457,7 +462,6 @@ jobs:
             $archSuffix = if ("${{ matrix.arch }}" -eq "arm64") { "arm64" } else { "x64" }
             
             # Copy common servers
-            Copy-Item "language_servers_additional/java" "$targetDir/java" -Recurse -Force
             Copy-Item "language_servers_additional/lua-ls" "$targetDir/lua-ls" -Recurse -Force
             Copy-Item "language_servers_additional/bash-ls" "$targetDir/bash-ls" -Recurse -Force
             
