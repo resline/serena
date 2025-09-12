@@ -828,9 +828,9 @@ for subgroup in (mode, context, project, config, tools, prompts):
 
 def main() -> None:
     """Entry point for PyInstaller compatibility."""
-    import sys
     import multiprocessing
-    
+    import sys
+
     # Required for PyInstaller Windows executables to avoid multiprocessing errors
     multiprocessing.freeze_support()
 
