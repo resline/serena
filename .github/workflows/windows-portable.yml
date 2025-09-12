@@ -625,6 +625,8 @@ jobs:
             "solidlsp.util.zip",
             "mcp",
             "mcp.server.fastmcp.server",
+            "mcp.server.fastmcp.utilities.func_metadata",
+            "mcp.server.fastmcp.tools.base",
             "anthropic",
             "requests",
             "yaml",
@@ -639,6 +641,12 @@ jobs:
             "joblib",
             "pathspec",
             "ruamel.yaml",
+            "ruamel.yaml.main",
+            "ruamel.yaml.loader",
+            "ruamel.yaml.dumper",
+            "sensai.util.logging",
+            "sensai.util.string",
+            "sensai.util.git",
             "ctypes",
             "ctypes.wintypes",
             "win32api",
@@ -668,7 +676,8 @@ jobs:
           $stderrLog = "build/pyinstaller_stderr.log"
           
           # Run PyInstaller with better error handling
-          $processInfo = Start-Process -FilePath "uv" -ArgumentList ("run", "pyinstaller") + $pyinstallerArgs `
+          $allArgs = @("run", "pyinstaller") + $pyinstallerArgs
+          $processInfo = Start-Process -FilePath "uv" -ArgumentList $allArgs `
             -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog `
             -PassThru -NoNewWindow -Wait
           
