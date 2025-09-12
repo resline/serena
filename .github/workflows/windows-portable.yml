@@ -375,9 +375,23 @@ jobs:
           $env:UV_HTTP_TIMEOUT = "300"
           $env:UV_CACHE_DIR = "$env:APPDATA\uv\cache"
           
+          # Install project in development mode
           uv pip install -e ".[dev]"
           uv pip install pyinstaller==6.11.1
           uv pip install pywin32 pywin32-ctypes
+          
+          # Verify UV virtual environment setup for Windows
+          Write-Host "Verifying UV virtual environment setup..." -ForegroundColor Cyan
+          if (Test-Path ".venv\Scripts\activate.ps1") {
+            Write-Host "[OK] Virtual environment PowerShell activation script found" -ForegroundColor Green
+          } else {
+            Write-Warning "Virtual environment PowerShell activation script not found"
+          }
+          
+          # Test UV environment functionality
+          Write-Host "Testing UV environment..." -ForegroundColor Cyan
+          uv run python --version
+          uv run pip list | Select-String "poethepoet"
 
       # Ensure dev tools are installed (fallback for quality checks)
       - name: Ensure dev tools are installed
