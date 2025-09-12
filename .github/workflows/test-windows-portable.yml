@@ -653,7 +653,7 @@ jobs:
   build-standalone:
     name: Build Windows Standalone
     needs: [syntax-validation, test-script-validation]
-    if: github.event_name == 'workflow_dispatch' && inputs.test_level == 'build'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.test_level == 'build'
     uses: ./.github/workflows/windows-portable.yml
     with:
       bundle_tier: essential

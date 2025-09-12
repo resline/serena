@@ -35,7 +35,7 @@
 
 param(
     [Parameter(Mandatory=$true)]
-    [ValidateSet("minimal", "essential", "complete", "full")]
+    [ValidateSet("minimal", "essential", "complete", "full", "build")]
     [string]$Tier,
     
     [string]$OutputDir = ".\language-servers",
@@ -50,6 +50,12 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+# Map build profile to tier
+if ($Tier -eq "build") {
+    $Tier = "essential"
+    Write-Host "Mapped 'build' profile to 'essential' tier" -ForegroundColor Yellow
+}
 
 # Color output functions
 function Write-Success { param($Message) Write-Host $Message -ForegroundColor Green }

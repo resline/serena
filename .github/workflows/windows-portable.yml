@@ -375,9 +375,23 @@ jobs:
           $env:UV_HTTP_TIMEOUT = "300"
           $env:UV_CACHE_DIR = "$env:APPDATA\uv\cache"
           
+          # Install project in development mode
           uv pip install -e ".[dev]"
           uv pip install pyinstaller==6.11.1
           uv pip install pywin32 pywin32-ctypes
+          
+          # Verify UV virtual environment setup for Windows
+          Write-Host "Verifying UV virtual environment setup..." -ForegroundColor Cyan
+          if (Test-Path ".venv\Scripts\activate.ps1") {
+            Write-Host "[OK] Virtual environment PowerShell activation script found" -ForegroundColor Green
+          } else {
+            Write-Warning "Virtual environment PowerShell activation script not found"
+          }
+          
+          # Test UV environment functionality
+          Write-Host "Testing UV environment..." -ForegroundColor Cyan
+          uv run python --version
+          uv run pip list | Select-String "poethepoet"
 
       # Ensure dev tools are installed (fallback for quality checks)
       - name: Ensure dev tools are installed
@@ -462,22 +476,6 @@ jobs:
         if: matrix.bundle_tier != 'minimal'
         shell: powershell
         run: |
-          Write-Host "Downloading portable runtimes for offline functionality..." -ForegroundColor Green
-          
-          # Temporarily skip runtime downloads to test build process
-          Write-Host "[SKIP] Runtime downloads temporarily disabled for testing" -ForegroundColor Yellow
-          Write-Host "The build will proceed with language servers only" -ForegroundColor Yellow
-          
-          # Create empty runtime directory
-          New-Item -ItemType Directory -Force -Path "build\runtimes" | Out-Null
-          
-          Write-Host "Build will continue without embedded runtimes" -ForegroundColor Cyan
-
-      # Download portable runtimes (enabled)
-      - name: Download portable runtimes (enabled)
-        if: matrix.bundle_tier != 'minimal'
-        shell: powershell
-        run: |
           Write-Host "Downloading portable runtimes (enabled step)..." -ForegroundColor Green
           $tier = "${{ matrix.bundle_tier }}"
           $arch = "${{ matrix.arch }}"
@@ -497,46 +495,53 @@ jobs:
           Write-Host "Runtimes directory populated:" -ForegroundColor Green
           Get-ChildItem -Recurse -Depth 2 $out | Select-Object FullName | ForEach-Object { Write-Host $_.FullName }
 
-      # Run quality checks with retry logic
+      # Run quality checks with Windows-optimized UV commands
       - name: Run code quality checks
         shell: powershell
         run: |
-          # Run code quality checks with retry logic
           Write-Host "Running code quality checks..." -ForegroundColor Green
-
-          $checks = @(
-              @{Name="Lint"; Command="uv run poe lint"},
-              @{Name="Type Check"; Command="uv run poe type-check"}
-          )
-
-          foreach ($check in $checks) {
-              $maxRetries = 2
-              $retryCount = 0
-              $success = $false
-              
-              while ($retryCount -le $maxRetries -and -not $success) {
-                  try {
-                      Write-Host "Running $($check.Name) (attempt $($retryCount + 1)/$($maxRetries + 1))..." -ForegroundColor Cyan
-                      
-                      $output = Invoke-Expression $check.Command 2>&1
-                      if ($LASTEXITCODE -eq 0) {
-                          Write-Host "[OK] $($check.Name) passed" -ForegroundColor Green
-                          $success = $true
-                      } else {
-                          throw "$($check.Name) failed with exit code $LASTEXITCODE"
-                      }
-                  } catch {
-                      $retryCount++
-                      if ($retryCount -gt $maxRetries) {
-                          Write-Error "[FAIL] $($check.Name) failed after $($maxRetries + 1) attempts"
-                          Write-Host "Last output:" -ForegroundColor Yellow
-                          Write-Host $output
-                          exit 1
-                      }
-                      Write-Warning "Retry $retryCount/$maxRetries after 5 seconds..."
-                      Start-Sleep -Seconds 5
-                  }
-              }
+          
+          # Ensure virtual environment is activated for UV commands
+          $env:VIRTUAL_ENV = ".venv"
+          
+          # Use direct UV commands with explicit error handling for Windows compatibility
+          Write-Host "Running black formatting check..." -ForegroundColor Cyan
+          try {
+            uv run black --check src scripts test
+            if ($LASTEXITCODE -ne 0) { 
+              Write-Host "[FAIL] Black formatting check failed" -ForegroundColor Red
+              exit 1
+            }
+            Write-Host "[OK] Black formatting check passed" -ForegroundColor Green
+          } catch {
+            Write-Host "[FAIL] Black execution failed: $_" -ForegroundColor Red
+            exit 1
+          }
+          
+          Write-Host "Running ruff linting check..." -ForegroundColor Cyan
+          try {
+            uv run ruff check src scripts test
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "[FAIL] Ruff linting check failed" -ForegroundColor Red  
+              exit 1
+            }
+            Write-Host "[OK] Ruff linting check passed" -ForegroundColor Green
+          } catch {
+            Write-Host "[FAIL] Ruff execution failed: $_" -ForegroundColor Red
+            exit 1
+          }
+          
+          Write-Host "Running mypy type checking..." -ForegroundColor Cyan
+          try {
+            uv run mypy src/serena
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "[FAIL] MyPy type checking failed" -ForegroundColor Red
+              exit 1
+            }
+            Write-Host "[OK] MyPy type checking passed" -ForegroundColor Green
+          } catch {
+            Write-Host "[FAIL] MyPy execution failed: $_" -ForegroundColor Red
+            exit 1
           }
 
           Write-Host "All quality checks passed successfully!" -ForegroundColor Green
@@ -612,12 +617,30 @@ jobs:
           $hiddenImports = @(
             "serena.agent",
             "serena.cli",
+            "serena.util.logging",
+            "serena.util.exception",
+            "serena.runtime_manager",
             "solidlsp.ls",
+            "solidlsp.util.subprocess_util",
+            "solidlsp.util.zip",
             "mcp",
+            "mcp.server.fastmcp.server",
             "anthropic",
             "requests",
             "yaml",
             "jinja2",
+            "click",
+            "pydantic",
+            "pydantic_settings",
+            "docstring_parser",
+            "psutil",
+            "tqdm",
+            "tiktoken",
+            "joblib",
+            "pathspec",
+            "ruamel.yaml",
+            "ctypes",
+            "ctypes.wintypes",
             "win32api",
             "win32con",
             "pywintypes"
