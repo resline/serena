@@ -599,18 +599,23 @@ jobs:
           
           # Include language servers in bundle
           if (Test-Path "build/language_servers") {
-            $pyinstallerArgs += @("--add-data", "build/language_servers;language_servers")
+            $langServersPath = Resolve-Path "build/language_servers"
+            $pyinstallerArgs += @("--add-data", "${langServersPath};language_servers")
             Write-Host "Language servers found - will be included in bundle" -ForegroundColor Green
+            Write-Host "Using absolute path: $langServersPath" -ForegroundColor Gray
             Get-ChildItem "build/language_servers" | ForEach-Object { Write-Host "  - $($_.Name)" -ForegroundColor Gray }
           } else {
             Write-Host "No language servers found in build/language_servers" -ForegroundColor Yellow
           }
           
-          # Add source packages
+          # Add source packages with absolute paths
+          $serenaPath = Resolve-Path "src/serena"
+          $solidlspPath = Resolve-Path "src/solidlsp"  
+          $interpromptPath = Resolve-Path "src/interprompt"
           $pyinstallerArgs += @(
-            "--add-data", "src/serena;serena",
-            "--add-data", "src/solidlsp;solidlsp",
-            "--add-data", "src/interprompt;interprompt"
+            "--add-data", "${serenaPath};serena",
+            "--add-data", "${solidlspPath};solidlsp",
+            "--add-data", "${interpromptPath};interprompt"
           )
           
           # Hidden imports for dynamic loading
