@@ -612,9 +612,9 @@ jobs:
           }
           
           # Add source packages with absolute paths
-          $serenaPath = Join-Path $workspaceRoot "src\serena" -replace '\\', '/'
-          $solidlspPath = Join-Path $workspaceRoot "src\solidlsp" -replace '\\', '/'
-          $interpromptPath = Join-Path $workspaceRoot "src\interprompt" -replace '\\', '/'
+          $serenaPath = (Join-Path $workspaceRoot "src\serena") -replace '\\', '/'
+          $solidlspPath = (Join-Path $workspaceRoot "src\solidlsp") -replace '\\', '/'
+          $interpromptPath = (Join-Path $workspaceRoot "src\interprompt") -replace '\\', '/'
           $pyinstallerArgs += @(
             "--add-data", "${serenaPath};serena",
             "--add-data", "${solidlspPath};solidlsp",
