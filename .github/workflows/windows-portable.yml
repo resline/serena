@@ -599,7 +599,10 @@ jobs:
           
           # Include language servers in bundle
           if (Test-Path "build/language_servers") {
-            $langServersPath = Resolve-Path "build/language_servers"
+            # Get absolute path from workspace root to avoid path doubling issues
+            $workspaceRoot = Get-Location
+            $langServersPath = Join-Path $workspaceRoot "build\language_servers"
+            $langServersPath = $langServersPath -replace '\\', '/'  # Normalize path separators for PyInstaller
             $pyinstallerArgs += @("--add-data", "${langServersPath};language_servers")
             Write-Host "Language servers found - will be included in bundle" -ForegroundColor Green
             Write-Host "Using absolute path: $langServersPath" -ForegroundColor Gray
@@ -609,9 +612,9 @@ jobs:
           }
           
           # Add source packages with absolute paths
-          $serenaPath = Resolve-Path "src/serena"
-          $solidlspPath = Resolve-Path "src/solidlsp"  
-          $interpromptPath = Resolve-Path "src/interprompt"
+          $serenaPath = Join-Path $workspaceRoot "src\serena" -replace '\\', '/'
+          $solidlspPath = Join-Path $workspaceRoot "src\solidlsp" -replace '\\', '/'
+          $interpromptPath = Join-Path $workspaceRoot "src\interprompt" -replace '\\', '/'
           $pyinstallerArgs += @(
             "--add-data", "${serenaPath};serena",
             "--add-data", "${solidlspPath};solidlsp",
