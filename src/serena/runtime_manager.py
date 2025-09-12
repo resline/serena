@@ -117,10 +117,10 @@ class PortableRuntimeManager:
             exe_path = runtime.path / runtime.executable
             runtime.is_available = exe_path.exists()
 
-        if runtime.is_available:
-            logger.info(f"Portable {runtime.name} found at: {exe_path}")
-        else:
-            logger.debug(f"Portable {runtime.name} not found at: {exe_path}")
+            if runtime.is_available:
+                logger.info(f"Portable {runtime.name} found at: {exe_path}")
+            else:
+                logger.debug(f"Portable {runtime.name} not found at: {exe_path}")
 
     def get_runtime_executable(self, runtime_name: str) -> Optional[str]:
         """Get the full path to a runtime executable if available."""
@@ -346,7 +346,7 @@ class PortableRuntimeManager:
             "eclipse-jdtls",
             "kotlin-language-server",
         ]
-        
+
         for server in servers:
             report["language_servers"][server] = {
                 "offline_capable": self.is_offline_capable(server),
