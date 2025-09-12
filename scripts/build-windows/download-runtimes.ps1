@@ -23,7 +23,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet('minimal', 'essential', 'complete', 'full')]
+    [ValidateSet('minimal', 'essential', 'complete', 'full', 'build')]
     [string]$RuntimeTier = 'essential',
     
     [Parameter(Mandatory=$false)]
@@ -36,6 +36,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+
+# Map build profile to tier
+if ($RuntimeTier -eq 'build') {
+    $RuntimeTier = 'essential'
+    Write-Host "Mapped 'build' profile to 'essential' tier" -ForegroundColor Yellow
+}
 
 # Runtime versions
 $NODEJS_VERSION = '20.11.1'

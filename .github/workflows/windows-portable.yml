@@ -462,22 +462,6 @@ jobs:
         if: matrix.bundle_tier != 'minimal'
         shell: powershell
         run: |
-          Write-Host "Downloading portable runtimes for offline functionality..." -ForegroundColor Green
-          
-          # Temporarily skip runtime downloads to test build process
-          Write-Host "[SKIP] Runtime downloads temporarily disabled for testing" -ForegroundColor Yellow
-          Write-Host "The build will proceed with language servers only" -ForegroundColor Yellow
-          
-          # Create empty runtime directory
-          New-Item -ItemType Directory -Force -Path "build\runtimes" | Out-Null
-          
-          Write-Host "Build will continue without embedded runtimes" -ForegroundColor Cyan
-
-      # Download portable runtimes (enabled)
-      - name: Download portable runtimes (enabled)
-        if: matrix.bundle_tier != 'minimal'
-        shell: powershell
-        run: |
           Write-Host "Downloading portable runtimes (enabled step)..." -ForegroundColor Green
           $tier = "${{ matrix.bundle_tier }}"
           $arch = "${{ matrix.arch }}"
@@ -612,12 +596,30 @@ jobs:
           $hiddenImports = @(
             "serena.agent",
             "serena.cli",
+            "serena.util.logging",
+            "serena.util.exception",
+            "serena.runtime_manager",
             "solidlsp.ls",
+            "solidlsp.util.subprocess_util",
+            "solidlsp.util.zip",
             "mcp",
+            "mcp.server.fastmcp.server",
             "anthropic",
             "requests",
             "yaml",
             "jinja2",
+            "click",
+            "pydantic",
+            "pydantic_settings",
+            "docstring_parser",
+            "psutil",
+            "tqdm",
+            "tiktoken",
+            "joblib",
+            "pathspec",
+            "ruamel.yaml",
+            "ctypes",
+            "ctypes.wintypes",
             "win32api",
             "win32con",
             "pywintypes"
