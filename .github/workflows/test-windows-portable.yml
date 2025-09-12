@@ -656,6 +656,6 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.test_level == 'build'
     uses: ./.github/workflows/windows-portable.yml
     with:
-      bundle_tier: essential
+      bundle_tier: all
       architecture: x64
       upload_artifacts: true
