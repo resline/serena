@@ -844,13 +844,6 @@ def get_help() -> str:
 
 # Entry point for PyInstaller executable
 if __name__ == "__main__":
-    # When run directly as an executable, default to starting the MCP server
+    # When run directly as an executable, run the main CLI
     # This ensures serena.exe works properly when built with PyInstaller
-    import sys
-
-    # start_mcp_server is a Click command, we need to invoke it properly
-    # Using standalone_mode=False to avoid SystemExit
-    try:
-        start_mcp_server.main(standalone_mode=False)
-    except SystemExit:
-        pass  # Click commands exit normally, don't propagate this
+    main()
