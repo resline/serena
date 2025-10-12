@@ -13,12 +13,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Test Markers:**
 Available pytest markers for selective testing:
-- `python`, `go`, `java`, `rust`, `typescript`, `php`, `csharp`, `elixir`, `terraform`, `clojure`, `swift`, `bash`, `ruby`, `ruby_solargraph`
+- `python`, `go`, `java`, `kotlin`, `rust`, `typescript`, `php`, `csharp`, `elixir`, `erlang`, `terraform`, `clojure`, `swift`, `bash`, `ruby`, `r`, `zig`, `lua`, `nix`, `dart`, `al`
 - `snapshot` - for symbolic editing operation tests
 
 **Project Management:**
-- `uv run serena-mcp-server` - Start MCP server from project root
-- `uv run index-project` - Index project for faster tool performance
+- `uv run serena start-mcp-server` - Start MCP server from project root
+- `uv run serena project index` - Index project for faster tool performance
+- `uv run serena config edit` - Edit global Serena configuration
+- `uv run serena tools list` - List all available tools
+- `uv run serena tools list --only-optional` - List optional tools only
+
+**CLI Help:**
+- `uv run serena --help` - Show all available CLI commands
+- `uv run serena <command> --help` - Show help for specific command
 
 **Always run format, type-check, and test before completing any task.**
 
@@ -106,8 +113,21 @@ Configuration is loaded from (in order of precedence):
 
 ## Working with the Codebase
 
-- Project uses Python 3.11 with `uv` for dependency management
-- Strict typing with mypy, formatted with black + ruff
+**Development Environment:**
+- Python 3.11 required (not 3.12+)
+- `uv` required for dependency management ([install guide](https://docs.astral.sh/uv/getting-started/installation/))
+- Virtual environment setup: `uv venv && uv pip install --all-extras -r pyproject.toml -e .`
+- Task runner: `poethepoet` via `uv run poe <task>`
+
+**Code Standards:**
+- Strict typing with mypy - all functions must have type hints
+- Formatted with black (line length 140) + ruff
+- No untyped defs allowed (`disallow_untyped_defs = true`)
+- Test coverage required for new features
+
+**Architecture Details:**
 - Language servers run as separate processes with LSP communication
 - Memory system enables persistent project knowledge
 - Context/mode system allows workflow customization
+- MCP server uses FastMCP with stdio or SSE transport
+- Tools are auto-discovered via subclass inspection
