@@ -1,0 +1,615 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://serena.ai/schemas/build-config.json",
+  "title": "Serena Windows Build Configuration",
+  "description": "Configuration for building Windows portable packages with different language server tiers",
+  "version": "1.0.0",
+  "lastUpdated": "2025-01-16",
+
+  "buildSystem": {
+    "pythonVersion": "3.11",
+    "uvVersion": "latest",
+    "pyinstallerVersion": "6.11.1",
+    "minDiskSpace": "15GB",
+    "recommendedDiskSpace": "25GB",
+    "buildTimeout": "60 minutes"
+  },
+
+  "tiers": {
+    "minimal": {
+      "name": "minimal",
+      "displayName": "Minimal",
+      "description": "Core Serena functionality only - no bundled language servers",
+      "languageServers": [],
+      "runtimes": [],
+      "estimatedSize": {
+        "executable": "45MB",
+        "bundle": "50MB"
+      },
+      "buildTime": "5-8 minutes",
+      "useCase": "Users who want to download language servers separately or use existing installations",
+      "features": [
+        "Core Serena MCP server",
+        "Tool registry and configuration system",
+        "Memory and project management",
+        "All file operation tools",
+        "Symbol operation tools (requires external LSP servers)"
+      ]
+    },
+
+    "essential": {
+      "name": "essential",
+      "displayName": "Essential",
+      "description": "Core + most popular language servers (Python, TypeScript, Rust, Go, Java)",
+      "languageServers": [
+        "pyright",
+        "typescript-language-server",
+        "rust-analyzer",
+        "gopls",
+        "eclipse-jdtls"
+      ],
+      "runtimes": [
+        "nodejs-20.11.1"
+      ],
+      "estimatedSize": {
+        "executable": "250MB",
+        "bundle": "280MB",
+        "languageServers": "180MB",
+        "runtimes": "28MB"
+      },
+      "buildTime": "15-20 minutes",
+      "useCase": "Most developers working with popular languages",
+      "features": [
+        "All minimal features",
+        "Python language server (Pyright)",
+        "TypeScript/JavaScript language server",
+        "Rust language server (rust-analyzer)",
+        "Go language server (gopls)",
+        "Java language server (Eclipse JDT)",
+        "Node.js runtime for npm-based servers"
+      ],
+      "languageSupport": {
+        "python": "Full support with Pyright",
+        "typescript": "Full support with typescript-language-server",
+        "javascript": "Full support with typescript-language-server",
+        "rust": "Full support with rust-analyzer",
+        "go": "Full support with gopls",
+        "java": "Full support with Eclipse JDT LS"
+      }
+    },
+
+    "complete": {
+      "name": "complete",
+      "displayName": "Complete",
+      "description": "Essential + additional popular languages (C#, Lua, Bash, PHP)",
+      "languageServers": [
+        "pyright",
+        "typescript-language-server",
+        "rust-analyzer",
+        "gopls",
+        "eclipse-jdtls",
+        "csharp-language-server",
+        "lua-language-server",
+        "bash-language-server",
+        "intelephense"
+      ],
+      "runtimes": [
+        "nodejs-20.11.1",
+        "dotnet-9.0.6"
+      ],
+      "estimatedSize": {
+        "executable": "380MB",
+        "bundle": "420MB",
+        "languageServers": "290MB",
+        "runtimes": "63MB"
+      },
+      "buildTime": "25-30 minutes",
+      "useCase": "Polyglot developers needing broad language support",
+      "features": [
+        "All essential features",
+        "C# language server (Microsoft Roslyn)",
+        "Lua language server",
+        "Bash language server",
+        "PHP language server (Intelephense)",
+        ".NET 9 runtime for C# support"
+      ],
+      "languageSupport": {
+        "python": "Full support with Pyright",
+        "typescript": "Full support with typescript-language-server",
+        "javascript": "Full support with typescript-language-server",
+        "rust": "Full support with rust-analyzer",
+        "go": "Full support with gopls",
+        "java": "Full support with Eclipse JDT LS",
+        "csharp": "Full support with Roslyn-based language server",
+        "lua": "Full support with lua-language-server",
+        "bash": "Full support with bash-language-server",
+        "php": "Full support with Intelephense"
+      }
+    },
+
+    "full": {
+      "name": "full",
+      "displayName": "Full",
+      "description": "All 28+ supported language servers including experimental ones",
+      "languageServers": [
+        "pyright",
+        "typescript-language-server",
+        "rust-analyzer",
+        "gopls",
+        "eclipse-jdtls",
+        "csharp-language-server",
+        "lua-language-server",
+        "bash-language-server",
+        "intelephense",
+        "clangd",
+        "terraform-ls",
+        "zls",
+        "clojure-lsp",
+        "kotlin-language-server",
+        "ruby-lsp",
+        "r-language-server",
+        "dart-language-server",
+        "omnisharp",
+        "solargraph",
+        "jedi-language-server",
+        "vtsls"
+      ],
+      "runtimes": [
+        "nodejs-20.11.1",
+        "dotnet-9.0.6"
+      ],
+      "estimatedSize": {
+        "executable": "650MB",
+        "bundle": "720MB",
+        "languageServers": "570MB",
+        "runtimes": "63MB"
+      },
+      "buildTime": "40-50 minutes",
+      "useCase": "Complete offline development environment with all language support",
+      "features": [
+        "All complete features",
+        "C/C++ language server (clangd)",
+        "Terraform language server",
+        "Zig language server",
+        "Clojure language server",
+        "Kotlin language server",
+        "Ruby language server",
+        "R language server",
+        "Dart language server",
+        "Legacy/experimental servers (OmniSharp, Solargraph, Jedi, vtsls)"
+      ],
+      "languageSupport": {
+        "python": "Full support with Pyright (+ Jedi experimental)",
+        "typescript": "Full support with typescript-language-server (+ vtsls experimental)",
+        "javascript": "Full support with typescript-language-server (+ vtsls experimental)",
+        "rust": "Full support with rust-analyzer",
+        "go": "Full support with gopls",
+        "java": "Full support with Eclipse JDT LS",
+        "kotlin": "Full support with kotlin-language-server",
+        "csharp": "Full support with Roslyn (+ OmniSharp experimental)",
+        "lua": "Full support with lua-language-server",
+        "bash": "Full support with bash-language-server",
+        "php": "Full support with Intelephense",
+        "cpp": "Full support with clangd",
+        "c": "Full support with clangd",
+        "terraform": "Full support with terraform-ls",
+        "zig": "Full support with zls",
+        "clojure": "Full support with clojure-lsp",
+        "ruby": "Full support with ruby-lsp (+ Solargraph experimental)",
+        "r": "Full support with r-language-server",
+        "dart": "Full support with dart-language-server"
+      }
+    }
+  },
+
+  "architectures": {
+    "x64": {
+      "name": "x64",
+      "displayName": "Windows x64",
+      "description": "64-bit Intel/AMD processors (most common)",
+      "supported": true,
+      "pythonArch": "x64",
+      "nativeSupport": "All language servers",
+      "compatibility": ["Windows 10 x64", "Windows 11 x64", "Windows Server 2019", "Windows Server 2022"]
+    },
+    "arm64": {
+      "name": "arm64",
+      "displayName": "Windows ARM64",
+      "description": "ARM64 processors (Surface Pro X, etc.)",
+      "supported": true,
+      "pythonArch": "arm64",
+      "nativeSupport": "16 language servers with native ARM64 binaries",
+      "emulationSupport": "5 language servers using x64 emulation",
+      "compatibility": ["Windows 11 ARM64"],
+      "notes": [
+        "Excellent x64 emulation performance in Windows 11",
+        "Minimal performance impact for emulated language servers",
+        "Some servers (nixd, sourcekit-lsp, erlang-ls) require manual setup"
+      ]
+    }
+  },
+
+  "languageServerDetails": {
+    "pyright": {
+      "language": "python",
+      "tier": "essential",
+      "version": "1.1.388",
+      "size": "25MB",
+      "runtime": "nodejs",
+      "downloadUrl": {
+        "x64": "https://registry.npmjs.org/pyright/-/pyright-1.1.388.tgz",
+        "arm64": "https://registry.npmjs.org/pyright/-/pyright-1.1.388.tgz"
+      },
+      "arm64Support": "native"
+    },
+    "typescript-language-server": {
+      "language": "typescript",
+      "tier": "essential",
+      "version": "4.3.3",
+      "size": "45MB",
+      "runtime": "nodejs",
+      "downloadUrl": {
+        "x64": "https://registry.npmjs.org/typescript-language-server/-/typescript-language-server-4.3.3.tgz",
+        "arm64": "https://registry.npmjs.org/typescript-language-server/-/typescript-language-server-4.3.3.tgz"
+      },
+      "arm64Support": "native"
+    },
+    "rust-analyzer": {
+      "language": "rust",
+      "tier": "essential",
+      "version": "latest",
+      "size": "15MB",
+      "runtime": "none",
+      "downloadUrl": {
+        "x64": "https://github.com/rust-lang/rust-analyzer/releases/latest/download/rust-analyzer-x86_64-pc-windows-msvc.zip",
+        "arm64": "https://github.com/rust-lang/rust-analyzer/releases/latest/download/rust-analyzer-aarch64-pc-windows-msvc.zip"
+      },
+      "arm64Support": "native"
+    },
+    "gopls": {
+      "language": "go",
+      "tier": "essential",
+      "version": "0.20.0",
+      "size": "12MB",
+      "runtime": "none",
+      "downloadUrl": {
+        "x64": "https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls_v0.20.0_windows_amd64.zip",
+        "arm64": "https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls_v0.20.0_windows_arm64.zip"
+      },
+      "arm64Support": "native"
+    },
+    "eclipse-jdtls": {
+      "language": "java",
+      "tier": "essential",
+      "version": "1.50.0",
+      "size": "95MB",
+      "runtime": "java21-bundled",
+      "downloadUrl": {
+        "x64": "https://download.eclipse.org/jdtls/milestones/1.50.0/jdt-language-server-1.50.0-202409261450.tar.gz",
+        "arm64": "https://download.eclipse.org/jdtls/milestones/1.50.0/jdt-language-server-1.50.0-202409261450.tar.gz"
+      },
+      "arm64Support": "emulation",
+      "notes": "Includes bundled Java 21 runtime"
+    },
+    "csharp-language-server": {
+      "language": "csharp",
+      "tier": "complete",
+      "version": "5.0.0-1.25329.6",
+      "size": "35MB",
+      "runtime": "dotnet9",
+      "downloadUrl": {
+        "x64": "nuget:Microsoft.CodeAnalysis.LanguageServer.win-x64",
+        "arm64": "nuget:Microsoft.CodeAnalysis.LanguageServer.win-arm64"
+      },
+      "arm64Support": "native"
+    },
+    "lua-language-server": {
+      "language": "lua",
+      "tier": "complete",
+      "version": "3.15.0",
+      "size": "25MB",
+      "runtime": "none",
+      "downloadUrl": {
+        "x64": "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-win32-x64.zip",
+        "arm64": "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-win32-x64.zip"
+      },
+      "arm64Support": "emulation"
+    },
+    "bash-language-server": {
+      "language": "bash",
+      "tier": "complete",
+      "version": "5.6.0",
+      "size": "15MB",
+      "runtime": "nodejs",
+      "downloadUrl": {
+        "x64": "https://registry.npmjs.org/bash-language-server/-/bash-language-server-5.6.0.tgz",
+        "arm64": "https://registry.npmjs.org/bash-language-server/-/bash-language-server-5.6.0.tgz"
+      },
+      "arm64Support": "native"
+    },
+    "intelephense": {
+      "language": "php",
+      "tier": "complete",
+      "version": "1.14.4",
+      "size": "22MB",
+      "runtime": "nodejs",
+      "downloadUrl": {
+        "x64": "https://registry.npmjs.org/intelephense/-/intelephense-1.14.4.tgz",
+        "arm64": "https://registry.npmjs.org/intelephense/-/intelephense-1.14.4.tgz"
+      },
+      "arm64Support": "native"
+    },
+    "clangd": {
+      "language": "cpp",
+      "tier": "full",
+      "version": "19.1.2",
+      "size": "65MB",
+      "runtime": "none",
+      "downloadUrl": {
+        "x64": "https://github.com/clangd/clangd/releases/download/19.1.2/clangd-windows-19.1.2.zip",
+        "arm64": "https://github.com/clangd/clangd/releases/download/19.1.2/clangd-windows-19.1.2.zip"
+      },
+      "arm64Support": "emulation"
+    },
+    "terraform-ls": {
+      "language": "terraform",
+      "tier": "full",
+      "version": "0.36.5",
+      "size": "18MB",
+      "runtime": "none",
+      "downloadUrl": {
+        "x64": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_windows_amd64.zip",
+        "arm64": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_windows_arm64.zip"
+      },
+      "arm64Support": "native"
+    },
+    "zls": {
+      "language": "zig",
+      "tier": "full",
+      "version": "0.13.0",
+      "size": "8MB",
+      "runtime": "none",
+      "downloadUrl": {
+        "x64": "https://github.com/zigtools/zls/releases/download/0.13.0/zls-x86_64-windows.zip",
+        "arm64": "https://github.com/zigtools/zls/releases/download/0.13.0/zls-aarch64-windows.zip"
+      },
+      "arm64Support": "native"
+    },
+    "clojure-lsp": {
+      "language": "clojure",
+      "tier": "full",
+      "version": "2024.11.25",
+      "size": "45MB",
+      "runtime": "none",
+      "downloadUrl": {
+        "x64": "https://github.com/clojure-lsp/clojure-lsp/releases/latest/download/clojure-lsp-native-windows-amd64.zip",
+        "arm64": "https://github.com/clojure-lsp/clojure-lsp/releases/latest/download/clojure-lsp-native-windows-amd64.zip"
+      },
+      "arm64Support": "emulation"
+    },
+    "omnisharp": {
+      "language": "csharp",
+      "tier": "full",
+      "version": "1.39.12",
+      "size": "55MB",
+      "runtime": "dotnet6-bundled",
+      "downloadUrl": {
+        "x64": "https://github.com/OmniSharp/omnisharp-roslyn/releases/download/v1.39.12/omnisharp-win-x64.zip",
+        "arm64": "https://github.com/OmniSharp/omnisharp-roslyn/releases/download/v1.39.12/omnisharp-win-x64.zip"
+      },
+      "arm64Support": "emulation",
+      "status": "experimental"
+    }
+  },
+
+  "runtimeDetails": {
+    "nodejs-20.11.1": {
+      "name": "Node.js",
+      "version": "20.11.1",
+      "description": "JavaScript runtime for npm-based language servers",
+      "size": "28MB",
+      "required": ["pyright", "typescript-language-server", "bash-language-server", "intelephense"],
+      "downloadUrl": {
+        "x64": "https://nodejs.org/dist/v20.11.1/node-v20.11.1-win-x64.zip",
+        "arm64": "https://nodejs.org/dist/v20.11.1/node-v20.11.1-win-arm64.zip"
+      }
+    },
+    "dotnet-9.0.6": {
+      "name": ".NET Runtime",
+      "version": "9.0.6",
+      "description": ".NET 9 runtime for C# language server",
+      "size": "35MB",
+      "required": ["csharp-language-server"],
+      "downloadUrl": {
+        "x64": "https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.6/dotnet-runtime-9.0.6-win-x64.zip",
+        "arm64": "https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.6/dotnet-runtime-9.0.6-win-arm64.zip"
+      }
+    }
+  },
+
+  "buildParameters": {
+    "pyinstaller": {
+      "onefile": true,
+      "console": true,
+      "optimize": 2,
+      "noupx": true,
+      "excludeModules": [
+        "tkinter",
+        "matplotlib",
+        "PIL",
+        "numpy",
+        "pandas"
+      ],
+      "hiddenImports": [
+        "serena.agent",
+        "serena.cli",
+        "serena.util.logging",
+        "serena.util.exception",
+        "serena.runtime_manager",
+        "solidlsp.ls",
+        "solidlsp.util.subprocess_util",
+        "solidlsp.util.zip",
+        "mcp",
+        "mcp.server.fastmcp.server",
+        "anthropic",
+        "requests",
+        "yaml",
+        "jinja2",
+        "click",
+        "pydantic",
+        "pydantic_settings",
+        "docstring_parser",
+        "psutil",
+        "tqdm",
+        "tiktoken",
+        "joblib",
+        "pathspec",
+        "ruamel.yaml",
+        "win32api",
+        "win32con",
+        "pywintypes"
+      ],
+      "collectAll": [
+        "win32",
+        "pywintypes",
+        "pythoncom"
+      ]
+    },
+    "compression": {
+      "zipLevel": "optimal",
+      "excludePatterns": [
+        "*.pyc",
+        "__pycache__",
+        ".git",
+        ".pytest_cache",
+        "*.log"
+      ]
+    }
+  },
+
+  "qualityChecks": {
+    "formatting": {
+      "tool": "black",
+      "command": "uv run black --check src scripts test",
+      "required": true
+    },
+    "linting": {
+      "tool": "ruff",
+      "command": "uv run ruff check src scripts test",
+      "required": true
+    },
+    "typeChecking": {
+      "tool": "mypy",
+      "command": "uv run mypy src/serena",
+      "required": true
+    },
+    "testing": {
+      "tool": "pytest",
+      "command": "uv run pytest",
+      "required": false,
+      "notes": "Skipped in build workflow to save time"
+    }
+  },
+
+  "outputArtifacts": {
+    "executable": {
+      "pattern": "serena-windows-{arch}-{tier}-{version}.exe",
+      "description": "Standalone executable",
+      "location": "dist/"
+    },
+    "bundle": {
+      "pattern": "serena-windows-{arch}-{tier}-{version}-bundle.zip",
+      "description": "Complete distribution bundle with documentation and installers",
+      "location": "dist/",
+      "contents": [
+        "bin/serena.exe",
+        "README.md",
+        "LICENSE",
+        "docs/CLAUDE.md",
+        "examples/usage.md",
+        "install.bat",
+        "install.ps1"
+      ]
+    },
+    "manifest": {
+      "pattern": "build-manifest-{arch}-{tier}.json",
+      "description": "Build manifest with version info and checksums",
+      "location": "dist/"
+    }
+  },
+
+  "cicdIntegration": {
+    "githubActions": {
+      "workflowFile": ".github/workflows/build-windows.yml",
+      "triggers": [
+        "workflow_dispatch",
+        "release",
+        "push to main (tags only)"
+      ],
+      "matrixStrategy": {
+        "tiers": ["essential", "complete", "full"],
+        "architectures": ["x64", "arm64"],
+        "parallelBuilds": true
+      },
+      "caching": {
+        "uvDependencies": true,
+        "languageServers": true,
+        "runtimes": true
+      },
+      "artifacts": {
+        "retention": "30 days",
+        "uploadToRelease": true
+      }
+    }
+  },
+
+  "troubleshooting": {
+    "commonIssues": [
+      {
+        "issue": "PyInstaller fails with ImportError",
+        "solution": "Ensure all hidden imports are specified in build-config.json",
+        "reference": "buildParameters.pyinstaller.hiddenImports"
+      },
+      {
+        "issue": "Language server not found in bundle",
+        "solution": "Check that language server is included in the tier's languageServers list",
+        "reference": "tiers.<tier>.languageServers"
+      },
+      {
+        "issue": "Executable size too large",
+        "solution": "Review excludeModules list and ensure unnecessary packages are excluded",
+        "reference": "buildParameters.pyinstaller.excludeModules"
+      },
+      {
+        "issue": "ARM64 build fails",
+        "solution": "Verify Python 3.11 ARM64 is installed and architecture parameter is correct",
+        "reference": "architectures.arm64"
+      },
+      {
+        "issue": "Quality checks fail",
+        "solution": "Run formatting and linting locally: uv run poe format && uv run poe lint",
+        "reference": "qualityChecks"
+      }
+    ]
+  },
+
+  "versionControl": {
+    "configVersion": "1.0.0",
+    "compatibleWith": "serena >= 0.1.0",
+    "lastValidated": "2025-01-16",
+    "changelog": [
+      {
+        "version": "1.0.0",
+        "date": "2025-01-16",
+        "changes": [
+          "Initial build configuration",
+          "Support for 4 tier levels (minimal, essential, complete, full)",
+          "Support for x64 and ARM64 architectures",
+          "28+ language servers defined",
+          "Runtime dependency management",
+          "Quality check integration"
+        ]
+      }
+    ]
+  }
+}

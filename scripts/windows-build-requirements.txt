@@ -1,0 +1,216 @@
+# Windows Build Requirements for Serena Portable Packages
+# ========================================================
+# This file documents the requirements for building Serena Windows portable packages.
+# For automated builds, these requirements are handled by GitHub Actions workflows.
+# For local builds, install these dependencies manually.
+
+# Python Version
+# --------------
+# REQUIRED: Python 3.11.x (NOT 3.12 or higher)
+# - Download from: https://www.python.org/downloads/
+# - Install with "Add to PATH" option enabled
+# - Verify: python --version (should show 3.11.x)
+#
+# Architecture-specific downloads:
+# - x64: https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe
+# - ARM64: https://www.python.org/ftp/python/3.11.9/python-3.11.9-arm64.exe
+#
+# IMPORTANT: Python 3.12+ is NOT supported due to compatibility issues with some dependencies
+
+# UV Package Manager
+# ------------------
+# REQUIRED: uv >= 0.1.0 (latest recommended)
+# - Install via PowerShell: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+# - Install via pip: pip install uv
+# - Verify: uv --version
+# - Documentation: https://docs.astral.sh/uv/
+
+# PyInstaller
+# -----------
+# REQUIRED: PyInstaller == 6.11.1
+# - Installed automatically via: uv pip install pyinstaller==6.11.1
+# - Do NOT install globally - should be in virtual environment
+# - Verify: pyinstaller --version
+
+# Windows-Specific Python Packages
+# ---------------------------------
+# REQUIRED: pywin32, pywin32-ctypes
+# - Installed automatically during build setup
+# - Required for Windows API access and process management
+
+# Build Tools
+# -----------
+# OPTIONAL: Git for Windows
+# - Download from: https://git-scm.com/download/win
+# - Required for version control and CI/CD integration
+
+# Disk Space Requirements
+# -----------------------
+# Minimum free disk space by tier:
+# - minimal:   5 GB  (Python, dependencies, build artifacts)
+# - essential: 10 GB (+ language servers + Node.js runtime)
+# - complete:  15 GB (+ additional language servers + .NET runtime)
+# - full:      25 GB (+ all 28 language servers)
+#
+# Recommended: 30 GB free space for comfortable builds with caching
+
+# Memory Requirements
+# -------------------
+# Minimum RAM: 8 GB
+# Recommended: 16 GB (especially for full tier builds)
+# PyInstaller peak usage: 2-4 GB during compilation
+
+# Build Time Estimates
+# --------------------
+# Times for clean builds (no caching):
+# - minimal:   5-8 minutes
+# - essential: 15-20 minutes
+# - complete:  25-30 minutes
+# - full:      40-50 minutes
+#
+# With caching (GitHub Actions):
+# - minimal:   3-5 minutes
+# - essential: 8-12 minutes
+# - complete:  15-20 minutes
+# - full:      25-35 minutes
+
+# Optional: NSIS Installer
+# -------------------------
+# OPTIONAL: NSIS (Nullsoft Scriptable Install System) for creating installers
+# - Download from: https://nsis.sourceforge.io/Download
+# - Version: 3.08 or higher
+# - Use case: Creating .exe installers instead of .zip bundles
+# - Not required for portable bundles
+
+# Development Dependencies
+# ------------------------
+# Installed automatically via: uv pip install -e ".[dev]"
+# Includes:
+# - black (code formatting)
+# - ruff (linting)
+# - mypy (type checking)
+# - pytest (testing)
+# - poethepoet (task runner)
+
+# System Requirements
+# -------------------
+# Operating System:
+# - Windows 10 (version 1809 or later)
+# - Windows 11 (all versions)
+# - Windows Server 2019 or 2022
+#
+# Architecture:
+# - x64 (64-bit Intel/AMD) - Full support
+# - ARM64 (Surface Pro X, etc.) - Full support with some emulation
+#
+# PowerShell:
+# - PowerShell 5.1 or higher (included with Windows 10+)
+# - PowerShell 7+ recommended for better performance
+
+# Network Requirements
+# --------------------
+# Build process requires internet access for:
+# - Downloading language servers (GitHub releases, npm registry, etc.)
+# - Downloading runtimes (Node.js, .NET)
+# - Installing Python dependencies (PyPI)
+#
+# Offline builds:
+# - Pre-download language servers to build/language_servers/
+# - Pre-download runtimes to build/runtimes/
+# - Use --no-index flag with uv pip install (not recommended)
+
+# Environment Variables (Optional)
+# ---------------------------------
+# SERENA_PORTABLE_BUILD=1          Enable portable build mode
+# SERENA_BUNDLE_TIER=<tier>        Override bundle tier (minimal/essential/complete/full)
+# SERENA_ARCH=<arch>               Override architecture (x64/arm64)
+# RUNTIMES_DIR=<path>              Override runtimes directory
+# UV_CONCURRENT_DOWNLOADS=10       Parallel downloads for faster builds
+# UV_HTTP_TIMEOUT=300              HTTP timeout for downloads (seconds)
+# PYINSTALLER_COMPILE_BOOTLOADER=1 Enable bootloader compilation
+# PYTHONWARNINGS=ignore            Suppress Python warnings during build
+
+# Verification Commands
+# ---------------------
+# Run these commands to verify your build environment:
+#
+# 1. Check Python version:
+#    python --version
+#    Expected: Python 3.11.x
+#
+# 2. Check UV:
+#    uv --version
+#    Expected: uv 0.x.x or higher
+#
+# 3. Check disk space (PowerShell):
+#    Get-PSDrive C | Select-Object Used,Free
+#    Expected: At least 15 GB free
+#
+# 4. Check architecture (PowerShell):
+#    $env:PROCESSOR_ARCHITECTURE
+#    Expected: AMD64 (for x64) or ARM64 (for ARM64)
+#
+# 5. Verify virtual environment setup:
+#    uv venv && .\.venv\Scripts\Activate.ps1
+#    Expected: Virtual environment activated
+
+# Quick Start Commands
+# --------------------
+# For local Windows builds, run these commands:
+#
+# 1. Clone repository:
+#    git clone https://github.com/oraios/serena.git
+#    cd serena
+#
+# 2. Create virtual environment:
+#    uv venv
+#
+# 3. Install dependencies:
+#    uv pip install -e ".[dev]"
+#    uv pip install pyinstaller==6.11.1
+#
+# 4. Run build (PowerShell):
+#    .\scripts\build-windows\build-portable.ps1 -Tier essential -Architecture x64
+#
+# Or use the Python build script (if available):
+#    uv run python scripts/build_windows_portable.py --tier essential --arch x64
+
+# Troubleshooting
+# ---------------
+# Issue: "Python 3.11 not found"
+# Solution: Install Python 3.11 from python.org and ensure it's in PATH
+#
+# Issue: "uv command not found"
+# Solution: Install uv via PowerShell script or pip install uv
+#
+# Issue: "PyInstaller fails with DLL load failed"
+# Solution: Install pywin32 and pywin32-ctypes: uv pip install pywin32 pywin32-ctypes
+#
+# Issue: "Insufficient disk space"
+# Solution: Clean up temporary files, or use a smaller tier (minimal/essential)
+#
+# Issue: "Language server download fails"
+# Solution: Check network connectivity, try manual download to build/language_servers/
+#
+# Issue: "ARM64 build fails on x64 machine"
+# Solution: Install Python 3.11 ARM64 version, or cross-compile using Docker (advanced)
+
+# CI/CD Notes
+# -----------
+# GitHub Actions workflow handles all requirements automatically.
+# See: .github/workflows/windows-portable.yml
+#
+# For custom CI/CD pipelines, ensure:
+# - Python 3.11 is available
+# - UV package manager is installed
+# - Sufficient disk space (see above)
+# - Network access for downloads
+# - Windows-specific dependencies (pywin32) are installed
+
+# Support and Documentation
+# --------------------------
+# Build documentation: BUILD-WINDOWS.md
+# Build configuration: scripts/build-config.json
+# Language servers manifest: scripts/build-windows/language-servers-manifest.json
+# Project documentation: CLAUDE.md
+# Issues: https://github.com/oraios/serena/issues

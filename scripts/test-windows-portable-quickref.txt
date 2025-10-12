@@ -1,0 +1,83 @@
+================================================================================
+WINDOWS PORTABLE TEST SUITE - QUICK REFERENCE
+================================================================================
+
+SCRIPT LOCATION:
+  /root/repo/scripts/test-windows-portable.ps1
+
+BASIC USAGE:
+  .\test-windows-portable.ps1 -BuildPath ".\package.zip"
+
+COMMON COMMANDS:
+  # Test with tier and architecture
+  .\test-windows-portable.ps1 -BuildPath ".\serena.zip" -Tier essential -Architecture x64
+  
+  # Test specific category only
+  .\test-windows-portable.ps1 -BuildPath ".\serena.zip" -TestCategory BuildValidation
+  
+  # Verbose output
+  .\test-windows-portable.ps1 -BuildPath ".\serena.zip" -Verbose
+  
+  # Custom output directory
+  .\test-windows-portable.ps1 -BuildPath ".\serena.zip" -OutputDir "C:\tests"
+
+TEST CATEGORIES:
+  - All (default)
+  - PreBuild
+  - BuildValidation
+  - PackageStructure
+  - Functional
+  - LanguageServers
+
+PARAMETERS:
+  -BuildPath       [Required] Path to package (ZIP or directory)
+  -Tier            [Optional] minimal|essential|complete|full
+  -Architecture    [Optional] x64|arm64
+  -TestCategory    [Optional] Which tests to run
+  -OutputDir       [Optional] Output directory (default: .\test-results)
+  -Verbose         [Switch]   Detailed output
+  -SkipExtraction  [Switch]   Skip ZIP extraction
+  -Timeout         [Optional] Test timeout in seconds (default: 60)
+
+OUTPUT FILES:
+  .\test-results\test-report.json  - Machine-readable JSON report
+  .\test-results\test-report.txt   - Human-readable text report
+  .\test-results\*.txt             - Individual test output files
+
+EXIT CODES:
+  0 = All tests passed
+  1 = One or more tests failed
+  2 = Critical error
+
+TEST COUNTS BY CATEGORY:
+  Pre-Build:         11 tests
+  Build Validation:  20 tests
+  Package Structure: 15 tests
+  Functional:        10 tests
+  Language Servers:  6 tests per server (tier-dependent)
+
+TIER LANGUAGE SERVER COUNTS:
+  Minimal:    0 servers (0 additional tests)
+  Essential:  6 servers (36 additional tests)
+  Complete:   9 servers (54 additional tests)
+  Full:      15 servers (90 additional tests)
+
+EXAMPLE WORKFLOW:
+  # Build and test essential tier
+  .\build-windows\build-portable.ps1 -Tier essential
+  .\test-windows-portable.ps1 -BuildPath ".\dist\serena-portable\serena-*-portable" -Tier essential
+  
+  # Check exit code
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+TROUBLESHOOTING:
+  - Path not found: Check BuildPath parameter
+  - Extraction failed: Verify write permissions
+  - Python not found: Install Python 3.11 and add to PATH
+  - Tests timeout: Increase -Timeout parameter
+  - Path too long: Use shorter OutputDir path
+
+FOR MORE INFORMATION:
+  See: /root/repo/scripts/TEST-WINDOWS-PORTABLE-GUIDE.md
+
+================================================================================

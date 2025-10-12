@@ -1,0 +1,146 @@
+================================================================================
+SERENA LAUNCHER SCRIPTS - QUICK REFERENCE
+================================================================================
+
+[1] BASIC LAUNCHERS - Use these to run Serena
+================================================================================
+
+  serena.bat / serena.ps1
+  ├─ Launches: bin/serena.exe
+  ├─ Purpose: Main CLI tool for Serena commands
+  ├─ Example: serena.bat --version
+  └─ Example: serena.bat project index
+
+  serena-mcp-server.bat / serena-mcp-server.ps1
+  ├─ Launches: bin/serena-mcp-server.exe
+  ├─ Purpose: MCP server for Claude Desktop integration
+  ├─ Example: serena-mcp-server.bat --transport stdio
+  └─ Example: serena-mcp-server.bat --transport sse
+
+  index-project.bat / index-project.ps1
+  ├─ Launches: bin/index-project.exe
+  ├─ Purpose: Index project for faster symbol operations
+  ├─ Example: index-project.bat /path/to/project
+  └─ Example: index-project.bat --help
+
+================================================================================
+[2] SETUP SCRIPTS - Use these for installation
+================================================================================
+
+  first-run.bat / first-run.ps1
+  ├─ Purpose: First-time setup wizard
+  ├─ Creates: ~/.serena/ directory structure
+  ├─ Copies: Default configuration files
+  ├─ Optional: Add to Windows PATH
+  ├─ Runs: Installation verification
+  ├─ Example: first-run.bat
+  └─ Example: first-run.ps1 -AddToPath
+
+  verify-installation.bat / verify-installation.ps1
+  ├─ Purpose: Health check and diagnostics
+  ├─ Checks: All executables exist
+  ├─ Checks: Runtime directories (Node.js, .NET, Java)
+  ├─ Checks: Language servers installed
+  ├─ Tests: serena.exe --version
+  ├─ Reports: Disk space and overall status
+  ├─ Example: verify-installation.bat
+  └─ Exit Code: 0=success, 1=failure
+
+================================================================================
+[3] ENVIRONMENT SCRIPTS - Use these for shell activation
+================================================================================
+
+  activate-serena.bat
+  ├─ Purpose: Activate environment in current shell
+  ├─ Sets: All environment variables
+  ├─ Usage: call activate-serena.bat
+  ├─ Then: serena.exe --version (direct execution)
+  └─ Note: Must use "call" to affect current session
+
+  activate-serena.ps1
+  ├─ Purpose: Activate environment in current PowerShell
+  ├─ Sets: All environment variables
+  ├─ Usage: . .\activate-serena.ps1
+  ├─ Then: serena.exe --version (direct execution)
+  └─ Note: Must use dot-sourcing to affect current session
+
+================================================================================
+ENVIRONMENT VARIABLES SET BY ALL SCRIPTS
+================================================================================
+
+  SERENA_PORTABLE=1                          → Enables portable mode
+  SERENA_HOME=<install_dir>                  → Installation directory
+  
+  PATH additions:
+    <install_dir>\bin                        → Serena executables
+    <install_dir>\runtimes\nodejs            → Node.js runtime
+    <install_dir>\runtimes\dotnet            → .NET runtime
+    <install_dir>\runtimes\java\bin          → Java runtime
+  
+  Language-specific:
+    JAVA_HOME=<install_dir>\runtimes\java
+    DOTNET_ROOT=<install_dir>\runtimes\dotnet
+    NODE_PATH=<install_dir>\runtimes\nodejs\node_modules
+
+================================================================================
+TYPICAL WORKFLOW
+================================================================================
+
+  STEP 1: First-time setup
+    cd C:\Serena\scripts\launchers
+    first-run.bat --add-to-path
+
+  STEP 2: Verify installation
+    verify-installation.bat
+
+  STEP 3: Use Serena
+    serena.bat --help
+    serena.bat project index
+    serena-mcp-server.bat --transport stdio
+
+  STEP 4 (Optional): Environment activation
+    call activate-serena.bat
+    serena.exe --version
+
+================================================================================
+CHOOSING BETWEEN .BAT AND .PS1
+================================================================================
+
+  Use .BAT files if:
+    ✓ You prefer Command Prompt
+    ✓ You need Windows 7 compatibility
+    ✓ You want maximum compatibility
+
+  Use .PS1 files if:
+    ✓ You prefer PowerShell
+    ✓ You use Windows 10 or 11
+    ✓ You want colored output
+    ✓ You need better error messages
+
+  Both versions have identical functionality!
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+  Problem: "serena.exe not found"
+  Solution: Ensure scripts are in <install_dir>/scripts/launchers/
+
+  Problem: "Cannot run because execution of scripts is disabled"
+  Solution: Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+  Problem: Language servers not working
+  Solution: Run verify-installation.bat to diagnose
+
+  Problem: PATH not working after first-run
+  Solution: Restart Command Prompt or PowerShell
+
+================================================================================
+FOR DEVELOPERS
+================================================================================
+
+  See: TECHNICAL_SPECIFICATION.md for architecture details
+  See: VALIDATION_CHECKLIST.txt for feature verification
+  See: README.txt for comprehensive user guide
+
+================================================================================
