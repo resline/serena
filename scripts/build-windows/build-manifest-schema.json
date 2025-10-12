@@ -1,0 +1,443 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Serena Windows Portable Build Manifest",
+  "description": "Complete metadata and tracking information for a Windows portable package build",
+  "type": "object",
+  "required": [
+    "build_id",
+    "timestamp",
+    "version",
+    "tier",
+    "architecture",
+    "stages"
+  ],
+  "properties": {
+    "build_id": {
+      "type": "string",
+      "description": "Unique build identifier in format: yyyyMMdd-HHmmss",
+      "pattern": "^\\d{8}-\\d{6}$",
+      "example": "20250112-143022"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when build started",
+      "example": "2025-01-12T14:30:22.123Z"
+    },
+    "version": {
+      "type": "string",
+      "description": "Serena version being built",
+      "pattern": "^\\d+\\.\\d+\\.\\d+",
+      "example": "0.1.4"
+    },
+    "tier": {
+      "type": "string",
+      "enum": ["minimal", "essential", "complete", "full"],
+      "description": "Language server tier included in the build"
+    },
+    "architecture": {
+      "type": "string",
+      "enum": ["x64", "x86", "arm64"],
+      "description": "Target Windows architecture"
+    },
+    "build_status": {
+      "type": "string",
+      "enum": ["success", "failed", "partial"],
+      "description": "Overall build status"
+    },
+    "build_duration_seconds": {
+      "type": "number",
+      "description": "Total build time in seconds",
+      "minimum": 0
+    },
+    "build_end_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when build completed"
+    },
+    "build_error": {
+      "type": "string",
+      "description": "Error message if build failed"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Build environment metadata",
+      "properties": {
+        "python_version": {
+          "type": "string",
+          "description": "Python version used for build",
+          "example": "Python 3.11.5"
+        },
+        "uv_version": {
+          "type": "string",
+          "description": "uv package manager version",
+          "example": "uv 0.1.0"
+        },
+        "system_info": {
+          "type": "object",
+          "properties": {
+            "os": {
+              "type": "string",
+              "description": "Windows OS version",
+              "example": "Microsoft Windows 10 Pro"
+            },
+            "platform": {
+              "type": "string",
+              "enum": ["windows"],
+              "description": "Target platform"
+            }
+          }
+        }
+      }
+    },
+    "stages": {
+      "type": "object",
+      "description": "Detailed information about each build stage",
+      "properties": {
+        "1_environment_validation": {
+          "$ref": "#/definitions/stage"
+        },
+        "2_dependency_resolution": {
+          "$ref": "#/definitions/stage"
+        },
+        "3_tests_execution": {
+          "$ref": "#/definitions/stageWithTests"
+        },
+        "4_language_server_bundling": {
+          "$ref": "#/definitions/stageWithLanguageServers"
+        },
+        "5_pyinstaller_build": {
+          "$ref": "#/definitions/stageWithExecutables"
+        },
+        "6_directory_structure": {
+          "$ref": "#/definitions/stageWithPackageInfo"
+        },
+        "7_file_copying": {
+          "$ref": "#/definitions/stageWithFiles"
+        },
+        "8_archive_creation": {
+          "$ref": "#/definitions/stageWithArchive"
+        },
+        "9_checksum_generation": {
+          "$ref": "#/definitions/stageWithChecksums"
+        },
+        "10_manifest_generation": {
+          "$ref": "#/definitions/stageWithManifest"
+        }
+      }
+    },
+    "package": {
+      "type": "object",
+      "description": "Final package information",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Package name",
+          "example": "serena-portable-v0.1.4-windows-x64-essential"
+        },
+        "directory": {
+          "type": "string",
+          "description": "Path to package directory"
+        },
+        "archive": {
+          "type": "string",
+          "description": "Path to ZIP archive"
+        },
+        "dir_size_mb": {
+          "type": "number",
+          "description": "Uncompressed directory size in MB",
+          "minimum": 0
+        },
+        "archive_size_mb": {
+          "type": "number",
+          "description": "Compressed archive size in MB",
+          "minimum": 0
+        }
+      }
+    },
+    "checksums": {
+      "type": "object",
+      "description": "SHA256 checksums for verification",
+      "properties": {
+        "archive": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "description": "SHA256 checksum of the ZIP archive"
+        }
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-fA-F0-9]{64}$"
+      }
+    }
+  },
+  "definitions": {
+    "stage": {
+      "type": "object",
+      "required": ["status", "timestamp"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["completed", "failed", "skipped"],
+          "description": "Stage execution status"
+        },
+        "duration_seconds": {
+          "type": "number",
+          "description": "Stage execution time in seconds",
+          "minimum": 0
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when stage completed"
+        },
+        "error": {
+          "type": "string",
+          "description": "Error message if stage failed"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Reason for skip if status is skipped"
+        }
+      }
+    },
+    "stageWithTests": {
+      "allOf": [
+        { "$ref": "#/definitions/stage" },
+        {
+          "properties": {
+            "tests_passed": {
+              "type": "boolean",
+              "description": "Whether all tests passed"
+            }
+          }
+        }
+      ]
+    },
+    "stageWithLanguageServers": {
+      "allOf": [
+        { "$ref": "#/definitions/stage" },
+        {
+          "properties": {
+            "tier": {
+              "type": "string",
+              "enum": ["minimal", "essential", "complete", "full"]
+            },
+            "count": {
+              "type": "integer",
+              "description": "Number of language servers downloaded",
+              "minimum": 0
+            },
+            "size_mb": {
+              "type": "number",
+              "description": "Total size of language servers in MB",
+              "minimum": 0
+            }
+          }
+        }
+      ]
+    },
+    "stageWithExecutables": {
+      "allOf": [
+        { "$ref": "#/definitions/stage" },
+        {
+          "properties": {
+            "executables": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Executable name"
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "Path to executable"
+                  },
+                  "size_mb": {
+                    "type": "number",
+                    "description": "Executable size in MB"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "stageWithPackageInfo": {
+      "allOf": [
+        { "$ref": "#/definitions/stage" },
+        {
+          "properties": {
+            "package_name": {
+              "type": "string",
+              "description": "Name of the package"
+            },
+            "package_dir": {
+              "type": "string",
+              "description": "Path to package directory"
+            }
+          }
+        }
+      ]
+    },
+    "stageWithFiles": {
+      "allOf": [
+        { "$ref": "#/definitions/stage" },
+        {
+          "properties": {
+            "files_copied": {
+              "type": "integer",
+              "description": "Number of files copied",
+              "minimum": 0
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "List of copied file paths"
+            }
+          }
+        }
+      ]
+    },
+    "stageWithArchive": {
+      "allOf": [
+        { "$ref": "#/definitions/stage" },
+        {
+          "properties": {
+            "archive_path": {
+              "type": "string",
+              "description": "Path to created archive"
+            },
+            "dir_size_mb": {
+              "type": "number",
+              "description": "Uncompressed size in MB"
+            },
+            "archive_size_mb": {
+              "type": "number",
+              "description": "Compressed size in MB"
+            },
+            "compression_ratio": {
+              "type": "number",
+              "description": "Compression percentage",
+              "minimum": 0,
+              "maximum": 100
+            }
+          }
+        }
+      ]
+    },
+    "stageWithChecksums": {
+      "allOf": [
+        { "$ref": "#/definitions/stage" },
+        {
+          "properties": {
+            "checksums_generated": {
+              "type": "integer",
+              "description": "Number of checksums generated",
+              "minimum": 0
+            }
+          }
+        }
+      ]
+    },
+    "stageWithManifest": {
+      "allOf": [
+        { "$ref": "#/definitions/stage" },
+        {
+          "properties": {
+            "manifest_path": {
+              "type": "string",
+              "description": "Path to generated manifest"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "examples": [
+    {
+      "build_id": "20250112-143022",
+      "timestamp": "2025-01-12T14:30:22.123Z",
+      "version": "0.1.4",
+      "tier": "essential",
+      "architecture": "x64",
+      "build_status": "success",
+      "build_duration_seconds": 485.7,
+      "build_end_time": "2025-01-12T14:38:27.823Z",
+      "metadata": {
+        "python_version": "Python 3.11.5",
+        "uv_version": "uv 0.1.0",
+        "system_info": {
+          "os": "Microsoft Windows 10 Pro",
+          "platform": "windows"
+        }
+      },
+      "stages": {
+        "1_environment_validation": {
+          "status": "completed",
+          "duration_seconds": 2.5,
+          "timestamp": "2025-01-12T14:30:24.623Z"
+        },
+        "2_dependency_resolution": {
+          "status": "completed",
+          "duration_seconds": 45.2,
+          "timestamp": "2025-01-12T14:31:09.823Z"
+        },
+        "3_tests_execution": {
+          "status": "completed",
+          "tests_passed": true,
+          "duration_seconds": 120.5,
+          "timestamp": "2025-01-12T14:33:10.323Z"
+        },
+        "4_language_server_bundling": {
+          "status": "completed",
+          "tier": "essential",
+          "count": 4,
+          "size_mb": 245.8,
+          "duration_seconds": 90.3,
+          "timestamp": "2025-01-12T14:34:40.623Z"
+        },
+        "5_pyinstaller_build": {
+          "status": "completed",
+          "executables": [
+            {
+              "name": "serena-mcp-server",
+              "path": "dist/serena-mcp-server/serena-mcp-server.exe",
+              "size_mb": 45.2
+            },
+            {
+              "name": "serena",
+              "path": "dist/serena/serena.exe",
+              "size_mb": 44.8
+            },
+            {
+              "name": "index-project",
+              "path": "dist/index-project/index-project.exe",
+              "size_mb": 44.5
+            }
+          ],
+          "duration_seconds": 180.6,
+          "timestamp": "2025-01-12T14:37:41.223Z"
+        }
+      },
+      "package": {
+        "name": "serena-portable-v0.1.4-windows-x64-essential",
+        "directory": "dist/windows/serena-portable-v0.1.4-windows-x64-essential",
+        "archive": "dist/windows/serena-portable-v0.1.4-windows-x64-essential.zip",
+        "dir_size_mb": 380.5,
+        "archive_size_mb": 156.2
+      },
+      "checksums": {
+        "archive": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2",
+        "serena-mcp-server.exe": "b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2a3",
+        "serena.exe": "c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2a3b4",
+        "index-project.exe": "d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2a3b4c5"
+      }
+    }
+  ]
+}
