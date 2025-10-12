@@ -87,12 +87,13 @@ class ListDirTool(Tool):
     Lists files and directories in the given directory (optionally with recursion).
     """
 
-    def apply(self, relative_path: str, recursive: bool, max_answer_chars: int = -1) -> str:
+    def apply(self, relative_path: str, recursive: bool, skip_ignored_files: bool = False, max_answer_chars: int = -1) -> str:
         """
         Lists all non-gitignored files and directories in the given directory (optionally with recursion).
 
         :param relative_path: the relative path to the directory to list; pass "." to scan the project root
         :param recursive: whether to scan subdirectories recursively
+        :param skip_ignored_files: whether to skip files and directories that are ignored
         :param max_answer_chars: if the output is longer than this number of characters,
             no content will be returned. -1 means the default value from the config will be used.
             Don't adjust unless there is really no other way to get the content required for the task.
@@ -113,8 +114,8 @@ class ListDirTool(Tool):
             os.path.join(self.get_project_root(), relative_path),
             relative_to=self.get_project_root(),
             recursive=recursive,
-            is_ignored_dir=self.project.is_ignored_path,
-            is_ignored_file=self.project.is_ignored_path,
+            is_ignored_dir=self.project.is_ignored_path if skip_ignored_files else None,
+            is_ignored_file=self.project.is_ignored_path if skip_ignored_files else None,
         )
 
         result = json.dumps({"dirs": dirs, "files": files})
@@ -145,7 +146,7 @@ class FindFileTool(Tool):
             filename = os.path.basename(abs_path)
             return not fnmatch(filename, file_mask)
 
-        dirs, files = scan_directory(
+        _dirs, files = scan_directory(
             path=dir_to_scan,
             recursive=True,
             is_ignored_dir=self.project.is_ignored_path,
@@ -178,14 +179,15 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
         Always try to use wildcards to avoid specifying the exact content of the code to be replaced,
         especially if it spans several lines.
 
-        IMPORTANT: REMEMBER TO USE WILDCARDS WHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE LONG REGEXES WITHOUT USING WILDCARDS INSTEAD!
+        IMPORTANT: REMEMBER TO USE WILDCARDS WHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE UNNECESSARILY LONG REGEXES WITHOUT USING WILDCARDS!
 
         :param relative_path: the relative path to the file
         :param regex: a Python-style regular expression, matches of which will be replaced.
             Dot matches all characters, multi-line matching is enabled.
         :param repl: the string to replace the matched content with, which may contain
             backreferences like \1, \2, etc.
-            Make sure to escape special characters appropriately, e.g., use `\\n` for a literal `\n`.
+            IMPORTANT: Make sure to escape special characters appropriately!
+                Use "\n" to insert a newline, but use "\\n" to insert the string "\n" within a string literal.
         :param allow_multiple_occurrences: if True, the regex may match multiple occurrences in the file
             and all of them will be replaced.
             If this is set to False and the regex matches multiple occurrences, an error will be returned
@@ -378,7 +380,7 @@ class SearchForPatternTool(Tool):
             if os.path.isfile(abs_path):
                 rel_paths_to_search = [relative_path]
             else:
-                dirs, rel_paths_to_search = scan_directory(
+                _dirs, rel_paths_to_search = scan_directory(
                     path=abs_path,
                     recursive=True,
                     is_ignored_dir=self.project.is_ignored_path,
