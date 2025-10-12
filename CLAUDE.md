@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Test Markers:**
 Available pytest markers for selective testing:
-- `python`, `go`, `java`, `kotlin`, `rust`, `typescript`, `php`, `csharp`, `elixir`, `erlang`, `terraform`, `clojure`, `swift`, `bash`, `ruby`, `r`, `zig`, `lua`, `nix`, `dart`, `al`
+- `python`, `go`, `java`, `kotlin`, `rust`, `typescript`, `php`, `perl`, `csharp`, `elixir`, `erlang`, `terraform`, `clojure`, `swift`, `bash`, `ruby`, `ruby_solargraph`, `r`, `zig`, `lua`, `nix`, `dart`, `al`, `markdown`
 - `snapshot` - for symbolic editing operation tests
 
 **Project Management:**
