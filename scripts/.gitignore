@@ -1,0 +1,184 @@
+# Build artifacts and temporary files
+# ====================================
+
+# Distribution directories
+dist/
+build/
+*.dist-info/
+
+# PyInstaller build artifacts
+*.spec
+build/pyinstaller/
+pyinstaller_stdout.log
+pyinstaller_stderr.log
+
+# Executable files
+*.exe
+*.app
+*.dmg
+
+# Compressed bundles
+*.zip
+*.tar.gz
+*.tgz
+*.tar.bz2
+*.7z
+
+# Language servers (downloaded during build)
+language_servers/
+language_servers_essential/
+language_servers_additional/
+build/language_servers/
+.serena/language_servers/static/
+
+# Runtimes (downloaded during build)
+runtimes/
+build/runtimes/
+nodejs/
+dotnet/
+
+# Build manifests (generated during build)
+build-manifest*.json
+*-manifest.json
+
+# Log files
+*.log
+build*.log
+download*.log
+install*.log
+
+# Temporary files
+*.tmp
+*.temp
+*.cache
+.cache/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+
+# Mypy type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Ruff cache
+.ruff_cache/
+
+# UV cache (keep user cache, ignore build-specific)
+.uv_cache/
+
+# Windows-specific
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Build-specific temporary directories
+build/language_servers_cache/
+build/downloads/
+build/temp/
+
+# Installer artifacts (NSIS, WiX, etc.)
+*.msi
+*.nsi
+*.wxs
+*.wixobj
+*.wixpdb
+
+# Checksums and verification files
+*.sha256
+*.md5
+checksums.txt
+verification.txt
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Documentation build artifacts (if using Sphinx, MkDocs, etc.)
+docs/_build/
+docs/site/
+site/
+
+# Release artifacts (when not using dist/)
+releases/
+artifacts/
+
+# CI/CD temporary files
+.github/workflows/cache/
+.github/tmp/
+
+# Windows portable build specific
+serena-windows-*.exe
+serena-windows-*-bundle.zip
+build-summary.txt
+build-report.html
+
+# Language-specific build artifacts
+# Node.js
+node_modules/
+package-lock.json
+yarn.lock
+
+# .NET
+bin/
+obj/
+*.nupkg
+
+# Java
+*.jar
+*.class
+target/
+
+# Gradle
+.gradle/
+gradle-app.setting
+
+# Keep certain files
+# ==================
+# These are explicitly NOT ignored
+
+# Keep the build scripts themselves
+!scripts/build-windows/*.ps1
+!scripts/build-windows/*.bat
+!scripts/build-windows/*.py
+!scripts/build-windows/*.sh
+
+# Keep configuration files
+!scripts/build-config.json
+!scripts/build-windows/language-servers-manifest.json
+!scripts/build-windows/launcher-config.json
+!scripts/build-windows/build-manifest-schema.json
+
+# Keep documentation
+!scripts/build-windows/*.md
+!BUILD-WINDOWS.md
+!BUNDLE-*.md
+
+# Keep this .gitignore
+!scripts/.gitignore
