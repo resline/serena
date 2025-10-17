@@ -292,12 +292,14 @@ jobs:
       - name: Install uv
         shell: bash
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      - name: Cache uv virtualenv
+      - name: Cache uv dependencies
         id: cache-uv
         uses: actions/cache@v4
         with:
-          path: .venv
-          key: uv-venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}
+          path: ~/.cache/uv
+          key: uv-cache-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            uv-cache-${{ runner.os }}-${{ matrix.python-version }}-
       - name: Cache language servers
         id: cache-language-servers
         uses: actions/cache@v4
@@ -308,10 +310,7 @@ jobs:
             language-servers-${{ runner.os }}-
       - name: Create virtual environment
         shell: bash
-        run: |
-          if [ ! -d ".venv" ]; then
-            uv venv
-          fi
+        run: uv venv
       - name: Install dependencies
         shell: bash
         run: uv pip install -e ".[dev]"
