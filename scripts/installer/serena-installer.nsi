@@ -452,8 +452,8 @@ FunctionEnd
 ; Uncomment and configure these when code signing certificate is available
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-; !finalize 'signtool.exe sign /f "certificate.p12" /p "password" /t http://timestamp.verisign.com/scripts/timstamp.dll "%1"'
-; !uninstfinalize 'signtool.exe sign /f "certificate.p12" /p "password" /t http://timestamp.verisign.com/scripts/timstamp.dll "%1"'
+; !finalize 'signtool.exe sign /f "certificate.p12" /p "password" /t http://timestamp.verisign.com/scripts/timestamp.dll "%1"'
+; !uninstfinalize 'signtool.exe sign /f "certificate.p12" /p "password" /t http://timestamp.verisign.com/scripts/timestamp.dll "%1"'
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Additional utility functions for enterprise deployment

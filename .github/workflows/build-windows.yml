@@ -49,8 +49,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tier: ${{ fromJson(inputs.bundle_tier && format('["{0}"]', inputs.bundle_tier) || '["essential", "complete", "full"]') }}
-        arch: ${{ fromJson(inputs.architecture && format('["{0}"]', inputs.architecture) || '["x64"]') }}
+        tier: ${{ fromJson(github.event_name == 'workflow_dispatch' && format('["{0}"]', inputs.bundle_tier) || '["essential", "complete", "full"]') }}
+        arch: ${{ fromJson(github.event_name == 'workflow_dispatch' && format('["{0}"]', inputs.architecture) || '["x64"]') }}
 
     permissions:
       contents: write

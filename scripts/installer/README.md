@@ -186,7 +186,7 @@ For distribution releases, the installer should be digitally signed:
 ### Manual Signing
 
 ```batch
-signtool sign /f "certificate.p12" /p "password" /t http://timestamp.verisign.com/scripts/timstamp.dll "serena-installer-0.1.4.exe"
+signtool sign /f "certificate.p12" /p "password" /t http://timestamp.verisign.com/scripts/timestamp.dll "serena-installer-0.1.4.exe"
 ```
 
 ### Certificate Requirements
