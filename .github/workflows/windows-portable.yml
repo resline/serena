@@ -1,5 +1,15 @@
 name: Build Windows Portable
 
+# This is the main Windows portable build workflow. It replaced the redundant
+# build-windows.yml workflow which had simplified/placeholder language server
+# downloads. This workflow includes:
+# - Parallel language server downloads with retry logic and caching
+# - Full PyInstaller build with optimized flags
+# - Enhanced error handling and quality checks
+# - Support for workflow_call for reusability
+# - Multiple bundle tiers (minimal, essential, complete, full)
+# - Both x64 and arm64 architecture support
+
 on:
   workflow_dispatch:
     inputs:

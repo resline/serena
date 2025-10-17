@@ -1,7 +1,11 @@
 name: Linting, Types and Docs Check
 
 on:
-  workflow_dispatch:  # Manual trigger only - workflow disabled from auto-running
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   check:
@@ -13,9 +17,9 @@ jobs:
       actions: write
       contents: read
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: 3.11
       
