@@ -24,3 +24,6 @@ jobs:
         uses: codespell-project/codespell-problem-matcher@v1
       - name: Codespell
         uses: codespell-project/actions-codespell@v2
+        with:
+          ignore_words_list: datas,SectionIn,alle
+          skip: .git*,*.svg,*.lock,*.min.*
