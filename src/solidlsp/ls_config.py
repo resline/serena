@@ -46,6 +46,7 @@ class Language(str, Enum):
     PERL = "perl"
     CLOJURE = "clojure"
     ELIXIR = "elixir"
+    ELM = "elm"
     TERRAFORM = "terraform"
     SWIFT = "swift"
     BASH = "bash"
@@ -54,6 +55,7 @@ class Language(str, Enum):
     NIX = "nix"
     ERLANG = "erlang"
     AL = "al"
+    REGO = "rego"
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -128,6 +130,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.clj", "*.cljs", "*.cljc", "*.edn")  # codespell:ignore edn
             case self.ELIXIR:
                 return FilenameMatcher("*.ex", "*.exs")
+            case self.ELM:
+                return FilenameMatcher("*.elm")
             case self.TERRAFORM:
                 return FilenameMatcher("*.tf", "*.tfvars", "*.tfstate")
             case self.SWIFT:
@@ -144,6 +148,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.erl", "*.hrl", "*.escript", "*.config", "*.app", "*.app.src")
             case self.AL:
                 return FilenameMatcher("*.al", "*.dal")
+            case self.REGO:
+                return FilenameMatcher("*.rego")
             case self.MARKDOWN:
                 return FilenameMatcher("*.md", "*.markdown")
             case _:
@@ -223,6 +229,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.elixir_tools.elixir_tools import ElixirTools
 
                 return ElixirTools
+            case self.ELM:
+                from solidlsp.language_servers.elm_language_server import ElmLanguageServer
+
+                return ElmLanguageServer
             case self.TERRAFORM:
                 from solidlsp.language_servers.terraform_ls import TerraformLS
 
@@ -255,6 +265,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.al_language_server import ALLanguageServer
 
                 return ALLanguageServer
+            case self.REGO:
+                from solidlsp.language_servers.regal_server import RegalLanguageServer
+
+                return RegalLanguageServer
             case self.MARKDOWN:
                 from solidlsp.language_servers.marksman import Marksman
 
@@ -292,6 +306,8 @@ class LanguageServerConfig:
     start_independent_lsp_process: bool = True
     ignored_paths: list[str] = field(default_factory=list)
     """Paths, dirs or glob-like patterns. The matching will follow the same logic as for .gitignore entries"""
+    encoding: str = "utf-8"
+    """File encoding to use when reading source files"""
 
     @classmethod
     def from_dict(cls, env: dict):
