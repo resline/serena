@@ -142,7 +142,7 @@ if ($Sign -and $CertificatePath -and (Test-Path $CertificatePath)) {
         $SignArgs = @(
             "sign",
             "/f", "`"$CertificatePath`"",
-            "/t", "http://timestamp.verisign.com/scripts/timstamp.dll"
+            "/t", "http://timestamp.verisign.com/scripts/timestamp.dll"
         )
         
         if ($CertificatePassword) {

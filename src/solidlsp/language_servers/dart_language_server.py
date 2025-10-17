@@ -156,3 +156,19 @@ class DartLanguageServer(SolidLanguageServer):
         )
 
         self.server.notify.initialized({})
+
+    def _get_wait_time_for_cross_file_referencing(self) -> float:
+        """Dart Language Server needs extra time on Windows for project indexing.
+
+        The Dart analyzer needs time to:
+        - Index all files in the project
+        - Analyze cross-file dependencies
+        - Build symbol tables
+
+        This is especially important on Windows where file I/O is slower in CI environments.
+        """
+        # Windows needs more time, especially in CI
+        if os.name == "nt":  # Windows
+            return 10 if os.getenv("CI") else 5
+        else:
+            return 5 if os.getenv("CI") else 2
