@@ -94,7 +94,21 @@ class DartLanguageServer(SolidLanguageServer):
         """
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
-            "capabilities": {},
+            "capabilities": {
+                "general": {
+                    # Enable automatic retry on ContentModified (-32801) errors
+                    # This handles race conditions where the Dart analyzer modifies documents
+                    # during background analysis/indexing while we're making requests
+                    # See: https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#clientCapabilities
+                    "retryOnContentModified": [
+                        "textDocument/documentSymbol",
+                        "textDocument/references",
+                        "textDocument/definition",
+                        "textDocument/hover",
+                        "textDocument/completion",
+                    ],
+                },
+            },
             "initializationOptions": {
                 "onlyAnalyzeProjectsWithOpenFiles": False,
                 "closingLabels": False,
