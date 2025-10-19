@@ -780,7 +780,7 @@ INSTALL_SCRIPT_END
           chmod +x "$bundleDir/install.sh"
 
           # Create usage examples
-          cat > "$bundleDir/examples/usage.md" <<USAGE_END
+          cat > "$bundleDir/examples/usage.md" <<'USAGE_END'
 # Serena Usage Examples
 
 ## Basic Commands
@@ -800,7 +800,7 @@ This $bundleSuffix bundle includes:
 USAGE_END
 
           if [ "$bundleSuffix" = "essential" ] || [ "$bundleSuffix" = "complete" ] || [ "$bundleSuffix" = "full" ]; then
-            cat >> "$bundleDir/examples/usage.md" <<ESSENTIAL_END
+            cat >> "$bundleDir/examples/usage.md" <<'ESSENTIAL_END'
 - Python (Pyright)
 - TypeScript/JavaScript
 - Rust (rust-analyzer)
@@ -810,7 +810,7 @@ ESSENTIAL_END
           fi
 
           if [ "$bundleSuffix" = "complete" ] || [ "$bundleSuffix" = "full" ]; then
-            cat >> "$bundleDir/examples/usage.md" <<COMPLETE_END
+            cat >> "$bundleDir/examples/usage.md" <<'COMPLETE_END'
 - C# (OmniSharp)
 - Lua
 - Bash
@@ -818,7 +818,7 @@ COMPLETE_END
           fi
 
           if [ "$bundleSuffix" = "full" ]; then
-            cat >> "$bundleDir/examples/usage.md" <<FULL_END
+            cat >> "$bundleDir/examples/usage.md" <<'FULL_END'
 - Additional language servers (28 total)
 FULL_END
           fi
