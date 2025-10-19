@@ -694,7 +694,7 @@ jobs:
           [ -f "CLAUDE.md" ] && cp CLAUDE.md "$bundle_dir/docs/"
 
           # Create installation script for macOS
-          cat > "$bundle_dir/install.sh" << 'EOF'
+          cat > "$bundle_dir/install.sh" <<'INSTALL_SCRIPT_END'
 #!/bin/bash
 # Serena macOS Portable Installation Script
 
@@ -742,12 +742,12 @@ echo "Restart your terminal or run: source $SHELL_CONFIG"
 echo ""
 echo "To verify installation, run: serena --version"
 echo ""
-EOF
+INSTALL_SCRIPT_END
 
           chmod +x "$bundle_dir/install.sh"
 
           # Create usage examples
-          cat > "$bundle_dir/examples/usage.md" << EOF
+          cat > "$bundle_dir/examples/usage.md" <<USAGE_END
 # Serena Usage Examples
 
 ## Basic Commands
@@ -764,30 +764,30 @@ serena --help
 ## Language Server Bundle Information
 
 This $bundle_suffix bundle includes:
-EOF
+USAGE_END
 
           if [ "$bundle_suffix" = "essential" ] || [ "$bundle_suffix" = "complete" ] || [ "$bundle_suffix" = "full" ]; then
-            cat >> "$bundle_dir/examples/usage.md" << EOF
+            cat >> "$bundle_dir/examples/usage.md" <<ESSENTIAL_END
 - Python (Pyright)
 - TypeScript/JavaScript
 - Rust (rust-analyzer)
 - Go (gopls)
 - Java (Eclipse JDT)
-EOF
+ESSENTIAL_END
           fi
 
           if [ "$bundle_suffix" = "complete" ] || [ "$bundle_suffix" = "full" ]; then
-            cat >> "$bundle_dir/examples/usage.md" << EOF
+            cat >> "$bundle_dir/examples/usage.md" <<COMPLETE_END
 - C# (OmniSharp)
 - Lua
 - Bash
-EOF
+COMPLETE_END
           fi
 
           if [ "$bundle_suffix" = "full" ]; then
-            cat >> "$bundle_dir/examples/usage.md" << EOF
+            cat >> "$bundle_dir/examples/usage.md" <<FULL_END
 - Additional language servers (28+ total)
-EOF
+FULL_END
           fi
 
           # Create ZIP archive

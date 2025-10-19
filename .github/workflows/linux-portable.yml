@@ -733,7 +733,7 @@ jobs:
           [ -f "CLAUDE.md" ] && cp "CLAUDE.md" "$bundleDir/docs/"
 
           # Create installation script (bash)
-          cat > "$bundleDir/install.sh" << 'EOF'
+          cat > "$bundleDir/install.sh" <<'INSTALL_SCRIPT_END'
 #!/bin/bash
 set -e
 
@@ -775,12 +775,12 @@ echo "Run 'source $SHELL_RC' or restart your terminal to use 'serena' command."
 echo ""
 echo "To verify installation, run: serena --version"
 echo ""
-EOF
+INSTALL_SCRIPT_END
 
           chmod +x "$bundleDir/install.sh"
 
           # Create usage examples
-          cat > "$bundleDir/examples/usage.md" << EOF
+          cat > "$bundleDir/examples/usage.md" <<USAGE_END
 # Serena Usage Examples
 
 ## Basic Commands
@@ -797,31 +797,30 @@ serena --help
 ## Language Server Bundle Information
 
 This $bundleSuffix bundle includes:
-
-EOF
+USAGE_END
 
           if [ "$bundleSuffix" = "essential" ] || [ "$bundleSuffix" = "complete" ] || [ "$bundleSuffix" = "full" ]; then
-            cat >> "$bundleDir/examples/usage.md" << EOF
+            cat >> "$bundleDir/examples/usage.md" <<ESSENTIAL_END
 - Python (Pyright)
 - TypeScript/JavaScript
 - Rust (rust-analyzer)
 - Go (gopls)
 - Java (Eclipse JDT)
-EOF
+ESSENTIAL_END
           fi
 
           if [ "$bundleSuffix" = "complete" ] || [ "$bundleSuffix" = "full" ]; then
-            cat >> "$bundleDir/examples/usage.md" << EOF
+            cat >> "$bundleDir/examples/usage.md" <<COMPLETE_END
 - C# (OmniSharp)
 - Lua
 - Bash
-EOF
+COMPLETE_END
           fi
 
           if [ "$bundleSuffix" = "full" ]; then
-            cat >> "$bundleDir/examples/usage.md" << EOF
+            cat >> "$bundleDir/examples/usage.md" <<FULL_END
 - Additional language servers (28 total)
-EOF
+FULL_END
           fi
 
           # Create tar.gz archive
