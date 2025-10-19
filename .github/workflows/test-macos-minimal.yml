@@ -1,0 +1,114 @@
+name: Test macOS Minimal
+
+# DIAGNOSTIC WORKFLOW - Testing basic workflow_dispatch + matrix pattern
+# This minimal workflow tests if the basic structure works without complex steps.
+# If this works: problem is in the complex steps/scripts
+# If this fails: problem is in the basic structure/triggers
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_tier:
+        description: 'Bundle tier selection (use "all" to build all tiers)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - 'all'
+          - 'minimal'
+          - 'essential'
+      architecture:
+        description: 'Target architecture'
+        required: true
+        default: 'arm64'
+        type: choice
+        options:
+          - 'x64'
+          - 'arm64'
+          - 'both'
+
+env:
+  TEST_RUN: "true"
+
+concurrency:
+  group: test-macos-minimal-${{ github.workflow }}-${{ github.ref }}-${{ inputs.bundle_tier || 'default' }}-${{ inputs.architecture || 'arm64' }}
+  cancel-in-progress: true
+
+jobs:
+  test-minimal:
+    name: Test (${{ matrix.arch }}, ${{ matrix.bundle_tier }})
+    runs-on: ${{ matrix.arch == 'arm64' && 'macos-14' || 'macos-13' }}
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        # Testing the exact same fromJson() pattern that's failing in the real workflows
+        arch: ${{ inputs.architecture == 'both' && fromJson('["x64", "arm64"]') || fromJson(format('["{0}"]', inputs.architecture || 'arm64')) }}
+        bundle_tier: ${{ inputs.bundle_tier == 'all' && fromJson('["minimal", "essential"]') || fromJson(format('["{0}"]', inputs.bundle_tier || 'essential')) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Print diagnostics
+        run: |
+          echo "=== DIAGNOSTIC INFO ==="
+          echo "Workflow: ${{ github.workflow }}"
+          echo "Event name: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "SHA: ${{ github.sha }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Matrix arch: ${{ matrix.arch }}"
+          echo "Matrix bundle_tier: ${{ matrix.bundle_tier }}"
+          echo "Input architecture: ${{ inputs.architecture }}"
+          echo "Input bundle_tier: ${{ inputs.bundle_tier }}"
+          echo "Runner OS: ${{ runner.os }}"
+          echo "Runner arch: ${{ runner.arch }}"
+          echo "======================="
+
+      - name: Test basic command
+        run: |
+          echo "Testing basic commands on macOS runner..."
+          uname -a
+          sw_vers
+          echo "Test completed successfully!"
+
+      - name: Generate summary
+        run: |
+          echo "# Test Minimal Workflow Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Architecture**: ${{ matrix.arch }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bundle Tier**: ${{ matrix.bundle_tier }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Event**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: SUCCESS" >> $GITHUB_STEP_SUMMARY
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: test-minimal
+    if: always()
+    steps:
+      - name: Generate final summary
+        run: |
+          echo "# Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.test-minimal.result }}" == "success" ]; then
+            echo "✅ **Basic Structure Works** - Problem is in complex steps/scripts" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Basic Structure Failed** - Problem is in workflow structure/triggers" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.test-minimal.result }}" == "success" ]; then
+            echo "- Check language server download steps" >> $GITHUB_STEP_SUMMARY
+            echo "- Check PyInstaller build configuration" >> $GITHUB_STEP_SUMMARY
+            echo "- Check quality check commands" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- Check workflow trigger configuration" >> $GITHUB_STEP_SUMMARY
+            echo "- Check matrix fromJson() expressions" >> $GITHUB_STEP_SUMMARY
+            echo "- Check concurrency group configuration" >> $GITHUB_STEP_SUMMARY
+          fi
