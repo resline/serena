@@ -93,6 +93,9 @@ jobs:
       additional-cache-key: ${{ steps.cache-additional.outputs.cache-primary-key }}
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Cache Essential Language Servers
         id: cache-essential
         if: matrix.server_group == 'essential'
@@ -286,8 +289,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: ${{ fromJson(inputs.architecture == 'both' && '["x64", "arm64"]' || format('["{0}"]', inputs.architecture || 'arm64')) }}
-        bundle_tier: ${{ fromJson(inputs.bundle_tier == 'all' && '["essential", "complete", "full"]' || (inputs.bundle_tier && format('["{0}"]', inputs.bundle_tier) || '["essential", "complete", "full"]')) }}
+        arch: ${{ inputs.architecture == 'both' && fromJson('["x64", "arm64"]') || fromJson(format('["{0}"]', inputs.architecture || 'arm64')) }}
+        bundle_tier: ${{ inputs.bundle_tier == 'all' && fromJson('["essential", "complete", "full"]') || fromJson(format('["{0}"]', inputs.bundle_tier || 'essential')) }}
 
     permissions:
       contents: write
