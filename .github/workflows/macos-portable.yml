@@ -489,92 +489,92 @@ jobs:
           [ -f CLAUDE.md ] && cp CLAUDE.md "$bundle_dir/docs/"
 
           # Create installation script (SIMPLIFIED bash script)
-          cat > "$bundle_dir/install.sh" << 'EOF'
-#!/bin/bash
-# Serena macOS Portable Installation Script
+          cat > "$bundle_dir/install.sh" <<'INSTALL_EOF'
+          #!/bin/bash
+          # Serena macOS Portable Installation Script
 
-echo "Serena macOS Portable Installation"
-echo "==================================="
-echo ""
+          echo "Serena macOS Portable Installation"
+          echo "==================================="
+          echo ""
 
-INSTALL_DIR="$HOME/.local/serena"
-BIN_DIR="$INSTALL_DIR/bin"
+          INSTALL_DIR="$HOME/.local/serena"
+          BIN_DIR="$INSTALL_DIR/bin"
 
-echo "Creating installation directory: $INSTALL_DIR"
-mkdir -p "$INSTALL_DIR"
-mkdir -p "$BIN_DIR"
+          echo "Creating installation directory: $INSTALL_DIR"
+          mkdir -p "$INSTALL_DIR"
+          mkdir -p "$BIN_DIR"
 
-echo "Copying Serena executable..."
-cp bin/serena "$BIN_DIR/serena"
-chmod +x "$BIN_DIR/serena"
+          echo "Copying Serena executable..."
+          cp bin/serena "$BIN_DIR/serena"
+          chmod +x "$BIN_DIR/serena"
 
-echo "Adding to PATH..."
-# Add to shell profile
-SHELL_PROFILE=""
-if [ -f "$HOME/.zshrc" ]; then
-  SHELL_PROFILE="$HOME/.zshrc"
-elif [ -f "$HOME/.bash_profile" ]; then
-  SHELL_PROFILE="$HOME/.bash_profile"
-elif [ -f "$HOME/.bashrc" ]; then
-  SHELL_PROFILE="$HOME/.bashrc"
-fi
+          echo "Adding to PATH..."
+          # Add to shell profile
+          SHELL_PROFILE=""
+          if [ -f "$HOME/.zshrc" ]; then
+            SHELL_PROFILE="$HOME/.zshrc"
+          elif [ -f "$HOME/.bash_profile" ]; then
+            SHELL_PROFILE="$HOME/.bash_profile"
+          elif [ -f "$HOME/.bashrc" ]; then
+            SHELL_PROFILE="$HOME/.bashrc"
+          fi
 
-if [ -n "$SHELL_PROFILE" ]; then
-  if ! grep -q "$BIN_DIR" "$SHELL_PROFILE"; then
-    echo "export PATH=\"\$PATH:$BIN_DIR\"" >> "$SHELL_PROFILE"
-    echo "Added $BIN_DIR to PATH in $SHELL_PROFILE"
-  else
-    echo "Directory already in PATH"
-  fi
-fi
+          if [ -n "$SHELL_PROFILE" ]; then
+            if ! grep -q "$BIN_DIR" "$SHELL_PROFILE"; then
+              echo "export PATH=\"\$PATH:$BIN_DIR\"" >> "$SHELL_PROFILE"
+              echo "Added $BIN_DIR to PATH in $SHELL_PROFILE"
+            else
+              echo "Directory already in PATH"
+            fi
+          fi
 
-echo ""
-echo "Installation complete!"
-echo "Restart your terminal or run: source $SHELL_PROFILE"
-echo ""
-echo "To verify installation, run: serena --version"
-echo ""
-EOF
+          echo ""
+          echo "Installation complete!"
+          echo "Restart your terminal or run: source $SHELL_PROFILE"
+          echo ""
+          echo "To verify installation, run: serena --version"
+          echo ""
+          INSTALL_EOF
 
           chmod +x "$bundle_dir/install.sh"
 
           # Create usage examples
-          cat > "$bundle_dir/examples/usage.md" << 'EOF'
-# Serena Usage Examples
+          cat > "$bundle_dir/examples/usage.md" <<'USAGE_EOF'
+          # Serena Usage Examples
 
-## Basic Commands
+          ## Basic Commands
 
-# Start MCP server (for Claude Desktop integration)
-serena-mcp-server
+          # Start MCP server (for Claude Desktop integration)
+          serena-mcp-server
 
-# Get version information
-serena --version
+          # Get version information
+          serena --version
 
-# Get help
-serena --help
+          # Get help
+          serena --help
 
-## Language Server Bundle Information
+          ## Language Server Bundle Information
 
-This essential bundle includes:
-- Python (Pyright)
-- TypeScript/JavaScript
-- Rust (rust-analyzer)
-- Go (gopls)
-- Java (Eclipse JDT)
+          This essential bundle includes:
+          - Python (Pyright)
+          - TypeScript/JavaScript
+          - Rust (rust-analyzer)
+          - Go (gopls)
+          - Java (Eclipse JDT)
 
-## Installation
+          ## Installation
 
-Run the installation script:
-```bash
-cd serena-macos-arm64-essential-*-bundle
-./install.sh
-```
+          Run the installation script:
+          ```bash
+          cd serena-macos-arm64-essential-*-bundle
+          ./install.sh
+          ```
 
-Then restart your terminal or run:
-```bash
-source ~/.zshrc  # or ~/.bash_profile
-```
-EOF
+          Then restart your terminal or run:
+          ```bash
+          source ~/.zshrc  # or ~/.bash_profile
+          ```
+          USAGE_EOF
 
           # Create ZIP archive
           zip_path="dist/${output_name}-bundle.zip"
