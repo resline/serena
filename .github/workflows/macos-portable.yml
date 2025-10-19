@@ -45,6 +45,9 @@ jobs:
       cache-key: ${{ steps.cache-essential.outputs.cache-primary-key }}
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Cache Essential Language Servers
         id: cache-essential
         uses: actions/cache@v4
