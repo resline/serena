@@ -197,9 +197,9 @@ class TopLevelCommands(AutoRegisteringGroup):
             if isinstance(e, BaseExceptionGroup):
                 log.error("MCP server encountered multiple errors:")
                 for i, exc in enumerate(e.exceptions, 1):
-                    log.error("  Error %d: %s", i, exc, exc_info=exc)
+                    log.exception("  Error %d: %s", i, exc)
             else:
-                log.error("MCP server failed: %s", e, exc_info=True)
+                log.exception("MCP server failed: %s", e)
             raise SystemExit(1) from e
 
     @staticmethod

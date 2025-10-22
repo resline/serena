@@ -348,7 +348,7 @@ class SerenaMCPFactorySingleProcess(SerenaMCPFactory):
             log.info("MCP server lifetime setup complete")
             yield
         except Exception as e:
-            log.error("Error during MCP server lifetime: %s", e, exc_info=True)
+            log.exception("Error during MCP server lifetime: %s", e)
             raise
         finally:
             # Cleanup resources on shutdown
@@ -358,4 +358,4 @@ class SerenaMCPFactorySingleProcess(SerenaMCPFactory):
                     # Close any language servers or resources
                     log.debug("Cleaning up agent resources")
             except Exception as e:
-                log.error("Error during MCP server cleanup: %s", e, exc_info=True)
+                log.exception("Error during MCP server cleanup: %s", e)
