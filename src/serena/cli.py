@@ -189,7 +189,18 @@ class TopLevelCommands(AutoRegisteringGroup):
                 project_file,
             )
         log.info("Starting MCP server …")
-        server.run(transport=transport)
+
+        try:
+            server.run(transport=transport)
+        except BaseException as e:
+            # Handle both regular exceptions and ExceptionGroups from asyncio.TaskGroup (Python 3.11+)
+            if isinstance(e, BaseExceptionGroup):
+                log.error("MCP server encountered multiple errors:")
+                for i, exc in enumerate(e.exceptions, 1):
+                    log.error("  Error %d: %s", i, exc, exc_info=exc)
+            else:
+                log.error("MCP server failed: %s", e, exc_info=True)
+            raise SystemExit(1) from e
 
     @staticmethod
     @click.command("print-system-prompt", help="Print the system prompt for a project.")
@@ -835,11 +846,17 @@ for subgroup in (mode, context, project, config, tools, prompts):
 
 def main() -> None:
     """Entry point for PyInstaller compatibility."""
+    import asyncio
     import multiprocessing
     import sys
 
     # Required for PyInstaller Windows executables to avoid multiprocessing errors
     multiprocessing.freeze_support()
+
+    # Set Windows-specific asyncio event loop policy for PyInstaller compatibility
+    # This prevents TaskGroup and event loop issues in frozen executables
+    if sys.platform == "win32" and getattr(sys, "frozen", False):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
     try:
         sys.exit(top_level.main(standalone_mode=False))
