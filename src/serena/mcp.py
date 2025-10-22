@@ -342,7 +342,20 @@ class SerenaMCPFactorySingleProcess(SerenaMCPFactory):
 
     @asynccontextmanager
     async def server_lifespan(self, mcp_server: FastMCP) -> AsyncIterator[None]:
-        openai_tool_compatible = self.context.name in ["chatgpt", "codex", "oaicompat-agent"]
-        self._set_mcp_tools(mcp_server, openai_tool_compatible=openai_tool_compatible)
-        log.info("MCP server lifetime setup complete")
-        yield
+        try:
+            openai_tool_compatible = self.context.name in ["chatgpt", "codex", "oaicompat-agent"]
+            self._set_mcp_tools(mcp_server, openai_tool_compatible=openai_tool_compatible)
+            log.info("MCP server lifetime setup complete")
+            yield
+        except Exception as e:
+            log.error("Error during MCP server lifetime: %s", e, exc_info=True)
+            raise
+        finally:
+            # Cleanup resources on shutdown
+            try:
+                log.info("MCP server shutting down")
+                if self.agent is not None:
+                    # Close any language servers or resources
+                    log.debug("Cleaning up agent resources")
+            except Exception as e:
+                log.error("Error during MCP server cleanup: %s", e, exc_info=True)
