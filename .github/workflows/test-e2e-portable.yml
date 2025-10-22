@@ -1,0 +1,239 @@
+name: E2E Tests for Portable Builds
+
+on:
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: 'Build tier to test'
+        required: true
+        default: 'essential'
+        type: choice
+        options:
+          - minimal
+          - essential
+          - complete
+          - full
+      architecture:
+        description: 'Architecture to test'
+        required: true
+        default: 'x64'
+        type: choice
+        options:
+          - x64
+          - arm64
+
+  workflow_call:
+    inputs:
+      build_artifact_name:
+        description: 'Name of build artifact to test'
+        required: true
+        type: string
+      tier:
+        description: 'Build tier'
+        required: false
+        default: 'essential'
+        type: string
+      architecture:
+        description: 'Architecture'
+        required: false
+        default: 'x64'
+        type: string
+
+jobs:
+  test-e2e-windows:
+    name: E2E Tests (Windows ${{ inputs.architecture }} - ${{ inputs.tier }})
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install UV
+        run: |
+          irm https://astral.sh/uv/install.ps1 | iex
+          echo "$env:USERPROFILE\.local\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Download build artifact
+        if: inputs.build_artifact_name != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.build_artifact_name }}
+          path: dist/
+
+      - name: Use existing build
+        if: inputs.build_artifact_name == ''
+        run: |
+          Write-Host "No artifact specified, checking for existing build..."
+          $buildPattern = "dist\windows\serena-portable-*-${{ inputs.tier }}"
+          $buildDir = Get-ChildItem -Path $buildPattern -Directory | Select-Object -First 1
+
+          if (-not $buildDir) {
+            Write-Error "No standalone build found. Build first or provide artifact name."
+            exit 1
+          }
+
+          Write-Host "Found build: $($buildDir.FullName)"
+
+      - name: Extract build
+        if: inputs.build_artifact_name != ''
+        run: |
+          Get-ChildItem dist\*.zip | ForEach-Object {
+            Write-Host "Extracting $($_.Name)..."
+            Expand-Archive -Path $_.FullName -DestinationPath dist\extracted\ -Force
+          }
+
+          # Find extracted directory
+          $extractedDir = Get-ChildItem -Path dist\extracted\serena-portable-* -Directory | Select-Object -First 1
+
+          if (-not $extractedDir) {
+            Write-Error "Failed to find extracted build directory"
+            exit 1
+          }
+
+          Write-Host "Extracted to: $($extractedDir.FullName)"
+
+      - name: Install test dependencies
+        run: |
+          uv pip install -e ".[dev]"
+          uv pip install pytest pytest-asyncio
+
+      - name: Set build directory environment variable
+        run: |
+          if (Test-Path "dist\extracted\serena-portable-*") {
+            $buildDir = (Get-ChildItem -Path "dist\extracted\serena-portable-*" -Directory | Select-Object -First 1).FullName
+          } else {
+            $buildDir = (Get-ChildItem -Path "dist\windows\serena-portable-*-${{ inputs.tier }}" -Directory | Select-Object -First 1).FullName
+          }
+
+          Write-Host "Build directory: $buildDir"
+          echo "SERENA_BUILD_DIR=$buildDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Verify build structure
+        run: |
+          Write-Host "Verifying build structure..."
+          Write-Host "Build dir: $env:SERENA_BUILD_DIR"
+
+          $requiredDirs = @("bin", "config", "docs")
+          $requiredFiles = @("VERSION.txt")
+
+          foreach ($dir in $requiredDirs) {
+            $path = Join-Path $env:SERENA_BUILD_DIR $dir
+            if (-not (Test-Path $path)) {
+              Write-Error "Required directory not found: $dir"
+              exit 1
+            }
+          }
+
+          foreach ($file in $requiredFiles) {
+            $path = Join-Path $env:SERENA_BUILD_DIR $file
+            if (-not (Test-Path $path)) {
+              Write-Error "Required file not found: $file"
+              exit 1
+            }
+          }
+
+          Write-Host "Build structure verified"
+
+      - name: Run E2E tests
+        run: |
+          Write-Host "Running E2E tests..."
+          Write-Host "Build directory: $env:SERENA_BUILD_DIR"
+
+          uv run pytest test/e2e/ -v -m e2e --tb=short --maxfail=3 `
+            --junitxml=test-results/junit.xml `
+            -o log_cli=true `
+            -o log_cli_level=INFO
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results-${{ inputs.tier }}-${{ inputs.architecture }}
+          path: test-results/
+          retention-days: 30
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          Write-Host "## E2E Test Results" >> $env:GITHUB_STEP_SUMMARY
+          Write-Host "" >> $env:GITHUB_STEP_SUMMARY
+          Write-Host "**Build:** ${{ inputs.tier }} (${{ inputs.architecture }})" >> $env:GITHUB_STEP_SUMMARY
+          Write-Host "**Build Directory:** $env:SERENA_BUILD_DIR" >> $env:GITHUB_STEP_SUMMARY
+          Write-Host "" >> $env:GITHUB_STEP_SUMMARY
+
+          if (Test-Path "test-results/junit.xml") {
+            [xml]$junit = Get-Content "test-results/junit.xml"
+            $tests = $junit.testsuites.testsuite.tests
+            $failures = $junit.testsuites.testsuite.failures
+            $errors = $junit.testsuites.testsuite.errors
+            $time = $junit.testsuites.testsuite.time
+
+            Write-Host "| Metric | Value |" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "|--------|-------|" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "| Total Tests | $tests |" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "| Failures | $failures |" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "| Errors | $errors |" >> $env:GITHUB_STEP_SUMMARY
+            Write-Host "| Duration | ${time}s |" >> $env:GITHUB_STEP_SUMMARY
+
+            if ($failures -eq 0 -and $errors -eq 0) {
+              Write-Host "" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "✅ All tests passed!" >> $env:GITHUB_STEP_SUMMARY
+            } else {
+              Write-Host "" >> $env:GITHUB_STEP_SUMMARY
+              Write-Host "❌ Some tests failed. Check artifacts for details." >> $env:GITHUB_STEP_SUMMARY
+            }
+          } else {
+            Write-Host "⚠️ Test results file not found" >> $env:GITHUB_STEP_SUMMARY
+          }
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            if (!fs.existsSync('test-results/junit.xml')) {
+              return;
+            }
+
+            const xml = fs.readFileSync('test-results/junit.xml', 'utf8');
+            const parser = require('xml2js').parseString;
+
+            parser(xml, (err, result) => {
+              if (err) return;
+
+              const testsuite = result.testsuites.testsuite[0].$;
+              const tests = testsuite.tests;
+              const failures = testsuite.failures;
+              const errors = testsuite.errors;
+
+              const status = (failures == 0 && errors == 0) ? '✅ PASSED' : '❌ FAILED';
+
+              const comment = `## E2E Test Results ${status}
+
+**Build:** ${{ inputs.tier }} (${{ inputs.architecture }})
+
+| Metric | Value |
+|--------|-------|
+| Total Tests | ${tests} |
+| Failures | ${failures} |
+| Errors | ${errors} |
+| Duration | ${testsuite.time}s |
+
+[View detailed results](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              `;
+
+              github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            });

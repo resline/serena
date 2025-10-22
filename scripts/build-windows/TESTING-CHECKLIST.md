@@ -849,8 +849,84 @@ _________________________________________________
 _________________________________________________
 ```
 
+## End-to-End (E2E) Testing
+
+**NEW**: Automated E2E tests for standalone builds.
+
+See `docs/E2E_TESTING.md` for complete guide.
+
+### Running E2E Tests
+
+- [ ] **Set Build Directory**
+  ```powershell
+  $env:SERENA_BUILD_DIR = "$packageDir"
+  ```
+
+- [ ] **Install Test Dependencies**
+  ```powershell
+  uv pip install pytest pytest-asyncio
+  ```
+
+- [ ] **Run All E2E Tests**
+  ```powershell
+  uv run pytest test/e2e/ -v -m e2e
+  # Should pass all tests (100% pass rate)
+  ```
+
+### E2E Test Categories
+
+- [ ] **Standalone Executable Tests**
+  ```powershell
+  pytest test/e2e/ -v -m standalone
+  # Tests: --help, --version, basic commands
+  # Expected: All pass (~10 tests, <5s)
+  ```
+
+- [ ] **MCP Server Communication Tests**
+  ```powershell
+  pytest test/e2e/ -v -m mcp
+  # Tests: Connection, tool listing, tool invocation
+  # Expected: All pass (~15 tests, <30s)
+  ```
+
+- [ ] **Tool Execution Tests** (Future)
+  ```powershell
+  pytest test/e2e/ -v -m tools
+  # Tests: find_symbol, edit_symbol, workflows
+  # Expected: All pass (~20 tests, <60s)
+  ```
+
+- [ ] **Language Server Integration Tests** (Future)
+  ```powershell
+  pytest test/e2e/ -v -m language_server
+  # Tests: LS startup, crash recovery, performance
+  # Expected: All pass (~15 tests, <120s)
+  ```
+
+### E2E Test Results
+
+- [ ] **All Tests Passed**
+  ```powershell
+  # Check test summary
+  # Total: XX tests
+  # Passed: XX
+  # Failed: 0
+  # Duration: <5 minutes
+  ```
+
+- [ ] **No Test Failures**
+  - No connection errors
+  - No timeout issues
+  - No assertion failures
+
+- [ ] **Performance Within Targets**
+  - MCP server startup < 5s
+  - Tool calls < 2s
+  - No memory leaks
+
 ---
 
-**Checklist Version:** 1.0.0
-**Last Updated:** 2025-01-12
+**Checklist Version:** 1.1.0
+**Last Updated:** 2025-10-22
 **For Build Script:** build-windows-portable.ps1 v1.0.0
+**E2E Tests:** See docs/E2E_TESTING.md
