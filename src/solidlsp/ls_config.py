@@ -56,6 +56,8 @@ class Language(str, Enum):
     ERLANG = "erlang"
     AL = "al"
     REGO = "rego"
+    SCALA = "scala"
+    JULIA = "julia"
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -152,6 +154,10 @@ class Language(str, Enum):
                 return FilenameMatcher("*.rego")
             case self.MARKDOWN:
                 return FilenameMatcher("*.md", "*.markdown")
+            case self.SCALA:
+                return FilenameMatcher("*.scala", "*.sbt")
+            case self.JULIA:
+                return FilenameMatcher("*.jl")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -277,6 +283,14 @@ class Language(str, Enum):
                 from solidlsp.language_servers.r_language_server import RLanguageServer
 
                 return RLanguageServer
+            case self.SCALA:
+                from solidlsp.language_servers.scala_language_server import ScalaLanguageServer
+
+                return ScalaLanguageServer
+            case self.JULIA:
+                from solidlsp.language_servers.julia_server import JuliaLanguageServer
+
+                return JuliaLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

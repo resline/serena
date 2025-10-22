@@ -231,6 +231,9 @@ tmp/
 # Exception: Don't ignore Nix test repository lib directory (contains source code)
 !/test/resources/repos/nix/test_repo/lib
 
+# Exception: Don't ignore Julia test repository lib directory (contains source code)
+!/test/resources/repos/julia/test_repo/lib
+
 # Swift
 /test/resources/repos/swift/test_repo/.build
 /test/resources/repos/swift/test_repo/.swiftpm
@@ -238,3 +241,11 @@ tmp/
 # Elm
 /test/resources/repos/elm/test_repo/.elm/
 /test/resources/repos/elm/test_repo/elm-stuff/
+
+# Scala
+.metals/
+.bsp/
+.scala-build/
+.bloop/
+bootstrap
+test/resources/repos/scala/.bloop/
