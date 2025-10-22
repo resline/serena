@@ -58,6 +58,7 @@ dev = [
   "mypy>=1.16.1",
   "poethepoet>=0.36.0",
   "pytest>=8.0.2",
+  "pytest-asyncio>=0.21.0",
   "pytest-xdist>=3.5.0",
   "ruff>=0.0.285",
   "toml-sort>=0.24.2",
@@ -281,6 +282,13 @@ markers = [
   "rego: language server running for Rego",
   "markdown: language server running for Markdown",
   "julia: Julia language server tests",
+  "e2e: End-to-end tests for standalone builds",
+  "standalone: Tests for standalone executables",
+  "mcp: MCP server communication tests",
+  "tools: Tool execution E2E tests",
+  "language_server: Language server integration E2E tests",
+  "workflow: Project workflow E2E tests",
+  "slow: Slow tests (>30 seconds)",
 ]
 
 [tool.codespell]
