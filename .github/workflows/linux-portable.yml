@@ -489,3 +489,13 @@ jobs:
           echo "2. Run: \`./install.sh\`" >> $GITHUB_STEP_SUMMARY
           echo "3. Restart your terminal" >> $GITHUB_STEP_SUMMARY
           echo "4. Verify: \`serena --version\`" >> $GITHUB_STEP_SUMMARY
+
+  # Call E2E tests workflow after successful build
+  test-e2e:
+    name: Run E2E Tests
+    needs: build-portable
+    uses: ./.github/workflows/test-e2e-portable.yml
+    with:
+      build_artifact_name: serena-linux-x64-essential
+      tier: essential
+      architecture: x64

@@ -33,6 +33,7 @@ class MCPTestClient:
         result = await client.call_tool("read_file", {"file_path": "main.py"})
         await client.disconnect()
         ```
+
     """
 
     def __init__(
@@ -47,6 +48,7 @@ class MCPTestClient:
             server_command: Command and arguments to start MCP server
             transport: Transport type ("stdio" or "sse")
             env: Optional environment variables for server process
+
         """
         self.server_command = server_command
         self.transport = transport
@@ -62,6 +64,7 @@ class MCPTestClient:
         Raises:
             RuntimeError: If connection fails
             TimeoutError: If connection takes too long
+
         """
         logger.info(f"Starting MCP server: {' '.join(self.server_command)}")
 
@@ -100,6 +103,7 @@ class MCPTestClient:
 
         Returns:
             True if connected, False otherwise
+
         """
         return self.session is not None
 
@@ -111,6 +115,7 @@ class MCPTestClient:
 
         Raises:
             RuntimeError: If not connected
+
         """
         if not self.session:
             raise RuntimeError("Not connected to MCP server. Call connect() first.")
@@ -133,6 +138,7 @@ class MCPTestClient:
 
         Raises:
             RuntimeError: If not connected
+
         """
         if not self.session:
             raise RuntimeError("Not connected to MCP server. Call connect() first.")
@@ -162,6 +168,7 @@ class MCPTestClient:
         Raises:
             asyncio.TimeoutError: If tool execution exceeds timeout
             RuntimeError: If not connected
+
         """
         logger.debug(f"Calling tool {name} with {timeout}s timeout")
 
@@ -169,7 +176,7 @@ class MCPTestClient:
             result = await asyncio.wait_for(self.call_tool(name, arguments), timeout=timeout)
             return result
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"Tool {name} timed out after {timeout}s")
             raise
 

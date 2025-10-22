@@ -237,3 +237,451 @@ jobs:
                 body: comment
               });
             });
+
+  test-e2e-linux:
+    name: E2E Tests (Linux ${{ inputs.architecture }} - ${{ inputs.tier }})
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+
+      - name: Download build artifact
+        if: inputs.build_artifact_name != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.build_artifact_name }}
+          path: dist/
+
+      - name: Use existing build
+        if: inputs.build_artifact_name == ''
+        run: |
+          echo "No artifact specified, checking for existing build..."
+          BUILD_DIR=$(find dist -maxdepth 1 -type d -name "serena-linux-*-${{ inputs.tier }}-*-bundle" | head -1)
+
+          if [ -z "$BUILD_DIR" ]; then
+            echo "ERROR: No standalone build found. Build first or provide artifact name."
+            exit 1
+          fi
+
+          echo "Found build: $BUILD_DIR"
+
+      - name: Extract build
+        if: inputs.build_artifact_name != ''
+        run: |
+          mkdir -p dist/extracted
+
+          # Extract tar.gz files
+          for tarball in dist/*.tar.gz; do
+            if [ -f "$tarball" ]; then
+              echo "Extracting $(basename $tarball)..."
+              tar -xzf "$tarball" -C dist/extracted/
+            fi
+          done
+
+          # Find extracted directory
+          EXTRACTED_DIR=$(find dist/extracted -maxdepth 1 -type d -name "serena-linux-*-bundle" | head -1)
+
+          if [ -z "$EXTRACTED_DIR" ]; then
+            echo "ERROR: Failed to find extracted build directory"
+            exit 1
+          fi
+
+          echo "Extracted to: $EXTRACTED_DIR"
+
+      - name: Install test dependencies
+        run: |
+          uv pip install -e ".[dev]"
+          uv pip install pytest pytest-asyncio
+
+      - name: Set build directory environment variable
+        run: |
+          if [ -d "dist/extracted/serena-linux-"*"-bundle" ]; then
+            BUILD_DIR=$(find dist/extracted -maxdepth 1 -type d -name "serena-linux-*-bundle" | head -1)
+          else
+            BUILD_DIR=$(find dist -maxdepth 1 -type d -name "serena-linux-*-bundle" | head -1)
+          fi
+
+          echo "Build directory: $BUILD_DIR"
+          echo "SERENA_BUILD_DIR=$BUILD_DIR" >> $GITHUB_ENV
+
+      - name: Verify build structure
+        run: |
+          echo "Verifying build structure..."
+          echo "Build dir: $SERENA_BUILD_DIR"
+
+          REQUIRED_DIRS=("bin" "docs")
+          REQUIRED_FILES=("README.md")
+
+          for dir in "${REQUIRED_DIRS[@]}"; do
+            if [ ! -d "$SERENA_BUILD_DIR/$dir" ]; then
+              echo "ERROR: Required directory not found: $dir"
+              exit 1
+            fi
+          done
+
+          for file in "${REQUIRED_FILES[@]}"; do
+            if [ ! -f "$SERENA_BUILD_DIR/$file" ]; then
+              echo "ERROR: Required file not found: $file"
+              exit 1
+            fi
+          done
+
+          # Verify serena executable exists
+          if [ ! -f "$SERENA_BUILD_DIR/bin/serena" ]; then
+            echo "ERROR: serena executable not found in bin/"
+            exit 1
+          fi
+
+          echo "Build structure verified"
+
+      - name: Make executables executable
+        run: |
+          echo "Setting executable permissions..."
+          chmod +x "$SERENA_BUILD_DIR/bin"/*
+          echo "Permissions set"
+
+      - name: Run E2E tests
+        run: |
+          echo "Running E2E tests..."
+          echo "Build directory: $SERENA_BUILD_DIR"
+
+          uv run pytest test/e2e/ -v -m e2e --tb=short --maxfail=3 \
+            --junitxml=test-results/junit.xml \
+            -o log_cli=true \
+            -o log_cli_level=INFO
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results-linux-${{ inputs.tier }}-${{ inputs.architecture }}
+          path: test-results/
+          retention-days: 30
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## E2E Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Platform:** Linux" >> $GITHUB_STEP_SUMMARY
+          echo "**Build:** ${{ inputs.tier }} (${{ inputs.architecture }})" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Directory:** $SERENA_BUILD_DIR" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f "test-results/junit.xml" ]; then
+            # Parse XML using Python for portability
+            python3 << 'EOF'
+import xml.etree.ElementTree as ET
+import os
+
+try:
+    tree = ET.parse('test-results/junit.xml')
+    root = tree.getroot()
+    testsuite = root.find('.//testsuite')
+
+    if testsuite is not None:
+        tests = testsuite.get('tests', '0')
+        failures = testsuite.get('failures', '0')
+        errors = testsuite.get('errors', '0')
+        time = testsuite.get('time', '0')
+
+        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+            f.write("| Metric | Value |\n")
+            f.write("|--------|-------|\n")
+            f.write(f"| Total Tests | {tests} |\n")
+            f.write(f"| Failures | {failures} |\n")
+            f.write(f"| Errors | {errors} |\n")
+            f.write(f"| Duration | {time}s |\n")
+            f.write("\n")
+
+            if int(failures) == 0 and int(errors) == 0:
+                f.write("✅ All tests passed!\n")
+            else:
+                f.write("❌ Some tests failed. Check artifacts for details.\n")
+except Exception as e:
+    print(f"Failed to parse test results: {e}")
+EOF
+          else
+            echo "⚠️ Test results file not found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            if (!fs.existsSync('test-results/junit.xml')) {
+              return;
+            }
+
+            const xml = fs.readFileSync('test-results/junit.xml', 'utf8');
+            const parser = require('xml2js').parseString;
+
+            parser(xml, (err, result) => {
+              if (err) return;
+
+              const testsuite = result.testsuites.testsuite[0].$;
+              const tests = testsuite.tests;
+              const failures = testsuite.failures;
+              const errors = testsuite.errors;
+
+              const status = (failures == 0 && errors == 0) ? '✅ PASSED' : '❌ FAILED';
+
+              const comment = `## E2E Test Results (Linux) ${status}
+
+**Build:** ${{ inputs.tier }} (${{ inputs.architecture }})
+
+| Metric | Value |
+|--------|-------|
+| Total Tests | ${tests} |
+| Failures | ${failures} |
+| Errors | ${errors} |
+| Duration | ${testsuite.time}s |
+
+[View detailed results](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              `;
+
+              github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            });
+
+  test-e2e-macos:
+    name: E2E Tests (macOS ${{ inputs.architecture }} - ${{ inputs.tier }})
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install UV
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Download build artifact
+        if: inputs.build_artifact_name != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.build_artifact_name }}
+          path: dist/
+
+      - name: Use existing build
+        if: inputs.build_artifact_name == ''
+        run: |
+          echo "No artifact specified, checking for existing build..."
+          build_pattern="dist/serena-macos-*-${{ inputs.tier }}-*-bundle"
+          build_dir=$(find dist -maxdepth 1 -type d -name "*serena-macos*" | head -1)
+
+          if [ -z "$build_dir" ]; then
+            echo "ERROR: No standalone build found. Build first or provide artifact name."
+            exit 1
+          fi
+
+          echo "Found build: $build_dir"
+
+      - name: Extract build
+        if: inputs.build_artifact_name != ''
+        run: |
+          for zip_file in dist/*.zip; do
+            if [ -f "$zip_file" ]; then
+              echo "Extracting $(basename $zip_file)..."
+              mkdir -p dist/extracted
+              unzip -q "$zip_file" -d dist/extracted/
+            fi
+          done
+
+          # Find extracted directory
+          extracted_dir=$(find dist/extracted -maxdepth 1 -type d -name "*serena-*-bundle" | head -1)
+
+          if [ -z "$extracted_dir" ]; then
+            echo "ERROR: Failed to find extracted build directory"
+            exit 1
+          fi
+
+          echo "Extracted to: $extracted_dir"
+
+      - name: Install test dependencies
+        run: |
+          uv pip install -e ".[dev]"
+          uv pip install pytest pytest-asyncio
+
+      - name: Set build directory environment variable
+        run: |
+          if [ -d "dist/extracted/serena-macos"*"-bundle" ]; then
+            build_dir=$(find dist/extracted -maxdepth 1 -type d -name "*serena-macos*-bundle" | head -1)
+          else
+            build_dir=$(find dist -maxdepth 1 -type d -name "*serena-macos*-bundle" | head -1)
+          fi
+
+          echo "Build directory: $build_dir"
+          echo "SERENA_BUILD_DIR=$build_dir" >> $GITHUB_ENV
+
+      - name: Verify build structure
+        run: |
+          echo "Verifying build structure..."
+          echo "Build dir: $SERENA_BUILD_DIR"
+
+          required_dirs=("bin" "docs")
+          required_files=("README.md")
+
+          for dir in "${required_dirs[@]}"; do
+            path="$SERENA_BUILD_DIR/$dir"
+            if [ ! -d "$path" ]; then
+              echo "ERROR: Required directory not found: $dir"
+              exit 1
+            fi
+          done
+
+          for file in "${required_files[@]}"; do
+            path="$SERENA_BUILD_DIR/$file"
+            if [ ! -f "$path" ]; then
+              echo "ERROR: Required file not found: $file"
+              exit 1
+            fi
+          done
+
+          # Verify serena executable exists
+          if [ ! -f "$SERENA_BUILD_DIR/bin/serena" ]; then
+            echo "ERROR: serena executable not found in bin/"
+            exit 1
+          fi
+
+          # Make executable if not already
+          chmod +x "$SERENA_BUILD_DIR/bin/serena"
+
+          echo "Build structure verified"
+
+      - name: Run E2E tests
+        run: |
+          echo "Running E2E tests..."
+          echo "Build directory: $SERENA_BUILD_DIR"
+
+          uv run pytest test/e2e/ -v -m e2e --tb=short --maxfail=3 \
+            --junitxml=test-results/junit.xml \
+            -o log_cli=true \
+            -o log_cli_level=INFO
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results-macos-${{ inputs.tier }}-${{ inputs.architecture }}
+          path: test-results/
+          retention-days: 30
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "## E2E Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Build:** ${{ inputs.tier }} (${{ inputs.architecture }})" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Directory:** $SERENA_BUILD_DIR" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f "test-results/junit.xml" ]; then
+            # Parse XML with Python since macOS doesn't have xml2js by default
+            python3 << 'EOF'
+import xml.etree.ElementTree as ET
+import os
+
+try:
+    tree = ET.parse('test-results/junit.xml')
+    root = tree.getroot()
+    testsuite = root.find('.//testsuite')
+
+    if testsuite is not None:
+        tests = testsuite.get('tests', '0')
+        failures = testsuite.get('failures', '0')
+        errors = testsuite.get('errors', '0')
+        time = testsuite.get('time', '0')
+
+        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+            f.write("| Metric | Value |\n")
+            f.write("|--------|-------|\n")
+            f.write(f"| Total Tests | {tests} |\n")
+            f.write(f"| Failures | {failures} |\n")
+            f.write(f"| Errors | {errors} |\n")
+            f.write(f"| Duration | {time}s |\n")
+            f.write("\n")
+
+            if int(failures) == 0 and int(errors) == 0:
+                f.write("✅ All tests passed!\n")
+            else:
+                f.write("❌ Some tests failed. Check artifacts for details.\n")
+except Exception as e:
+    print(f"Failed to parse test results: {e}")
+EOF
+          else
+            echo "⚠️ Test results file not found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            if (!fs.existsSync('test-results/junit.xml')) {
+              return;
+            }
+
+            const xml = fs.readFileSync('test-results/junit.xml', 'utf8');
+            const parser = require('xml2js').parseString;
+
+            parser(xml, (err, result) => {
+              if (err) return;
+
+              const testsuite = result.testsuites.testsuite[0].$;
+              const tests = testsuite.tests;
+              const failures = testsuite.failures;
+              const errors = testsuite.errors;
+
+              const status = (failures == 0 && errors == 0) ? '✅ PASSED' : '❌ FAILED';
+
+              const comment = `## E2E Test Results (macOS) ${status}
+
+**Build:** ${{ inputs.tier }} (${{ inputs.architecture }})
+
+| Metric | Value |
+|--------|-------|
+| Total Tests | ${tests} |
+| Failures | ${failures} |
+| Errors | ${errors} |
+| Duration | ${testsuite.time}s |
+
+[View detailed results](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              `;
+
+              github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            });

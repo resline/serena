@@ -7,7 +7,6 @@ This module tests real tool execution scenarios through MCP, including:
 - Error handling
 """
 
-import json
 from pathlib import Path
 
 import pytest
@@ -147,7 +146,7 @@ def process_data(data):
         for file_path in files:
             result = await mcp_client.call_tool("read_file", {"file_path": str(file_path)})
             assert hasattr(result, "content")
-            assert f"# File" in result.content[0].text
+            assert "# File" in result.content[0].text
 
     async def test_error_handling_nonexistent_file(self, mcp_client: MCPTestClient, tmp_path: Path) -> None:
         """Test error handling when reading non-existent file."""

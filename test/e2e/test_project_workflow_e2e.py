@@ -11,9 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from solidlsp.ls_config import Language
 from test.e2e.mcp_test_client import MCPTestClient
-from test.e2e.standalone_utils import StandaloneTestEnv
 
 
 @pytest.mark.e2e
