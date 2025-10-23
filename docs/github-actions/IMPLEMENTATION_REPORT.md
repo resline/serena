@@ -171,7 +171,7 @@ test-e2e:
 
 3. **Artifact Passing Mechanism**
    - Struktura i nazewnictwo artefaktów
-   - Proces upload/download
+   - Process upload/download
    - Lifecycle management (30 dni)
    - Diagramy przepływu
 
@@ -298,9 +298,9 @@ test-e2e:
    - Nowy job: `test-e2e`
 
 4. **`.github/workflows/test-e2e-portable.yml`**
-   - Dodano: ~453 linie (2 nowe joby)
+   - Dodano: ~453 linie (2 new joby)
    - Nowy job: `test-e2e-linux` (~226 linii)
-   - Nowy job: `test-e2e-macos` (~221 linii)
+   - New job: `test-e2e-macos` (~221 linii)
    - Istniejący job: `test-e2e-windows` (bez zmian)
 
 5. **`docs/github-actions/E2E_WORKFLOW_INTEGRATION.md`**
@@ -310,9 +310,9 @@ test-e2e:
 ### Łączne Statystyki
 
 - **Pliki zmodyfikowane:** 4
-- **Pliki nowe:** 1
+- **Pliki new:** 1
 - **Łączne linie dodane:** ~1,601
-- **Nowe joby CI/CD:** 2 (test-e2e-linux, test-e2e-macos)
+- **New joby CI/CD:** 2 (test-e2e-linux, test-e2e-macos)
 - **Workflow calls dodane:** 3 (Windows, Linux, macOS)
 
 ---
@@ -327,7 +327,7 @@ Wszystkie pliki workflow zostały zwalidowane:
 - ✅ `macos-portable.yml` - Valid
 - ✅ `test-e2e-portable.yml` - Valid (minor warnings for template strings - expected)
 
-**Note:** PyYAML pokazuje fałszywe pozytywy dla template strings w JavaScript `script` blocks (np. `**Build:**`). GitHub Actions parser poprawnie obsługuje te konstrukcje.
+**Note:** PyYAML shows false positives for template strings in JavaScript `script` blocks (e.g., `**Build:**`). The GitHub Actions parser correctly handles these constructs.
 
 ### Python Version Compliance
 
@@ -551,7 +551,7 @@ Po zakończeniu workflow:
 ✅ **Konsystencja wersji** - Python 3.11 wszędzie
 ✅ **Proper artifact handling** - Prawidłowe przekazywanie między jobs
 ✅ **Kompleksowa dokumentacja** - 1,100+ linii
-✅ **Platform-specific adaptations** - Każda platforma ma optymalne ustawienia
+✅ **Platform-specific adaptations** - Each platform has optimal settings
 ✅ **Best practices** - Zgodność z GitHub Actions guidelines
 ✅ **Production ready** - Gotowe do użycia w produkcji
 
@@ -559,7 +559,7 @@ Po zakończeniu workflow:
 
 1. **`workflow_call` pattern** - Umożliwia reużywalność i modularność
 2. **Matrix strategy** - Parallel execution dla wielu wariantów
-3. **Platform-specific jobs** - Każda platforma ma dedykowany job E2E
+3. **Platform-specific jobs** - Each platform has a dedicated E2E job
 4. **Python 3.11 enforcement** - Konsystencja w całym CI/CD
 5. **Comprehensive error handling** - Proper exit codes, clear messages
 6. **Artifact retention 30 days** - Balance między dostępnością a kosztami
@@ -577,7 +577,7 @@ Po zakończeniu workflow:
 - **Czas implementacji:** ~3 godziny (parallel agents)
 - **Linie kodu dodane:** ~1,601
 - **Pliki zmodyfikowane:** 5
-- **Nowe joby CI/CD:** 2
+- **New joby CI/CD:** 2
 - **Workflow calls:** 3
 - **Dokumentacja:** 1,105 linii
 
