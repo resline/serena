@@ -37,10 +37,7 @@ def standalone_build_dir() -> Path:
         build_path = repo_root / "dist" / "windows" / "serena-portable-windows-x64-essential"
 
     if not build_path.exists():
-        pytest.skip(
-            f"Standalone build not found at {build_path}. "
-            "Set SERENA_BUILD_DIR environment variable or build standalone first."
-        )
+        pytest.skip(f"Standalone build not found at {build_path}. " "Set SERENA_BUILD_DIR environment variable or build standalone first.")
 
     return build_path
 

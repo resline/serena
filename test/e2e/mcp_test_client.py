@@ -154,13 +154,13 @@ class MCPTestClient:
             logger.error(f"Tool {name} failed: {e}")
             raise
 
-    async def call_tool_with_timeout(self, name: str, arguments: dict[str, Any], timeout: float) -> Any:
+    async def call_tool_with_timeout(self, name: str, arguments: dict[str, Any], timeout_seconds: float) -> Any:
         """Call a tool with a timeout.
 
         Args:
             name: Tool name
             arguments: Tool arguments
-            timeout: Timeout in seconds
+            timeout_seconds: Timeout in seconds
 
         Returns:
             Tool result
@@ -170,14 +170,14 @@ class MCPTestClient:
             RuntimeError: If not connected
 
         """
-        logger.debug(f"Calling tool {name} with {timeout}s timeout")
+        logger.debug(f"Calling tool {name} with {timeout_seconds}s timeout")
 
         try:
-            result = await asyncio.wait_for(self.call_tool(name, arguments), timeout=timeout)
+            result = await asyncio.wait_for(self.call_tool(name, arguments), timeout=timeout_seconds)
             return result
 
         except TimeoutError:
-            logger.error(f"Tool {name} timed out after {timeout}s")
+            logger.error(f"Tool {name} timed out after {timeout_seconds}s")
             raise
 
     async def __aenter__(self) -> "MCPTestClient":

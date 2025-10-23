@@ -12,6 +12,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 from solidlsp.ls_config import Language
 
@@ -133,6 +134,7 @@ class StandaloneTestEnv:
             timeout=timeout,
             capture_output=True,
             text=True,
+            check=False,
             **kwargs,
         )
 

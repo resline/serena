@@ -145,9 +145,7 @@ class TestMCPServerCommunication:
         test_content = "This is test content"
 
         # Write file
-        result = await mcp_client.call_tool(
-            "write_file", {"file_path": str(test_file), "content": test_content}
-        )
+        result = await mcp_client.call_tool("write_file", {"file_path": str(test_file), "content": test_content})
 
         assert hasattr(result, "content")
 
@@ -163,9 +161,7 @@ class TestMCPServerCommunication:
             (tmp_path / f"file{i}.txt").write_text(f"content{i}")
 
         # This should complete but may take a moment
-        result = await mcp_client.call_tool_with_timeout(
-            "list_directory", {"path": str(tmp_path)}, timeout=30.0
-        )
+        result = await mcp_client.call_tool_with_timeout("list_directory", {"path": str(tmp_path)}, timeout=30.0)
 
         assert hasattr(result, "content")
 

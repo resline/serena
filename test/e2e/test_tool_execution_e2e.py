@@ -48,9 +48,7 @@ class TestToolExecutionE2E:
 """
 
         # Write file via MCP
-        result = await mcp_client.call_tool(
-            "write_file", {"file_path": str(test_file), "content": test_content}
-        )
+        result = await mcp_client.call_tool("write_file", {"file_path": str(test_file), "content": test_content})
 
         assert hasattr(result, "content")
 
@@ -81,19 +79,21 @@ class TestToolExecutionE2E:
     async def test_search_files_tool(self, mcp_client: MCPTestClient, tmp_path: Path) -> None:
         """Test search_files tool for pattern matching."""
         # Create test files with searchable content
-        (tmp_path / "file1.py").write_text("""
+        (tmp_path / "file1.py").write_text(
+            """
 def calculate_total(items):
     return sum(items)
-""")
-        (tmp_path / "file2.py").write_text("""
+"""
+        )
+        (tmp_path / "file2.py").write_text(
+            """
 def process_data(data):
     return data
-""")
+"""
+        )
 
         # Search for pattern
-        result = await mcp_client.call_tool(
-            "search_files", {"path": str(tmp_path), "pattern": "def calculate", "file_pattern": "*.py"}
-        )
+        result = await mcp_client.call_tool("search_files", {"path": str(tmp_path), "pattern": "def calculate", "file_pattern": "*.py"})
 
         assert hasattr(result, "content")
         content_text = result.content[0].text
@@ -120,9 +120,7 @@ def process_data(data):
         modified_content = original_content.replace("old_function", "new_function").replace('"old"', '"new"')
 
         # Step 3: Write modified content
-        write_result = await mcp_client.call_tool(
-            "write_file", {"file_path": str(original_file), "content": modified_content}
-        )
+        write_result = await mcp_client.call_tool("write_file", {"file_path": str(original_file), "content": modified_content})
 
         assert hasattr(write_result, "content")
 
@@ -160,13 +158,11 @@ def process_data(data):
 
     async def test_error_handling_invalid_path(self, mcp_client: MCPTestClient) -> None:
         """Test error handling with invalid file path."""
-        with pytest.raises(Exception):
+        with pytest.raises((FileNotFoundError, RuntimeError, ValueError, OSError)):
             await mcp_client.call_tool("read_file", {"file_path": "/invalid/path/file.py"})
 
     @pytest.mark.parametrize("test_project", [Language.PYTHON], indirect=True)
-    async def test_project_file_operations(
-        self, mcp_client: MCPTestClient, test_project: Path, standalone_env: StandaloneTestEnv
-    ) -> None:
+    async def test_project_file_operations(self, mcp_client: MCPTestClient, test_project: Path, standalone_env: StandaloneTestEnv) -> None:
         """Test file operations on a real project structure."""
         # List project directory
         list_result = await mcp_client.call_tool("list_directory", {"path": str(test_project)})
@@ -241,18 +237,14 @@ def process_data(data):
         target_file = tmp_path / "overwrite.py"
 
         # Write initial content
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(target_file), "content": "# Original content\n"}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(target_file), "content": "# Original content\n"})
 
         assert target_file.exists()
         original = target_file.read_text()
         assert "Original" in original
 
         # Overwrite with new content
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(target_file), "content": "# New content\n"}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(target_file), "content": "# New content\n"})
 
         # Verify overwrite
         new_content = target_file.read_text()
@@ -260,9 +252,7 @@ def process_data(data):
         assert "Original" not in new_content
 
     @pytest.mark.parametrize("extension", ["py", "ts", "go", "rs", "java"])
-    async def test_multi_language_file_operations(
-        self, mcp_client: MCPTestClient, tmp_path: Path, extension: str
-    ) -> None:
+    async def test_multi_language_file_operations(self, mcp_client: MCPTestClient, tmp_path: Path, extension: str) -> None:
         """Test file operations with different language file types."""
         test_file = tmp_path / f"sample.{extension}"
 
@@ -343,9 +333,7 @@ class TestAdvancedToolWorkflows:
         (tmp_path / "tests" / "test_main.py").write_text("def test_main():\n    assert True\n")
 
         # Step 1: Search for main functions
-        search_result = await mcp_client.call_tool(
-            "search_files", {"path": str(tmp_path), "pattern": "def main", "file_pattern": "*.py"}
-        )
+        search_result = await mcp_client.call_tool("search_files", {"path": str(tmp_path), "pattern": "def main", "file_pattern": "*.py"})
 
         assert hasattr(search_result, "content")
         search_text = search_result.content[0].text
