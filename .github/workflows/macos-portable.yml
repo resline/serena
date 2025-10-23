@@ -641,3 +641,13 @@ jobs:
           echo "- No runtime downloads - skip portable runtimes for now" >> $GITHUB_STEP_SUMMARY
           echo "- Basic quality checks - format and type-check only" >> $GITHUB_STEP_SUMMARY
           echo "- Simple installation script - basic bash script for ~/.local/serena" >> $GITHUB_STEP_SUMMARY
+
+  # Call E2E test workflow after successful build
+  test-e2e:
+    name: Run E2E Tests
+    needs: build-portable
+    uses: ./.github/workflows/test-e2e-portable.yml
+    with:
+      build_artifact_name: serena-macos-arm64-essential
+      tier: essential
+      architecture: arm64

@@ -6,6 +6,7 @@ This module tests the basic functionality of standalone Serena executables:
 - index-project.exe
 """
 
+import os
 import time
 
 import pytest
@@ -115,7 +116,7 @@ class TestStandaloneExecutables:
             assert exe_path.is_file(), f"{exe_name} is not a file"
             assert not exe_path.is_dir(), f"{exe_name} is a directory"
 
-    @pytest.mark.skipif(pytest.os.name != "nt", reason="Windows-specific test")
+    @pytest.mark.skipif(os.name != "nt", reason="Windows-specific test")
     def test_executables_have_exe_extension_windows(self, standalone_env: StandaloneTestEnv) -> None:
         """On Windows, verify executables have .exe extension."""
         for exe_name in ["serena", "serena-mcp-server", "index-project"]:

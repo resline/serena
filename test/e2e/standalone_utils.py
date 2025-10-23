@@ -9,9 +9,10 @@ import shutil
 import subprocess
 import tempfile
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Any
 
 from solidlsp.ls_config import Language
 
@@ -35,6 +36,7 @@ class StandaloneTestEnv:
             # Use project for testing
             pass
         ```
+
     """
 
     def __init__(self, build_dir: Path, tier: str = "essential"):
@@ -46,6 +48,7 @@ class StandaloneTestEnv:
 
         Raises:
             ValueError: If build directory doesn't exist
+
         """
         self.build_dir = build_dir
         self.tier = tier
@@ -68,6 +71,7 @@ class StandaloneTestEnv:
 
         Raises:
             FileNotFoundError: If executable doesn't exist
+
         """
         if os.name == "nt":
             exe_name = f"{name}.exe"
@@ -86,6 +90,7 @@ class StandaloneTestEnv:
 
         Returns:
             Dictionary mapping executable names to existence status
+
         """
         expected = ["serena", "serena-mcp-server", "index-project"]
 
@@ -120,6 +125,7 @@ class StandaloneTestEnv:
         Raises:
             FileNotFoundError: If executable doesn't exist
             subprocess.TimeoutExpired: If command times out
+
         """
         exe_path = self.get_executable_path(exe)
 
@@ -128,6 +134,7 @@ class StandaloneTestEnv:
             timeout=timeout,
             capture_output=True,
             text=True,
+            check=False,
             **kwargs,
         )
 
@@ -142,6 +149,7 @@ class StandaloneTestEnv:
 
         Raises:
             FileNotFoundError: If serena-mcp-server executable doesn't exist
+
         """
         exe_path = self.get_executable_path("serena-mcp-server")
 
@@ -178,6 +186,7 @@ class StandaloneTestEnv:
                 assert (project / "main.py").exists()
             # Project is automatically cleaned up
             ```
+
         """
         temp_dir = Path(tempfile.mkdtemp())
 
@@ -240,6 +249,7 @@ def verify_build_structure(build_dir: Path) -> dict[str, bool]:
 
     Returns:
         Dictionary mapping components to existence status
+
     """
     checks = {
         "bin_dir": (build_dir / "bin").is_dir(),
@@ -262,6 +272,7 @@ def get_bundled_language_servers(build_dir: Path) -> list[str]:
 
     Returns:
         List of language server names
+
     """
     ls_dir = build_dir / "language_servers"
 

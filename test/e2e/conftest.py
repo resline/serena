@@ -4,8 +4,8 @@ This module provides pytest fixtures for E2E testing of Serena standalone builds
 """
 
 import os
+from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Any, AsyncGenerator
 
 import pytest
 
@@ -25,6 +25,7 @@ def standalone_build_dir() -> Path:
 
     Raises:
         pytest.skip: If build directory doesn't exist
+
     """
     build_dir_env = os.environ.get("SERENA_BUILD_DIR")
 
@@ -36,10 +37,7 @@ def standalone_build_dir() -> Path:
         build_path = repo_root / "dist" / "windows" / "serena-portable-windows-x64-essential"
 
     if not build_path.exists():
-        pytest.skip(
-            f"Standalone build not found at {build_path}. "
-            "Set SERENA_BUILD_DIR environment variable or build standalone first."
-        )
+        pytest.skip(f"Standalone build not found at {build_path}. Set SERENA_BUILD_DIR environment variable or build standalone first.")
 
     return build_path
 
@@ -53,6 +51,7 @@ def standalone_env(standalone_build_dir: Path) -> StandaloneTestEnv:
 
     Returns:
         Configured StandaloneTestEnv instance
+
     """
     return StandaloneTestEnv(standalone_build_dir)
 
@@ -76,6 +75,7 @@ async def mcp_client(standalone_env: StandaloneTestEnv) -> AsyncGenerator[MCPTes
             tools = await mcp_client.list_tools()
             assert len(tools) > 0
         ```
+
     """
     server_exe = standalone_env.get_executable_path("serena-mcp-server")
 
@@ -109,6 +109,7 @@ def test_project(request: pytest.FixtureRequest, tmp_path: Path, standalone_env:
         def test_something(test_project):
             assert (test_project / "main.py").exists()
         ```
+
     """
     language = getattr(request, "param", None)
 

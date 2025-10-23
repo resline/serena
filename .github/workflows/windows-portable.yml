@@ -968,11 +968,27 @@ jobs:
             }
           }
 
+  # Run E2E tests on built artifacts
+  test-e2e:
+    name: E2E Tests (${{ matrix.arch }}, ${{ matrix.bundle_tier }})
+    needs: build-portable
+    if: inputs.upload_artifacts != false && needs.build-portable.result == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: ${{ fromJson(inputs.architecture == 'both' && '["x64", "arm64"]' || format('["{0}"]', inputs.architecture || 'x64')) }}
+        bundle_tier: ${{ fromJson(inputs.bundle_tier == 'all' && '["essential", "complete", "full"]' || (inputs.bundle_tier && format('["{0}"]', inputs.bundle_tier) || '["essential", "complete", "full"]')) }}
+    uses: ./.github/workflows/test-e2e-portable.yml
+    with:
+      build_artifact_name: serena-windows-${{ matrix.arch }}-${{ matrix.bundle_tier }}
+      tier: ${{ matrix.bundle_tier }}
+      architecture: ${{ matrix.arch }}
+
   # Create a summary job that runs after all builds complete
   build-summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: build-portable
+    needs: [build-portable, test-e2e]
     if: always()
     steps:
       - name: Download all artifacts
@@ -985,13 +1001,21 @@ jobs:
         run: |
           echo "# Windows Portable Build Results (Optimized)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           if [ "${{ needs.build-portable.result }}" == "success" ]; then
             echo "✅ **Build Status**: SUCCESS" >> $GITHUB_STEP_SUMMARY
           else
             echo "❌ **Build Status**: FAILED" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
+          if [ "${{ needs.test-e2e.result }}" == "success" ]; then
+            echo "✅ **E2E Test Status**: SUCCESS" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.test-e2e.result }}" == "skipped" ]; then
+            echo "⏭️ **E2E Test Status**: SKIPPED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **E2E Test Status**: FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Performance Improvements" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -1004,14 +1028,14 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Artifacts Created" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           # List all created artifacts
           find artifacts -type f -name "*.exe" -o -name "*.zip" | while read file; do
             size=$(du -h "$file" | cut -f1)
             basename_file=$(basename "$file")
             echo "- **$basename_file** ($size)" >> $GITHUB_STEP_SUMMARY
           done
-          
+
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Installation Instructions" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -1020,7 +1044,7 @@ jobs:
           echo "3. Run \`install.bat\` (Command Prompt) or \`install.ps1\` (PowerShell) as Administrator" >> $GITHUB_STEP_SUMMARY
           echo "4. Restart your command prompt/PowerShell" >> $GITHUB_STEP_SUMMARY
           echo "5. Verify installation with \`serena --version\`" >> $GITHUB_STEP_SUMMARY
-          
+
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Bundle Types" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

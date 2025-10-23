@@ -37,9 +37,7 @@ class TestLanguageServerIntegration:
             pytest.skip("Minimal tier has no bundled language servers")
 
     @pytest.mark.parametrize("test_project", [Language.PYTHON], indirect=True)
-    async def test_python_project_file_operations(
-        self, mcp_client: MCPTestClient, test_project: Path
-    ) -> None:
+    async def test_python_project_file_operations(self, mcp_client: MCPTestClient, test_project: Path) -> None:
         """Test basic file operations on Python project."""
         # List project files
         result = await mcp_client.call_tool("list_directory", {"path": str(test_project)})
@@ -78,9 +76,7 @@ class TestLanguageServerIntegration:
             assert "package" in content or "func" in content
 
     @pytest.mark.parametrize("test_project", [Language.TYPESCRIPT], indirect=True)
-    async def test_typescript_project_file_operations(
-        self, mcp_client: MCPTestClient, test_project: Path
-    ) -> None:
+    async def test_typescript_project_file_operations(self, mcp_client: MCPTestClient, test_project: Path) -> None:
         """Test basic file operations on TypeScript project."""
         result = await mcp_client.call_tool("list_directory", {"path": str(test_project)})
 
@@ -163,9 +159,7 @@ func main() {
         (project_dir / "file3.py").write_text("def save_data(data, path):\n    pass\n")
 
         # Search for "data" function
-        result = await mcp_client.call_tool(
-            "search_files", {"path": str(project_dir), "pattern": "def.*data", "file_pattern": "*.py"}
-        )
+        result = await mcp_client.call_tool("search_files", {"path": str(project_dir), "pattern": "def.*data", "file_pattern": "*.py"})
 
         content = result.content[0].text
 
@@ -216,9 +210,7 @@ func main() {
         }
 
         for filename, content in files.items():
-            await mcp_client.call_tool(
-                "write_file", {"file_path": str(project_dir / filename), "content": content}
-            )
+            await mcp_client.call_tool("write_file", {"file_path": str(project_dir / filename), "content": content})
 
         # List directory - should see all files
         result = await mcp_client.call_tool("list_directory", {"path": str(project_dir)})
@@ -228,9 +220,7 @@ func main() {
             assert filename in listing
 
     @pytest.mark.slow
-    async def test_concurrent_file_operations_across_languages(
-        self, mcp_client: MCPTestClient, tmp_path: Path
-    ) -> None:
+    async def test_concurrent_file_operations_across_languages(self, mcp_client: MCPTestClient, tmp_path: Path) -> None:
         """Test concurrent operations on files in different languages."""
         project_dir = tmp_path / "concurrent_project"
         project_dir.mkdir()
@@ -246,8 +236,7 @@ func main() {
 
         # Write all files concurrently
         write_tasks = [
-            mcp_client.call_tool("write_file", {"file_path": str(project_dir / fname), "content": content})
-            for fname, content in files
+            mcp_client.call_tool("write_file", {"file_path": str(project_dir / fname), "content": content}) for fname, content in files
         ]
 
         write_results = await asyncio.gather(*write_tasks)
@@ -272,7 +261,7 @@ func main() {
         project_dir.mkdir()
 
         # Try to read non-existent file
-        with pytest.raises(Exception):
+        with pytest.raises((FileNotFoundError, RuntimeError, ValueError, OSError)):
             await mcp_client.call_tool("read_file", {"file_path": str(project_dir / "nonexistent.py")})
 
         # Server should still work after error
@@ -322,9 +311,7 @@ class TestLanguageServerPerformance:
         # Measure time to read all files
         start_time = time.time()
 
-        read_tasks = [
-            mcp_client.call_tool("read_file", {"file_path": str(project_dir / f"file_{i}.py")}) for i in range(50)
-        ]
+        read_tasks = [mcp_client.call_tool("read_file", {"file_path": str(project_dir / f"file_{i}.py")}) for i in range(50)]
 
         results = await asyncio.gather(*read_tasks, return_exceptions=True)
 
@@ -350,7 +337,8 @@ class TestLanguageServerPerformance:
             subdir.mkdir()
             for j in range(20):
                 file_path = subdir / f"file_{j}.py"
-                file_path.write_text(f"""
+                file_path.write_text(
+                    f"""
 # Module {i}, File {j}
 
 def process_{i}_{j}(data):
@@ -362,14 +350,13 @@ def calculate_{i}_{j}(value):
 class Handler_{i}_{j}:
     def handle(self):
         pass
-""")
+"""
+                )
 
         # Measure search time
         start_time = time.time()
 
-        result = await mcp_client.call_tool(
-            "search_files", {"path": str(project_dir), "pattern": "def process", "file_pattern": "*.py"}
-        )
+        result = await mcp_client.call_tool("search_files", {"path": str(project_dir), "pattern": "def process", "file_pattern": "*.py"})
 
         elapsed = time.time() - start_time
 

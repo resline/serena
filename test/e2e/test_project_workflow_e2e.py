@@ -11,9 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from solidlsp.ls_config import Language
 from test.e2e.mcp_test_client import MCPTestClient
-from test.e2e.standalone_utils import StandaloneTestEnv
 
 
 @pytest.mark.e2e
@@ -22,9 +20,7 @@ from test.e2e.standalone_utils import StandaloneTestEnv
 class TestProjectWorkflows:
     """Tests for complete project workflow scenarios."""
 
-    async def test_create_simple_python_project_workflow(
-        self, mcp_client: MCPTestClient, tmp_path: Path
-    ) -> None:
+    async def test_create_simple_python_project_workflow(self, mcp_client: MCPTestClient, tmp_path: Path) -> None:
         """Test workflow: create simple Python project from scratch."""
         project_dir = tmp_path / "simple_project"
         project_dir.mkdir()
@@ -56,9 +52,7 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 """
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "src" / "main.py"), "content": main_content}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "src" / "main.py"), "content": main_content})
 
         # Step 3: Create test file
         test_content = """\"\"\"Tests for main module.\"\"\"
@@ -77,9 +71,7 @@ def test_multiply():
     assert multiply(2, 3) == 6
     assert multiply(-1, 5) == -5
 """
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "tests" / "test_main.py"), "content": test_content}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "tests" / "test_main.py"), "content": test_content})
 
         # Step 4: Create README
         readme_content = """# Simple Project
@@ -104,9 +96,7 @@ python src/main.py
 pytest tests/
 ```
 """
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "README.md"), "content": readme_content}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "README.md"), "content": readme_content})
 
         # Step 5: Verify project structure
         result = await mcp_client.call_tool("list_directory", {"path": str(project_dir)})
@@ -137,9 +127,7 @@ pytest tests/
   }
 }
 """
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "package.json"), "content": package_json}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "package.json"), "content": package_json})
 
         # Create tsconfig.json
         tsconfig = """{
@@ -154,9 +142,7 @@ pytest tests/
   "exclude": ["node_modules", "dist"]
 }
 """
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "tsconfig.json"), "content": tsconfig}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "tsconfig.json"), "content": tsconfig})
 
         # Create source file
         (project_dir / "src").mkdir()
@@ -173,9 +159,7 @@ export default function main(): void {
     console.log(`2 + 2 = ${add(2, 2)}`);
 }
 """
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "src" / "index.ts"), "content": ts_content}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "src" / "index.ts"), "content": ts_content})
 
         # Verify
         result = await mcp_client.call_tool("list_directory", {"path": str(project_dir)})
@@ -204,23 +188,15 @@ def test_old_calculate():
 """
 
         # Write original files
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "main.py"), "content": old_module}
-        )
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "test_main.py"), "content": old_test}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "main.py"), "content": old_module})
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "test_main.py"), "content": old_test})
 
         # Refactor: rename function
         new_module = old_module.replace("old_calculate", "calculate_sum")
         new_test = old_test.replace("old_calculate", "calculate_sum")
 
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "main.py"), "content": new_module}
-        )
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "test_main.py"), "content": new_test}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "main.py"), "content": new_module})
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "test_main.py"), "content": new_test})
 
         # Verify refactoring
         main_result = await mcp_client.call_tool("read_file", {"file_path": str(project_dir / "main.py")})
@@ -244,9 +220,7 @@ def test_old_calculate():
     return f"Hello, {name}!"
 """
 
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "utils.py"), "content": existing_code}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "utils.py"), "content": existing_code})
 
         # Add new feature: farewell function
         updated_code = """def greet(name):
@@ -257,9 +231,7 @@ def farewell(name):
     return f"Goodbye, {name}!"
 """
 
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "utils.py"), "content": updated_code}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "utils.py"), "content": updated_code})
 
         # Add tests for new feature
         test_code = """from utils import greet, farewell
@@ -273,9 +245,7 @@ def test_farewell():
     assert farewell("Bob") == "Goodbye, Bob!"
 """
 
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "test_utils.py"), "content": test_code}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "test_utils.py"), "content": test_code})
 
         # Verify
         result = await mcp_client.call_tool("read_file", {"file_path": str(project_dir / "utils.py")})
@@ -295,9 +265,7 @@ def test_farewell():
 Basic project description.
 """
 
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "README.md"), "content": initial_readme}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "README.md"), "content": initial_readme})
 
         # Update with comprehensive documentation
         updated_readme = """# My Project
@@ -329,9 +297,7 @@ result = process_data("input.csv")
 MIT License
 """
 
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "README.md"), "content": updated_readme}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "README.md"), "content": updated_readme})
 
         # Verify update
         result = await mcp_client.call_tool("read_file", {"file_path": str(project_dir / "README.md")})
@@ -371,9 +337,7 @@ class DataProcessor:
         return len(self.data)
 """
 
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "src" / "processor.py"), "content": initial_code}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "src" / "processor.py"), "content": initial_code})
 
         # Phase 3: Add tests
         test_code = """\"\"\"Tests for processor module.\"\"\"
@@ -394,9 +358,7 @@ def test_multiple_items():
     assert processor.get_count() == 2
 """
 
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "tests" / "test_processor.py"), "content": test_code}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "tests" / "test_processor.py"), "content": test_code})
 
         # Phase 4: Add documentation
         docs_content = """# Data Processor Documentation
@@ -423,9 +385,7 @@ print(processor.get_count())  # Output: 1
 ```
 """
 
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "docs" / "api.md"), "content": docs_content}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "docs" / "api.md"), "content": docs_content})
 
         # Phase 5: Add configuration
         config_content = """[tool.pytest.ini_options]
@@ -436,9 +396,7 @@ python_files = "test_*.py"
 line-length = 100
 """
 
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "pyproject.toml"), "content": config_content}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "pyproject.toml"), "content": config_content})
 
         # Verify complete structure
         result = await mcp_client.call_tool("list_directory", {"path": str(project_dir)})
@@ -502,9 +460,7 @@ def validate_input(value):
     return value is not None and len(str(value)) > 0
 """
 
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(shared_dir / "utils.py"), "content": shared_utils}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(shared_dir / "utils.py"), "content": shared_utils})
 
         # Create project using shared utilities
         project_dir = tmp_path / "project"
@@ -524,9 +480,7 @@ def process(data):
     return format_message(data)
 """
 
-        await mcp_client.call_tool(
-            "write_file", {"file_path": str(project_dir / "main.py"), "content": project_code}
-        )
+        await mcp_client.call_tool("write_file", {"file_path": str(project_dir / "main.py"), "content": project_code})
 
         # Verify structure
         shared_result = await mcp_client.call_tool("list_directory", {"path": str(shared_dir)})
