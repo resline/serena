@@ -385,7 +385,7 @@ jobs:
 
           if [ -f "test-results/junit.xml" ]; then
             # Parse XML using Python for portability
-            python3 - <<'PYTHON_EOF'
+            python3 - <<-'PYTHON_EOF'
             import xml.etree.ElementTree as ET
             import os
 
@@ -415,7 +415,7 @@ jobs:
                             f.write("❌ Some tests failed. Check artifacts for details.\n")
             except Exception as e:
                 print(f"Failed to parse test results: {e}")
-PYTHON_EOF
+            PYTHON_EOF
           else
             echo "⚠️ Test results file not found" >> $GITHUB_STEP_SUMMARY
           fi
@@ -639,7 +639,7 @@ PYTHON_EOF
                             f.write("❌ Some tests failed. Check artifacts for details.\n")
             except Exception as e:
                 print(f"Failed to parse test results: {e}")
-PYTHON_EOF
+            PYTHON_EOF
           else
             echo "⚠️ Test results file not found" >> $GITHUB_STEP_SUMMARY
           fi
