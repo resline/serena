@@ -261,9 +261,12 @@ jobs:
           ls -la build/ || echo "build/ not found"
           ls -la build/language_servers/ || echo "build/language_servers/ not found"
 
-          # Use absolute path for language servers to avoid path resolution issues
+          # Use absolute paths for all data directories to avoid path resolution issues
           WORKSPACE=$(pwd)
           LANG_SERVERS_PATH="${WORKSPACE}/build/language_servers"
+          SERENA_SRC="${WORKSPACE}/src/serena"
+          SOLIDLSP_SRC="${WORKSPACE}/src/solidlsp"
+          INTERPROMPT_SRC="${WORKSPACE}/src/interprompt"
 
           if [ ! -d "${LANG_SERVERS_PATH}" ]; then
             echo "ERROR: Language servers directory not found at ${LANG_SERVERS_PATH}"
@@ -288,9 +291,9 @@ jobs:
             --workpath build/pyinstaller \
             --specpath build \
             --add-data "${LANG_SERVERS_PATH}:language_servers" \
-            --add-data "src/serena:serena" \
-            --add-data "src/solidlsp:solidlsp" \
-            --add-data "src/interprompt:interprompt" \
+            --add-data "${SERENA_SRC}:serena" \
+            --add-data "${SOLIDLSP_SRC}:solidlsp" \
+            --add-data "${INTERPROMPT_SRC}:interprompt" \
             --hidden-import serena.agent \
             --hidden-import serena.cli \
             --hidden-import serena.util.logging \
