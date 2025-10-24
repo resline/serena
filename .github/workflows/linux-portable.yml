@@ -112,7 +112,7 @@ jobs:
 
           # gopls (Linux x64 specific)
           download_file \
-            "https://github.com/golang/tools/releases/download/gopls/v0.20.0/gopls_v0.20.0_linux_amd64.tar.gz" \
+            "https://go.dev/dl/gopls/v0.20.0/gopls-linux-amd64.tar.gz" \
             "language_servers/gopls.tar.gz"
           mkdir -p language_servers/gopls
           tar -xzf language_servers/gopls.tar.gz -C language_servers/gopls
