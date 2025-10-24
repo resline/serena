@@ -256,6 +256,20 @@ jobs:
           echo "UV version: $(uv --version)"
           echo "Working directory: $(pwd)"
 
+          # Debug: Check directory structure
+          echo "Checking build directory structure:"
+          ls -la build/ || echo "build/ not found"
+          ls -la build/language_servers/ || echo "build/language_servers/ not found"
+
+          # Use absolute path for language servers to avoid path resolution issues
+          WORKSPACE=$(pwd)
+          LANG_SERVERS_PATH="${WORKSPACE}/build/language_servers"
+
+          if [ ! -d "${LANG_SERVERS_PATH}" ]; then
+            echo "ERROR: Language servers directory not found at ${LANG_SERVERS_PATH}"
+            exit 1
+          fi
+
           # Build with PyInstaller - simplified arguments
           uv run pyinstaller \
             --name "${OUTPUT_NAME}" \
@@ -273,7 +287,7 @@ jobs:
             --distpath dist \
             --workpath build/pyinstaller \
             --specpath build \
-            --add-data "build/language_servers:language_servers" \
+            --add-data "${LANG_SERVERS_PATH}:language_servers" \
             --add-data "src/serena:serena" \
             --add-data "src/solidlsp:solidlsp" \
             --add-data "src/interprompt:interprompt" \
