@@ -969,26 +969,80 @@ jobs:
           }
 
   # Run E2E tests on built artifacts
-  test-e2e:
-    name: E2E Tests (${{ matrix.arch }}, ${{ matrix.bundle_tier }})
+  # Note: Matrix expansion for E2E tests is done via separate job calls
+  # to avoid GitHub Actions limitation of matrix + uses in same job
+  test-e2e-x64-essential:
+    name: E2E Tests (x64, essential)
     needs: build-portable
-    if: inputs.upload_artifacts != false && needs.build-portable.result == 'success'
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: ${{ fromJson(inputs.architecture == 'both' && '["x64", "arm64"]' || format('["{0}"]', inputs.architecture || 'x64')) }}
-        bundle_tier: ${{ fromJson(inputs.bundle_tier == 'all' && '["essential", "complete", "full"]' || (inputs.bundle_tier && format('["{0}"]', inputs.bundle_tier) || '["essential", "complete", "full"]')) }}
+    if: inputs.upload_artifacts != false && needs.build-portable.result == 'success' && (inputs.architecture == 'x64' || inputs.architecture == 'both') && (inputs.bundle_tier == 'essential' || inputs.bundle_tier == 'all')
     uses: ./.github/workflows/test-e2e-portable.yml
     with:
-      build_artifact_name: serena-windows-${{ matrix.arch }}-${{ matrix.bundle_tier }}
-      tier: ${{ matrix.bundle_tier }}
-      architecture: ${{ matrix.arch }}
+      build_artifact_name: serena-windows-x64-essential
+      tier: essential
+      architecture: x64
+
+  test-e2e-x64-complete:
+    name: E2E Tests (x64, complete)
+    needs: build-portable
+    if: inputs.upload_artifacts != false && needs.build-portable.result == 'success' && (inputs.architecture == 'x64' || inputs.architecture == 'both') && (inputs.bundle_tier == 'complete' || inputs.bundle_tier == 'all')
+    uses: ./.github/workflows/test-e2e-portable.yml
+    with:
+      build_artifact_name: serena-windows-x64-complete
+      tier: complete
+      architecture: x64
+
+  test-e2e-x64-full:
+    name: E2E Tests (x64, full)
+    needs: build-portable
+    if: inputs.upload_artifacts != false && needs.build-portable.result == 'success' && (inputs.architecture == 'x64' || inputs.architecture == 'both') && (inputs.bundle_tier == 'full' || inputs.bundle_tier == 'all')
+    uses: ./.github/workflows/test-e2e-portable.yml
+    with:
+      build_artifact_name: serena-windows-x64-full
+      tier: full
+      architecture: x64
+
+  test-e2e-arm64-essential:
+    name: E2E Tests (arm64, essential)
+    needs: build-portable
+    if: inputs.upload_artifacts != false && needs.build-portable.result == 'success' && (inputs.architecture == 'arm64' || inputs.architecture == 'both') && (inputs.bundle_tier == 'essential' || inputs.bundle_tier == 'all')
+    uses: ./.github/workflows/test-e2e-portable.yml
+    with:
+      build_artifact_name: serena-windows-arm64-essential
+      tier: essential
+      architecture: arm64
+
+  test-e2e-arm64-complete:
+    name: E2E Tests (arm64, complete)
+    needs: build-portable
+    if: inputs.upload_artifacts != false && needs.build-portable.result == 'success' && (inputs.architecture == 'arm64' || inputs.architecture == 'both') && (inputs.bundle_tier == 'complete' || inputs.bundle_tier == 'all')
+    uses: ./.github/workflows/test-e2e-portable.yml
+    with:
+      build_artifact_name: serena-windows-arm64-complete
+      tier: complete
+      architecture: arm64
+
+  test-e2e-arm64-full:
+    name: E2E Tests (arm64, full)
+    needs: build-portable
+    if: inputs.upload_artifacts != false && needs.build-portable.result == 'success' && (inputs.architecture == 'arm64' || inputs.architecture == 'both') && (inputs.bundle_tier == 'full' || inputs.bundle_tier == 'all')
+    uses: ./.github/workflows/test-e2e-portable.yml
+    with:
+      build_artifact_name: serena-windows-arm64-full
+      tier: full
+      architecture: arm64
 
   # Create a summary job that runs after all builds complete
   build-summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: [build-portable, test-e2e]
+    needs:
+      - build-portable
+      - test-e2e-x64-essential
+      - test-e2e-x64-complete
+      - test-e2e-x64-full
+      - test-e2e-arm64-essential
+      - test-e2e-arm64-complete
+      - test-e2e-arm64-full
     if: always()
     steps:
       - name: Download all artifacts
@@ -1008,12 +1062,32 @@ jobs:
             echo "❌ **Build Status**: FAILED" >> $GITHUB_STEP_SUMMARY
           fi
 
-          if [ "${{ needs.test-e2e.result }}" == "success" ]; then
-            echo "✅ **E2E Test Status**: SUCCESS" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.test-e2e.result }}" == "skipped" ]; then
-            echo "⏭️ **E2E Test Status**: SKIPPED" >> $GITHUB_STEP_SUMMARY
+          # Aggregate E2E test results from all test jobs
+          e2e_success=0
+          e2e_failed=0
+          e2e_skipped=0
+
+          for result in "${{ needs.test-e2e-x64-essential.result }}" \
+                        "${{ needs.test-e2e-x64-complete.result }}" \
+                        "${{ needs.test-e2e-x64-full.result }}" \
+                        "${{ needs.test-e2e-arm64-essential.result }}" \
+                        "${{ needs.test-e2e-arm64-complete.result }}" \
+                        "${{ needs.test-e2e-arm64-full.result }}"; do
+            if [ "$result" == "success" ]; then
+              ((e2e_success++))
+            elif [ "$result" == "skipped" ]; then
+              ((e2e_skipped++))
+            elif [ "$result" == "failure" ]; then
+              ((e2e_failed++))
+            fi
+          done
+
+          if [ $e2e_failed -gt 0 ]; then
+            echo "❌ **E2E Test Status**: $e2e_failed FAILED, $e2e_success PASSED, $e2e_skipped SKIPPED" >> $GITHUB_STEP_SUMMARY
+          elif [ $e2e_success -gt 0 ]; then
+            echo "✅ **E2E Test Status**: ALL PASSED ($e2e_success tests, $e2e_skipped skipped)" >> $GITHUB_STEP_SUMMARY
           else
-            echo "❌ **E2E Test Status**: FAILED" >> $GITHUB_STEP_SUMMARY
+            echo "⏭️ **E2E Test Status**: ALL SKIPPED" >> $GITHUB_STEP_SUMMARY
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
