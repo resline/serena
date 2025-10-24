@@ -120,7 +120,7 @@ jobs:
 
           # Eclipse JDT Language Server (platform-independent)
           download_file \
-            "https://download.eclipse.org/jdtls/milestones/1.50.0/jdt-language-server-1.50.0-202409261450.tar.gz" \
+            "https://download.eclipse.org/jdtls/milestones/1.51.0/jdt-language-server-1.51.0-202510022025.tar.gz" \
             "language_servers/java.tar.gz"
           mkdir -p language_servers/java
           tar -xzf language_servers/java.tar.gz -C language_servers/java
