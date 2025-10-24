@@ -195,6 +195,9 @@ jobs:
       - name: Comment on PR
         if: github.event_name == 'pull_request' && always()
         uses: actions/github-script@v7
+        env:
+          INPUT_TIER: ${{ inputs.tier }}
+          INPUT_ARCH: ${{ inputs.architecture }}
         with:
           script: |
             const fs = require('fs');
@@ -218,7 +221,7 @@ jobs:
 
               const comment = `## E2E Test Results ${status}
 
-**Build:** ${{ inputs.tier }} (${{ inputs.architecture }})
+**Build:** ${process.env.INPUT_TIER} (${process.env.INPUT_ARCH})
 
 | Metric | Value |
 |--------|-------|
@@ -227,7 +230,7 @@ jobs:
 | Errors | ${errors} |
 | Duration | ${testsuite.time}s |
 
-[View detailed results](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+[View detailed results](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
               `;
 
               github.rest.issues.createComment({
@@ -421,6 +424,9 @@ EOF
       - name: Comment on PR
         if: github.event_name == 'pull_request' && always()
         uses: actions/github-script@v7
+        env:
+          INPUT_TIER: ${{ inputs.tier }}
+          INPUT_ARCH: ${{ inputs.architecture }}
         with:
           script: |
             const fs = require('fs');
@@ -444,7 +450,7 @@ EOF
 
               const comment = `## E2E Test Results (Linux) ${status}
 
-**Build:** ${{ inputs.tier }} (${{ inputs.architecture }})
+**Build:** ${process.env.INPUT_TIER} (${process.env.INPUT_ARCH})
 
 | Metric | Value |
 |--------|-------|
@@ -453,7 +459,7 @@ EOF
 | Errors | ${errors} |
 | Duration | ${testsuite.time}s |
 
-[View detailed results](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+[View detailed results](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
               `;
 
               github.rest.issues.createComment({
@@ -643,6 +649,9 @@ EOF
       - name: Comment on PR
         if: github.event_name == 'pull_request' && always()
         uses: actions/github-script@v7
+        env:
+          INPUT_TIER: ${{ inputs.tier }}
+          INPUT_ARCH: ${{ inputs.architecture }}
         with:
           script: |
             const fs = require('fs');
@@ -666,7 +675,7 @@ EOF
 
               const comment = `## E2E Test Results (macOS) ${status}
 
-**Build:** ${{ inputs.tier }} (${{ inputs.architecture }})
+**Build:** ${process.env.INPUT_TIER} (${process.env.INPUT_ARCH})
 
 | Metric | Value |
 |--------|-------|
@@ -675,7 +684,7 @@ EOF
 | Errors | ${errors} |
 | Duration | ${testsuite.time}s |
 
-[View detailed results](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+[View detailed results](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
               `;
 
               github.rest.issues.createComment({
