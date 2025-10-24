@@ -110,12 +110,13 @@ jobs:
           gunzip -c language_servers/rust-analyzer.gz > language_servers/rust-analyzer/rust-analyzer
           chmod +x language_servers/rust-analyzer/rust-analyzer
 
-          # gopls (Linux x64 specific)
-          download_file \
-            "https://go.dev/dl/gopls/v0.20.0/gopls-linux-amd64.tar.gz" \
-            "language_servers/gopls.tar.gz"
-          mkdir -p language_servers/gopls
-          tar -xzf language_servers/gopls.tar.gz -C language_servers/gopls
+          # Note: gopls doesn't publish pre-built binaries in releases
+          # Skip gopls for now - can be added later via 'go install' if Go runtime is bundled
+          # download_file \
+          #   "https://go.dev/dl/gopls/v0.20.0/gopls-linux-amd64.tar.gz" \
+          #   "language_servers/gopls.tar.gz"
+          # mkdir -p language_servers/gopls
+          # tar -xzf language_servers/gopls.tar.gz -C language_servers/gopls
 
           # Eclipse JDT Language Server (platform-independent)
           download_file \
