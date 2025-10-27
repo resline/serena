@@ -325,10 +325,9 @@ jobs:
             .venv
             ~/.cache/uv
             %APPDATA%\uv\cache
-          key: uv-windows-${{ matrix.arch }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('uv.lock', 'pyproject.toml') }}-v2
+          key: uv-${{ runner.os }}-${{ runner.arch }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('uv.lock') }}-v3
           restore-keys: |
-            uv-windows-${{ matrix.arch }}-${{ env.PYTHON_VERSION }}-
-            uv-windows-${{ matrix.arch }}-
+            uv-${{ runner.os }}-${{ runner.arch }}-py${{ env.PYTHON_VERSION }}-
 
       # Prepare environment directories
       - name: Prepare build environment

@@ -171,9 +171,9 @@ jobs:
           path: |
             .venv
             ~/.cache/uv
-          key: uv-linux-x64-${{ env.PYTHON_VERSION }}-${{ hashFiles('uv.lock', 'pyproject.toml') }}-v1
+          key: uv-${{ runner.os }}-${{ runner.arch }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('uv.lock') }}-v3
           restore-keys: |
-            uv-linux-x64-${{ env.PYTHON_VERSION }}-
+            uv-${{ runner.os }}-${{ runner.arch }}-py${{ env.PYTHON_VERSION }}-
 
       - name: Prepare build environment
         run: |
