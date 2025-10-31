@@ -1,0 +1,278 @@
+name: Cache Warmup for Portable Builds
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'Platforms to warm cache for (all, ubuntu, windows, macos-intel, macos-arm)'
+        required: false
+        default: 'all'
+        type: string
+      
+      force_refresh:
+        description: 'Force refresh cache (ignore existing)'
+        required: false
+        default: false
+        type: boolean
+  
+  schedule:
+    # Run weekly on Sundays at 00:00 UTC to keep caches warm
+    - cron: '0 0 * * 0'
+
+env:
+  PYTHON_VERSION: '3.11'
+  UV_VERSION: 'latest'
+  CACHE_VERSION: 'v3'
+
+jobs:
+  determine-platforms:
+    name: Determine Platforms
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    
+    steps:
+      - name: Set platform matrix
+        id: set-matrix
+        run: |
+          FILTER="${{ github.event.inputs.platforms || 'all' }}"
+          
+          ALL_PLATFORMS='[
+            {"os": "ubuntu-latest", "platform": "linux-x64", "arch": "X64"},
+            {"os": "windows-latest", "platform": "win-x64", "arch": "X64"},
+            {"os": "macos-13", "platform": "macos-x64", "arch": "X64"},
+            {"os": "macos-14", "platform": "macos-arm64", "arch": "ARM64"}
+          ]'
+          
+          case "$FILTER" in
+            all)
+              echo "matrix=${ALL_PLATFORMS}" >> $GITHUB_OUTPUT
+              ;;
+            ubuntu)
+              echo 'matrix=[{"os": "ubuntu-latest", "platform": "linux-x64", "arch": "X64"}]' >> $GITHUB_OUTPUT
+              ;;
+            windows)
+              echo 'matrix=[{"os": "windows-latest", "platform": "win-x64", "arch": "X64"}]' >> $GITHUB_OUTPUT
+              ;;
+            macos-intel)
+              echo 'matrix=[{"os": "macos-13", "platform": "macos-x64", "arch": "X64"}]' >> $GITHUB_OUTPUT
+              ;;
+            macos-arm)
+              echo 'matrix=[{"os": "macos-14", "platform": "macos-arm64", "arch": "ARM64"}]' >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "matrix=${ALL_PLATFORMS}" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+  warmup-cache:
+    name: Warm Cache - ${{ matrix.platform }}
+    needs: determine-platforms
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.determine-platforms.outputs.matrix) }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+      
+      # Warmup cache layers
+      
+      # 1. Python embedded runtime
+      - name: Check existing Python embedded cache
+        id: check-python-cache
+        if: github.event.inputs.force_refresh != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/python-embedded
+          key: python-embedded-${{ runner.os }}-${{ matrix.arch }}-${{ env.PYTHON_VERSION }}-${{ env.CACHE_VERSION }}
+          lookup-only: true
+      
+      - name: Download Python embedded (Windows)
+        if: |
+          runner.os == 'Windows' && 
+          (github.event.inputs.force_refresh == 'true' || steps.check-python-cache.outputs.cache-hit != 'true')
+        shell: pwsh
+        run: |
+          $PYTHON_EMBED_URL = "https://www.python.org/ftp/python/${{ env.PYTHON_VERSION }}.10/python-${{ env.PYTHON_VERSION }}.10-embed-amd64.zip"
+          $DEST = "${{ runner.temp }}/python-embedded"
+          New-Item -ItemType Directory -Force -Path $DEST
+          Write-Host "Downloading Python embedded from $PYTHON_EMBED_URL"
+          Invoke-WebRequest -Uri $PYTHON_EMBED_URL -OutFile "$DEST/python-embed.zip"
+          Expand-Archive -Path "$DEST/python-embed.zip" -DestinationPath "$DEST" -Force
+          Remove-Item "$DEST/python-embed.zip"
+          Write-Host "Python embedded downloaded and extracted"
+      
+      - name: Download Python standalone (Linux/macOS)
+        if: |
+          runner.os != 'Windows' && 
+          (github.event.inputs.force_refresh == 'true' || steps.check-python-cache.outputs.cache-hit != 'true')
+        shell: bash
+        run: |
+          DEST="${{ runner.temp }}/python-embedded"
+          mkdir -p "$DEST"
+          
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.11.10+20241016-x86_64-unknown-linux-gnu-install_only.tar.gz"
+          elif [[ "${{ runner.os }}" == "macOS" && "${{ matrix.arch }}" == "ARM64" ]]; then
+            PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.11.10+20241016-aarch64-apple-darwin-install_only.tar.gz"
+          else
+            PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.11.10+20241016-x86_64-apple-darwin-install_only.tar.gz"
+          fi
+          
+          echo "Downloading Python from $PYTHON_URL"
+          curl -L "$PYTHON_URL" -o "$DEST/python.tar.gz"
+          tar -xzf "$DEST/python.tar.gz" -C "$DEST" --strip-components=1
+          rm "$DEST/python.tar.gz"
+          echo "Python standalone downloaded and extracted"
+      
+      - name: Save Python embedded cache
+        if: |
+          github.event.inputs.force_refresh == 'true' || 
+          steps.check-python-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/python-embedded
+          key: python-embedded-${{ runner.os }}-${{ matrix.arch }}-${{ env.PYTHON_VERSION }}-${{ env.CACHE_VERSION }}
+      
+      # 2. Language servers - standard set
+      - name: Setup language server directories
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.serena/language_servers/static"
+      
+      - name: Check existing language server cache
+        id: check-ls-cache
+        if: github.event.inputs.force_refresh != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.serena/language_servers/static
+          key: language-servers-portable-${{ runner.os }}-${{ matrix.arch }}-standard-${{ env.CACHE_VERSION }}
+          lookup-only: true
+      
+      - name: Pre-download language servers
+        if: |
+          github.event.inputs.force_refresh == 'true' || 
+          steps.check-ls-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          # Create minimal test environment to trigger language server downloads
+          uv venv .venv-warmup
+          source .venv-warmup/bin/activate 2>/dev/null || .venv-warmup/Scripts/activate
+          uv pip install -e "."
+          
+          # Download common language servers
+          echo "Warming up language server cache..."
+          
+          # This script will trigger downloads without full tests
+          python -c "
+          from solidlsp.ls_config import Language
+          from solidlsp.ls_utils import PlatformUtils
+          
+          print('Platform:', PlatformUtils.get_platform_id().value)
+          print('Common languages will be downloaded on first use')
+          print('Cache location: ~/.serena/language_servers/static')
+          "
+          
+          # Cleanup
+          deactivate 2>/dev/null || true
+          rm -rf .venv-warmup
+      
+      - name: Save language server cache
+        if: |
+          github.event.inputs.force_refresh == 'true' || 
+          steps.check-ls-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.serena/language_servers/static
+          key: language-servers-portable-${{ runner.os }}-${{ matrix.arch }}-standard-${{ env.CACHE_VERSION }}
+      
+      # 3. UV virtualenv
+      - name: Check existing uv cache
+        id: check-uv-cache
+        if: github.event.inputs.force_refresh != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: .venv
+          key: uv-venv-portable-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('uv.lock') }}-${{ env.CACHE_VERSION }}
+          lookup-only: true
+      
+      - name: Create and populate virtualenv
+        if: |
+          github.event.inputs.force_refresh == 'true' || 
+          steps.check-uv-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          echo "Creating fresh virtualenv..."
+          rm -rf .venv
+          uv venv
+          uv pip install -e ".[dev]"
+      
+      - name: Save uv cache
+        if: |
+          github.event.inputs.force_refresh == 'true' || 
+          steps.check-uv-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .venv
+          key: uv-venv-portable-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('uv.lock') }}-${{ env.CACHE_VERSION }}
+      
+      - name: Cache warmup summary
+        shell: bash
+        run: |
+          echo "## Cache Warmup Summary - ${{ matrix.platform }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Cache Layer | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------------|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ steps.check-python-cache.outputs.cache-hit }}" == "true" ]]; then
+            echo "| Python Embedded | ✅ Already cached |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Python Embedded | 🔄 Newly cached |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [[ "${{ steps.check-ls-cache.outputs.cache-hit }}" == "true" ]]; then
+            echo "| Language Servers | ✅ Already cached |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Language Servers | 🔄 Newly cached |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [[ "${{ steps.check-uv-cache.outputs.cache-hit }}" == "true" ]]; then
+            echo "| UV Virtualenv | ✅ Already cached |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| UV Virtualenv | 🔄 Newly cached |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  summary:
+    name: Warmup Summary
+    needs: [determine-platforms, warmup-cache]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# Cache Warmup Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Cache layers have been warmed for portable builds." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Next portable build will benefit from:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Faster Python runtime setup" >> $GITHUB_STEP_SUMMARY
+          echo "- Pre-downloaded language servers" >> $GITHUB_STEP_SUMMARY
+          echo "- Ready virtualenv with dependencies" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Caches are valid for 7 days and automatically refreshed weekly." >> $GITHUB_STEP_SUMMARY

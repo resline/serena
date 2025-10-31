@@ -1,0 +1,440 @@
+name: Build Portable Packages
+
+on:
+  release:
+    types: [published]
+  
+  workflow_dispatch:
+    inputs:
+      platform_filter:
+        description: 'Platform filter (all, ubuntu, windows, macos-intel, macos-arm, or comma-separated)'
+        required: false
+        default: 'all'
+        type: string
+      
+      language_set:
+        description: 'Language set (minimal, standard, full)'
+        required: false
+        default: 'standard'
+        type: choice
+        options:
+          - minimal
+          - standard
+          - full
+      
+      include_all_languages:
+        description: 'Override: include ALL languages (ignores language_set)'
+        required: false
+        default: false
+        type: boolean
+      
+      skip_tests:
+        description: 'Skip integration tests (faster builds)'
+        required: false
+        default: false
+        type: boolean
+      
+      upload_to_release:
+        description: 'Upload artifacts to GitHub release'
+        required: false
+        default: true
+        type: boolean
+
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  PYTHON_VERSION: '3.11'
+  UV_VERSION: 'latest'
+  CACHE_VERSION: 'v3'
+
+jobs:
+  # Determine which platforms to build
+  prepare-matrix:
+    name: Prepare Build Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      language_config: ${{ steps.set-langs.outputs.config }}
+      version: ${{ steps.version.outputs.version }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            VERSION="${{ github.event.release.tag_name }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')-dev"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Building version: ${VERSION}"
+      
+      - name: Set language configuration
+        id: set-langs
+        run: |
+          if [[ "${{ github.event.inputs.include_all_languages }}" == "true" ]]; then
+            echo "config=full" >> $GITHUB_OUTPUT
+          else
+            echo "config=${{ github.event.inputs.language_set || 'standard' }}" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Set build matrix
+        id: set-matrix
+        run: |
+          FILTER="${{ github.event.inputs.platform_filter || 'all' }}"
+          
+          ALL_PLATFORMS='[
+            {"os": "ubuntu-latest", "platform": "linux-x64", "artifact_name": "serena-linux-x64", "runner_cost": 1},
+            {"os": "windows-latest", "platform": "win-x64", "artifact_name": "serena-windows-x64", "runner_cost": 2},
+            {"os": "macos-13", "platform": "macos-x64", "artifact_name": "serena-macos-x64", "runner_cost": 10},
+            {"os": "macos-14", "platform": "macos-arm64", "artifact_name": "serena-macos-arm64", "runner_cost": 10}
+          ]'
+          
+          if [[ "$FILTER" == "all" ]]; then
+            echo "matrix=${ALL_PLATFORMS}" >> $GITHUB_OUTPUT
+          elif [[ "$FILTER" == "ubuntu" ]]; then
+            echo 'matrix=[{"os": "ubuntu-latest", "platform": "linux-x64", "artifact_name": "serena-linux-x64", "runner_cost": 1}]' >> $GITHUB_OUTPUT
+          elif [[ "$FILTER" == "windows" ]]; then
+            echo 'matrix=[{"os": "windows-latest", "platform": "win-x64", "artifact_name": "serena-windows-x64", "runner_cost": 2}]' >> $GITHUB_OUTPUT
+          elif [[ "$FILTER" == "macos-intel" ]]; then
+            echo 'matrix=[{"os": "macos-13", "platform": "macos-x64", "artifact_name": "serena-macos-x64", "runner_cost": 10}]' >> $GITHUB_OUTPUT
+          elif [[ "$FILTER" == "macos-arm" ]]; then
+            echo 'matrix=[{"os": "macos-14", "platform": "macos-arm64", "artifact_name": "serena-macos-arm64", "runner_cost": 10}]' >> $GITHUB_OUTPUT
+          else
+            # Custom comma-separated list
+            SELECTED='['
+            IFS=',' read -ra PLATFORMS <<< "$FILTER"
+            FIRST=true
+            for P in "${PLATFORMS[@]}"; do
+              P=$(echo "$P" | xargs) # trim whitespace
+              case "$P" in
+                ubuntu|linux)
+                  [[ "$FIRST" == "false" ]] && SELECTED+=','
+                  SELECTED+='{"os": "ubuntu-latest", "platform": "linux-x64", "artifact_name": "serena-linux-x64", "runner_cost": 1}'
+                  FIRST=false
+                  ;;
+                windows|win)
+                  [[ "$FIRST" == "false" ]] && SELECTED+=','
+                  SELECTED+='{"os": "windows-latest", "platform": "win-x64", "artifact_name": "serena-windows-x64", "runner_cost": 2}'
+                  FIRST=false
+                  ;;
+                macos-intel|macos-x64)
+                  [[ "$FIRST" == "false" ]] && SELECTED+=','
+                  SELECTED+='{"os": "macos-13", "platform": "macos-x64", "artifact_name": "serena-macos-x64", "runner_cost": 10}'
+                  FIRST=false
+                  ;;
+                macos-arm|macos-arm64)
+                  [[ "$FIRST" == "false" ]] && SELECTED+=','
+                  SELECTED+='{"os": "macos-14", "platform": "macos-arm64", "artifact_name": "serena-macos-arm64", "runner_cost": 10}'
+                  FIRST=false
+                  ;;
+              esac
+            done
+            SELECTED+=']'
+            echo "matrix=${SELECTED}" >> $GITHUB_OUTPUT
+          fi
+
+  # Main build job for each platform
+  build-portable:
+    name: Build ${{ matrix.platform }}
+    needs: prepare-matrix
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+      
+      # Cache strategy: Layer caches by volatility
+      # 1. Python embedded runtime (most stable, platform-specific)
+      - name: Cache Python embedded runtime
+        id: cache-python-embedded
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/python-embedded
+          key: python-embedded-${{ runner.os }}-${{ runner.arch }}-${{ env.PYTHON_VERSION }}-${{ env.CACHE_VERSION }}
+      
+      # 2. Language servers (medium stability, platform+version specific)
+      - name: Cache language servers
+        id: cache-language-servers
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.serena/language_servers/static
+          key: language-servers-portable-${{ runner.os }}-${{ runner.arch }}-${{ needs.prepare-matrix.outputs.language_config }}-${{ env.CACHE_VERSION }}
+          restore-keys: |
+            language-servers-portable-${{ runner.os }}-${{ runner.arch }}-
+            language-servers-${{ runner.os }}-
+      
+      # 3. UV dependencies (changes with lock file)
+      - name: Cache uv virtualenv
+        id: cache-uv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-venv-portable-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('uv.lock') }}-${{ env.CACHE_VERSION }}
+          restore-keys: |
+            uv-venv-portable-${{ runner.os }}-${{ env.PYTHON_VERSION }}-
+      
+      # 4. Build artifacts cache (for incremental builds)
+      - name: Cache build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            build
+            dist
+          key: build-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            build-${{ runner.os }}-
+      
+      - name: Setup build environment
+        shell: bash
+        run: |
+          # Create necessary directories
+          mkdir -p "${{ runner.temp }}/portable-build"
+          mkdir -p "$HOME/.serena/language_servers/static"
+          
+          # Set environment variables for build
+          echo "BUILD_DIR=${{ runner.temp }}/portable-build" >> $GITHUB_ENV
+          echo "PORTABLE_VERSION=${{ needs.prepare-matrix.outputs.version }}" >> $GITHUB_ENV
+          echo "LANGUAGE_CONFIG=${{ needs.prepare-matrix.outputs.language_config }}" >> $GITHUB_ENV
+      
+      - name: Download Python embedded (Windows)
+        if: runner.os == 'Windows' && steps.cache-python-embedded.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $PYTHON_EMBED_URL = "https://www.python.org/ftp/python/${{ env.PYTHON_VERSION }}.10/python-${{ env.PYTHON_VERSION }}.10-embed-amd64.zip"
+          $DEST = "${{ runner.temp }}/python-embedded"
+          New-Item -ItemType Directory -Force -Path $DEST
+          Invoke-WebRequest -Uri $PYTHON_EMBED_URL -OutFile "$DEST/python-embed.zip"
+          Expand-Archive -Path "$DEST/python-embed.zip" -DestinationPath "$DEST" -Force
+          Remove-Item "$DEST/python-embed.zip"
+      
+      - name: Setup Python standalone (Linux/macOS)
+        if: runner.os != 'Windows' && steps.cache-python-embedded.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          DEST="${{ runner.temp }}/python-embedded"
+          mkdir -p "$DEST"
+          
+          # Use python-build-standalone for portable Python
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.11.10+20241016-x86_64-unknown-linux-gnu-install_only.tar.gz"
+          elif [[ "${{ runner.os }}" == "macOS" && "${{ runner.arch }}" == "ARM64" ]]; then
+            PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.11.10+20241016-aarch64-apple-darwin-install_only.tar.gz"
+          else
+            PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.11.10+20241016-x86_64-apple-darwin-install_only.tar.gz"
+          fi
+          
+          curl -L "$PYTHON_URL" -o "$DEST/python.tar.gz"
+          tar -xzf "$DEST/python.tar.gz" -C "$DEST" --strip-components=1
+          rm "$DEST/python.tar.gz"
+      
+      - name: Create virtual environment
+        shell: bash
+        run: |
+          if [ ! -d ".venv" ]; then
+            uv venv
+          fi
+      
+      - name: Install Serena dependencies
+        shell: bash
+        run: |
+          uv pip install -e ".[dev]"
+      
+      - name: Build portable package
+        shell: bash
+        run: |
+          chmod +x scripts/portable/build_portable.sh
+          ./scripts/portable/build_portable.sh \
+            --platform "${{ matrix.platform }}" \
+            --version "${{ needs.prepare-matrix.outputs.version }}" \
+            --language-set "${{ needs.prepare-matrix.outputs.language_config }}" \
+            --python-embedded "${{ runner.temp }}/python-embedded" \
+            --output "${{ env.BUILD_DIR }}"
+        timeout-minutes: 60
+      
+      - name: Test portable package
+        if: github.event.inputs.skip_tests != 'true'
+        shell: bash
+        run: |
+          chmod +x scripts/portable/test_portable.sh
+          ./scripts/portable/test_portable.sh \
+            --package "${{ env.BUILD_DIR }}/${{ matrix.artifact_name }}" \
+            --platform "${{ matrix.platform }}"
+        timeout-minutes: 30
+      
+      - name: Create release archive
+        shell: bash
+        run: |
+          cd "${{ env.BUILD_DIR }}"
+          
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            7z a -tzip "${{ matrix.artifact_name }}-${{ needs.prepare-matrix.outputs.version }}.zip" "${{ matrix.artifact_name }}"
+          else
+            tar -czf "${{ matrix.artifact_name }}-${{ needs.prepare-matrix.outputs.version }}.tar.gz" "${{ matrix.artifact_name }}"
+          fi
+      
+      - name: Generate checksums
+        shell: bash
+        run: |
+          cd "${{ env.BUILD_DIR }}"
+          
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            ARCHIVE="${{ matrix.artifact_name }}-${{ needs.prepare-matrix.outputs.version }}.zip"
+          else
+            ARCHIVE="${{ matrix.artifact_name }}-${{ needs.prepare-matrix.outputs.version }}.tar.gz"
+          fi
+          
+          if command -v sha256sum &> /dev/null; then
+            sha256sum "$ARCHIVE" > "$ARCHIVE.sha256"
+          else
+            shasum -a 256 "$ARCHIVE" > "$ARCHIVE.sha256"
+          fi
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}-${{ needs.prepare-matrix.outputs.version }}
+          path: |
+            ${{ env.BUILD_DIR }}/*.tar.gz
+            ${{ env.BUILD_DIR }}/*.zip
+            ${{ env.BUILD_DIR }}/*.sha256
+          retention-days: 30
+          compression-level: 0  # Already compressed
+      
+      - name: Upload to GitHub Release
+        if: |
+          github.event_name == 'release' ||
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.upload_to_release == 'true')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare-matrix.outputs.version }}
+          files: |
+            ${{ env.BUILD_DIR }}/*.tar.gz
+            ${{ env.BUILD_DIR }}/*.zip
+            ${{ env.BUILD_DIR }}/*.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Generate release manifest
+  generate-manifest:
+    name: Generate Release Manifest
+    needs: [prepare-matrix, build-portable]
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'release' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.upload_to_release == 'true')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Generate manifest
+        shell: bash
+        run: |
+          VERSION="${{ needs.prepare-matrix.outputs.version }}"
+          
+          cat > latest.json << EOF_MANIFEST
+          {
+            "version": "$VERSION",
+            "released_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "language_config": "${{ needs.prepare-matrix.outputs.language_config }}",
+            "platforms": {
+          EOF_MANIFEST
+          
+          FIRST=true
+          for platform_dir in artifacts/*; do
+            if [ -d "$platform_dir" ]; then
+              PLATFORM=$(basename "$platform_dir" | sed "s/-${VERSION}//")
+              
+              # Find the archive file
+              ARCHIVE=$(find "$platform_dir" -name "*.tar.gz" -o -name "*.zip" | head -1)
+              CHECKSUM_FILE="${ARCHIVE}.sha256"
+              
+              if [ -f "$ARCHIVE" ] && [ -f "$CHECKSUM_FILE" ]; then
+                SIZE=$(stat -f%z "$ARCHIVE" 2>/dev/null || stat -c%s "$ARCHIVE")
+                CHECKSUM=$(cat "$CHECKSUM_FILE" | awk '{print $1}')
+                FILENAME=$(basename "$ARCHIVE")
+                
+                [[ "$FIRST" == "false" ]] && echo "," >> latest.json
+                FIRST=false
+                
+                cat >> latest.json << EOF_PLATFORM
+              "$PLATFORM": {
+                "filename": "$FILENAME",
+                "size": $SIZE,
+                "sha256": "$CHECKSUM",
+                "download_url": "https://github.com/${{ github.repository }}/releases/download/$VERSION/$FILENAME"
+              }
+          EOF_PLATFORM
+              fi
+            fi
+          done
+          
+          cat >> latest.json << EOF_FOOTER
+            }
+          }
+          EOF_FOOTER
+          
+          cat latest.json
+      
+      - name: Upload manifest to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare-matrix.outputs.version }}
+          files: latest.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Report build summary
+  build-summary:
+    name: Build Summary
+    needs: [prepare-matrix, build-portable]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# Portable Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.prepare-matrix.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Language Config:** ${{ needs.prepare-matrix.outputs.language_config }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Build Status" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          # Matrix status will be added by GitHub Actions automatically
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Estimated Cost" >> $GITHUB_STEP_SUMMARY
+          echo "Refer to cost estimation documentation for runner minute calculations." >> $GITHUB_STEP_SUMMARY

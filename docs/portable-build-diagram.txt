@@ -1,0 +1,205 @@
+# Portable Build System Architecture Diagram
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            TRIGGER EVENTS                                   │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │   Release    │  │   Git Tag    │  │   Workflow   │  │   Schedule   │  │
+│  │  Published   │  │  (v*.*.*)    │  │   Dispatch   │  │   (Weekly)   │  │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  │
+└─────────┼──────────────────┼──────────────────┼──────────────────┼─────────┘
+          │                  │                  │                  │
+          └──────────────────┴──────────────────┤                  │
+                                                │                  │
+                     ┌──────────────────────────▼──────────────────▼─────────┐
+                     │                 CACHE WARMUP                           │
+                     │         (cache-warmup.yml - Optional)                  │
+                     │  ┌────────────────────────────────────────────────┐   │
+                     │  │  For each platform:                            │   │
+                     │  │  • Download Python embedded (~100MB)           │   │
+                     │  │  • Pre-download language servers (~300MB)      │   │
+                     │  │  • Create UV virtualenv (~200MB)               │   │
+                     │  │  • Cache for 7 days                            │   │
+                     │  └────────────────────────────────────────────────┘   │
+                     │  Time: ~20 min/platform | Cost: ~496 min (all)        │
+                     └────────────────────────────────────────────────────────┘
+                                                │
+                     ┌──────────────────────────▼──────────────────────────┐
+                     │              PREPARE MATRIX                         │
+                     │        (Job 1 - Platform Selection)                 │
+                     │  ┌──────────────────────────────────────────────┐  │
+                     │  │  • Parse inputs (platform_filter, lang_set)  │  │
+                     │  │  • Determine platforms to build              │  │
+                     │  │  • Extract version from tag/pyproject.toml   │  │
+                     │  │  • Output: matrix, version, lang_config      │  │
+                     │  └──────────────────────────────────────────────┘  │
+                     │  Time: <1 min                                       │
+                     └─────────────────────────────────────────────────────┘
+                                                │
+          ┌──────────────────────┬──────────────┼──────────────┬──────────────┐
+          │                      │              │              │              │
+    ┌─────▼─────┐          ┌────▼─────┐  ┌────▼─────┐  ┌────▼─────┐  ┌────▼─────┐
+    │  Linux    │          │ Windows  │  │  macOS   │  │  macOS   │  │   ...    │
+    │  x86_64   │          │  x86_64  │  │  Intel   │  │   ARM    │  │          │
+    └─────┬─────┘          └────┬─────┘  └────┬─────┘  └────┬─────┘  └──────────┘
+          │                     │             │             │
+          └──────────────┬──────┴─────────────┴─────────────┘
+                         │
+    ┌────────────────────▼────────────────────────────────────────────────────┐
+    │                    BUILD PORTABLE (Matrix Job)                          │
+    │                   (Job 2 - Per Platform Build)                          │
+    │                                                                          │
+    │  ┌────────────────────────────────────────────────────────────────────┐ │
+    │  │ PHASE 1: SETUP (2-3 min)                                          │ │
+    │  │  • Checkout code                                                   │ │
+    │  │  • Setup Python 3.11                                               │ │
+    │  │  • Install UV                                                      │ │
+    │  │  • Create directories                                              │ │
+    │  └────────────────────────────────────────────────────────────────────┘ │
+    │                                                                          │
+    │  ┌────────────────────────────────────────────────────────────────────┐ │
+    │  │ PHASE 2: CACHE RESTORE (1-2 min with hit, 10-15 without)         │ │
+    │  │  ┌─────────────────────────────────────────────────────────────┐  │ │
+    │  │  │ Layer 1: Python Embedded                                    │  │ │
+    │  │  │ • Key: python-embedded-{os}-{arch}-3.11-v3                  │  │ │
+    │  │  │ • Size: ~100MB                                              │  │ │
+    │  │  └─────────────────────────────────────────────────────────────┘  │ │
+    │  │  ┌─────────────────────────────────────────────────────────────┐  │ │
+    │  │  │ Layer 2: Language Servers                                   │  │ │
+    │  │  │ • Key: language-servers-portable-{os}-{arch}-{lang}-v3      │  │ │
+    │  │  │ • Size: ~300MB                                              │  │ │
+    │  │  │ • Restore-keys: ...-{os}-{arch}-, ...-{os}-                │  │ │
+    │  │  └─────────────────────────────────────────────────────────────┘  │ │
+    │  │  ┌─────────────────────────────────────────────────────────────┐  │ │
+    │  │  │ Layer 3: UV Virtualenv                                      │  │ │
+    │  │  │ • Key: uv-venv-portable-{os}-3.11-{hash(uv.lock)}-v3       │  │ │
+    │  │  │ • Size: ~200MB                                              │  │ │
+    │  │  │ • Restore-keys: ...-{os}-3.11-                             │  │ │
+    │  │  └─────────────────────────────────────────────────────────────┘  │ │
+    │  │  ┌─────────────────────────────────────────────────────────────┐  │ │
+    │  │  │ Layer 4: Build Artifacts                                    │  │ │
+    │  │  │ • Key: build-{os}-{sha}                                     │  │ │
+    │  │  │ • Size: ~100MB                                              │  │ │
+    │  │  │ • Restore-keys: build-{os}-                                │  │ │
+    │  │  └─────────────────────────────────────────────────────────────┘  │ │
+    │  └────────────────────────────────────────────────────────────────────┘ │
+    │                                                                          │
+    │  ┌────────────────────────────────────────────────────────────────────┐ │
+    │  │ PHASE 3: PYTHON RUNTIME (5-8 min if not cached)                   │ │
+    │  │  • Download Python Build Standalone (Linux/macOS)                  │ │
+    │  │  • Download Python Embedded (Windows)                              │ │
+    │  │  • Extract to runner.temp/python-embedded                          │ │
+    │  └────────────────────────────────────────────────────────────────────┘ │
+    │                                                                          │
+    │  ┌────────────────────────────────────────────────────────────────────┐ │
+    │  │ PHASE 4: BUILD (8-25 min depending on language set)               │ │
+    │  │  • Run scripts/portable/build_portable.sh                          │ │
+    │  │    ├─ Create package structure (bin, python, serena, ls)           │ │
+    │  │    ├─ Copy Python runtime                                          │ │
+    │  │    ├─ Install Serena + dependencies via UV                         │ │
+    │  │    ├─ Pre-download language servers (minimal/std/full)             │ │
+    │  │    ├─ Create launcher scripts (serena, serena-mcp-server)          │ │
+    │  │    ├─ Generate README, BUILD_INFO.json, VERSION                    │ │
+    │  │    └─ Verify build (--version check)                               │ │
+    │  └────────────────────────────────────────────────────────────────────┘ │
+    │                                                                          │
+    │  ┌────────────────────────────────────────────────────────────────────┐ │
+    │  │ PHASE 5: TEST (3-12 min, skippable)                               │ │
+    │  │  • Run scripts/portable/test_portable.sh                           │ │
+    │  │    ├─ Structure tests (directories, files exist)                   │ │
+    │  │    ├─ Python runtime tests (version, imports, pip)                 │ │
+    │  │    ├─ Installation tests (serena, solidlsp modules)                │ │
+    │  │    ├─ CLI tests (--version, --help)                                │ │
+    │  │    ├─ Language server tests (availability)                         │ │
+    │  │    └─ Integration tests (optional, with test project)              │ │
+    │  └────────────────────────────────────────────────────────────────────┘ │
+    │                                                                          │
+    │  ┌────────────────────────────────────────────────────────────────────┐ │
+    │  │ PHASE 6: ARCHIVE (1-4 min)                                         │ │
+    │  │  • Create tar.gz (Linux/macOS) or zip (Windows)                    │ │
+    │  │  • Generate SHA256 checksum                                        │ │
+    │  │  • Upload artifacts to GitHub Actions                              │ │
+    │  │  • Upload to GitHub Release (if enabled)                           │ │
+    │  └────────────────────────────────────────────────────────────────────┘ │
+    │                                                                          │
+    │  Total Time: 14-49 min/platform (varies by platform and config)        │
+    │  Billable: 1x (Linux), 2x (Windows), 10x (macOS)                       │
+    └──────────────────────────────────────────────────────────────────────────┘
+                         │
+                         │ (All platforms complete)
+                         │
+    ┌────────────────────▼─────────────────────────────────────────────────────┐
+    │                    GENERATE MANIFEST                                     │
+    │                   (Job 3 - Release Metadata)                             │
+    │  ┌────────────────────────────────────────────────────────────────────┐  │
+    │  │  • Download all build artifacts                                    │  │
+    │  │  • Extract checksums and sizes                                     │  │
+    │  │  • Generate latest.json with:                                      │  │
+    │  │    - Version, release date                                         │  │
+    │  │    - Per-platform metadata (filename, size, sha256, URL)           │  │
+    │  │  • Upload latest.json to release                                   │  │
+    │  └────────────────────────────────────────────────────────────────────┘  │
+    │  Time: <2 min                                                            │
+    └──────────────────────────────────────────────────────────────────────────┘
+                         │
+    ┌────────────────────▼─────────────────────────────────────────────────────┐
+    │                    BUILD SUMMARY                                         │
+    │                   (Job 4 - Reporting)                                    │
+    │  ┌────────────────────────────────────────────────────────────────────┐  │
+    │  │  • Generate GitHub Actions summary                                 │  │
+    │  │  • Report build status per platform                                │  │
+    │  │  • Show estimated costs                                            │  │
+    │  │  • Link to artifacts and release                                   │  │
+    │  └────────────────────────────────────────────────────────────────────┘  │
+    │  Time: <1 min                                                            │
+    └──────────────────────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+    ┌────────────────────────────────────────────────────────────────────────┐
+    │                         OUTPUTS                                        │
+    │  ┌──────────────────────────────────────────────────────────────────┐ │
+    │  │  GitHub Release Assets:                                          │ │
+    │  │  • serena-linux-x64-VERSION.tar.gz (+ .sha256)                   │ │
+    │  │  • serena-windows-x64-VERSION.zip (+ .sha256)                    │ │
+    │  │  • serena-macos-x64-VERSION.tar.gz (+ .sha256)                   │ │
+    │  │  • serena-macos-arm64-VERSION.tar.gz (+ .sha256)                 │ │
+    │  │  • latest.json (manifest with all metadata)                      │ │
+    │  └──────────────────────────────────────────────────────────────────┘ │
+    │  ┌──────────────────────────────────────────────────────────────────┐ │
+    │  │  GitHub Actions Artifacts (30 day retention):                    │ │
+    │  │  • Same files as release assets                                  │ │
+    │  │  • Available even if not uploaded to release                     │ │
+    │  └──────────────────────────────────────────────────────────────────┘ │
+    └────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      COST BREAKDOWN (Standard Set)                          │
+│  ┌───────────┬────────────┬──────────────┬─────────────┬─────────────────┐ │
+│  │ Platform  │ Time (min) │ Multiplier   │ Billable    │ % of Total      │ │
+│  ├───────────┼────────────┼──────────────┼─────────────┼─────────────────┤ │
+│  │ Linux     │     21     │      1x      │     21      │      3%         │ │
+│  │ Windows   │     27     │      2x      │     54      │      8%         │ │
+│  │ macOS Int │     31     │     10x      │    310      │     47%         │ │
+│  │ macOS ARM │     28     │     10x      │    280      │     42%         │ │
+│  ├───────────┼────────────┼──────────────┼─────────────┼─────────────────┤ │
+│  │ TOTAL     │    107     │      -       │    664      │    100%         │ │
+│  └───────────┴────────────┴──────────────┴─────────────┴─────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      OPTIMIZATION STRATEGIES                                │
+│  ┌────────────────────────┬──────────────┬─────────────┬─────────────────┐ │
+│  │ Strategy               │ Time Saved   │ Cost Saved  │ When to Use     │ │
+│  ├────────────────────────┼──────────────┼─────────────┼─────────────────┤ │
+│  │ Warm Cache             │   40-50%     │  260-330    │ Always          │ │
+│  │ Skip Tests             │   25-30%     │  166-199    │ Development     │ │
+│  │ Minimal Lang Set       │   30-40%     │  199-266    │ Quick Testing   │ │
+│  │ Linux Only             │   75%        │  ~500       │ Dev Iterations  │ │
+│  │ Combined (all above)   │   ~80%       │  ~530       │ Rapid Testing   │ │
+│  └────────────────────────┴──────────────┴─────────────┴─────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Legend:
+  • Percentages show time/cost relative to full build (664 minutes)
+  • Warm cache assumes cache-warmup.yml run within past 7 days
+  • Times are estimates based on empirical testing
+  • Actual times may vary based on network, load, and other factors
