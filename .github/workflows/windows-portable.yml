@@ -816,14 +816,17 @@ jobs:
           Write-Host "Creating distribution bundle: $bundleDir"
           
           # Create bundle directory structure
-          $directories = @("$bundleDir", "$bundleDir/bin", "$bundleDir/docs", "$bundleDir/examples")
+          $directories = @("$bundleDir", "$bundleDir/bin", "$bundleDir/docs", "$bundleDir/examples", "$bundleDir/config")
           $directories | ForEach-Object {
             New-Item -ItemType Directory -Force -Path $_ | Out-Null
           }
           
           # Copy executable
           Copy-Item "dist/${outputName}.exe" "$bundleDir/bin/serena.exe"
-          
+
+          # Create VERSION.txt file
+          $version | Out-File -FilePath "$bundleDir/VERSION.txt" -Encoding ascii
+
           # Copy documentation files
           $docFiles = @(
             @{ Source = "README.md"; Dest = "$bundleDir/README.md" },
@@ -873,7 +876,7 @@ jobs:
           }
           
           # Use optimal compression settings
-          Compress-Archive -Path "$bundleDir/*" -DestinationPath $zipPath -CompressionLevel Optimal
+          Compress-Archive -Path "$bundleDir" -DestinationPath $zipPath -CompressionLevel Optimal
           
           $zipSize = (Get-Item $zipPath).Length / 1MB
           Write-Host "Created bundle ZIP: $zipPath (${zipSize:N2} MB)"
@@ -1103,11 +1106,15 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
 
           # List all created artifacts
-          find artifacts -type f -name "*.exe" -o -name "*.zip" | while read file; do
-            size=$(du -h "$file" | cut -f1)
-            basename_file=$(basename "$file")
-            echo "- **$basename_file** ($size)" >> $GITHUB_STEP_SUMMARY
-          done
+          if find artifacts -type f \( -name "*.exe" -o -name "*.zip" \) 2>/dev/null | grep -q .; then
+            find artifacts -type f \( -name "*.exe" -o -name "*.zip" \) | while read file; do
+              size=$(du -h "$file" | cut -f1)
+              basename_file=$(basename "$file")
+              echo "- **$basename_file** ($size)" >> $GITHUB_STEP_SUMMARY
+            done
+          else
+            echo "- No artifacts found" >> $GITHUB_STEP_SUMMARY
+          fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Installation Instructions" >> $GITHUB_STEP_SUMMARY
