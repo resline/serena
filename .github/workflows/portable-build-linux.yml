@@ -1,0 +1,229 @@
+name: Build Portable Package - Linux
+
+# Linux-specific portable build workflow
+# Can be called from orchestrator or run standalone
+# Cost: 1x multiplier (most cost-effective)
+
+on:
+  # Allow workflow_call from orchestrator
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version string for the build'
+        required: true
+        type: string
+      language_set:
+        description: 'Language set (minimal, standard, full)'
+        required: false
+        default: 'standard'
+        type: string
+      skip_tests:
+        description: 'Skip integration tests'
+        required: false
+        default: false
+        type: boolean
+      cache_version:
+        description: 'Cache version identifier'
+        required: false
+        default: 'v3'
+        type: string
+    outputs:
+      artifact_name:
+        description: 'Name of the uploaded artifact'
+        value: ${{ jobs.build-linux.outputs.artifact_name }}
+      archive_path:
+        description: 'Archive filename'
+        value: ${{ jobs.build-linux.outputs.archive_path }}
+      checksum:
+        description: 'SHA256 checksum'
+        value: ${{ jobs.build-linux.outputs.checksum }}
+
+  # Also allow standalone execution for testing
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version string (leave empty for auto-detect)'
+        required: false
+        default: ''
+        type: string
+      language_set:
+        description: 'Language set'
+        required: false
+        default: 'standard'
+        type: choice
+        options:
+          - minimal
+          - standard
+          - full
+      skip_tests:
+        description: 'Skip integration tests'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  PYTHON_VERSION: '3.11'
+  UV_VERSION: 'latest'
+  PLATFORM: 'linux-x64'
+  ARTIFACT_NAME: 'serena-linux-x64'
+
+jobs:
+  build-linux:
+    name: Build Linux x64 Package
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      artifact_name: ${{ steps.artifact.outputs.name }}
+      archive_path: ${{ steps.archive.outputs.filename }}
+      checksum: ${{ steps.checksum.outputs.sha256 }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="v$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')-dev"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "::notice::Building Linux package version: ${VERSION}"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      # Cache Layer 1: Python embedded runtime
+      - name: Cache Python embedded runtime
+        id: cache-python-embedded
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/python-embedded
+          key: python-embedded-Linux-X64-${{ env.PYTHON_VERSION }}-${{ inputs.cache_version || 'v3' }}
+
+      # Cache Layer 2: Language servers
+      - name: Cache language servers
+        id: cache-language-servers
+        uses: actions/cache@v4
+        with:
+          path: ~/.serena/language_servers/static
+          key: language-servers-portable-Linux-X64-${{ inputs.language_set || 'standard' }}-${{ inputs.cache_version || 'v3' }}
+          restore-keys: |
+            language-servers-portable-Linux-X64-
+            language-servers-Linux-
+
+      # Cache Layer 3: UV virtualenv
+      - name: Cache UV virtualenv
+        id: cache-uv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-venv-portable-Linux-${{ env.PYTHON_VERSION }}-${{ hashFiles('uv.lock') }}-${{ inputs.cache_version || 'v3' }}
+          restore-keys: |
+            uv-venv-portable-Linux-${{ env.PYTHON_VERSION }}-
+
+      - name: Setup build environment
+        run: |
+          mkdir -p "${{ runner.temp }}/portable-build"
+          mkdir -p "$HOME/.serena/language_servers/static"
+
+          echo "BUILD_DIR=${{ runner.temp }}/portable-build" >> $GITHUB_ENV
+          echo "PORTABLE_VERSION=${{ steps.version.outputs.version }}" >> $GITHUB_ENV
+          echo "LANGUAGE_CONFIG=${{ inputs.language_set || 'standard' }}" >> $GITHUB_ENV
+
+          echo "::group::Build Environment"
+          echo "BUILD_DIR: ${{ runner.temp }}/portable-build"
+          echo "VERSION: ${{ steps.version.outputs.version }}"
+          echo "LANGUAGE_SET: ${{ inputs.language_set || 'standard' }}"
+          echo "::endgroup::"
+
+      - name: Download Python Build Standalone
+        if: steps.cache-python-embedded.outputs.cache-hit != 'true'
+        run: |
+          DEST="${{ runner.temp }}/python-embedded"
+          mkdir -p "$DEST"
+
+          PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.11.10+20241016-x86_64-unknown-linux-gnu-install_only.tar.gz"
+
+          curl -L "$PYTHON_URL" -o "$DEST/python.tar.gz"
+          tar -xzf "$DEST/python.tar.gz" -C "$DEST" --strip-components=1
+          rm "$DEST/python.tar.gz"
+
+      - name: Create virtual environment
+        if: steps.cache-uv.outputs.cache-hit != 'true'
+        run: uv venv
+
+      - name: Install dependencies
+        run: uv pip install -e ".[dev]"
+
+      - name: Build portable package
+        run: |
+          chmod +x scripts/portable/build_portable.sh
+
+          ./scripts/portable/build_portable.sh \
+            --platform "${{ env.PLATFORM }}" \
+            --version "${{ steps.version.outputs.version }}" \
+            --language-set "${{ inputs.language_set || 'standard' }}" \
+            --python-embedded "${{ runner.temp }}/python-embedded" \
+            --output "${{ env.BUILD_DIR }}"
+        timeout-minutes: 60
+
+      - name: Test portable package
+        if: inputs.skip_tests != true
+        run: |
+          chmod +x scripts/portable/test_portable.sh
+
+          ./scripts/portable/test_portable.sh \
+            --package "${{ env.BUILD_DIR }}/${{ env.ARTIFACT_NAME }}" \
+            --platform "${{ env.PLATFORM }}"
+        timeout-minutes: 30
+
+      - name: Create release archive
+        id: archive
+        run: |
+          cd "${{ env.BUILD_DIR }}"
+
+          ARCHIVE_NAME="${{ env.ARTIFACT_NAME }}-${{ steps.version.outputs.version }}.tar.gz"
+          tar -czf "${ARCHIVE_NAME}" "${{ env.ARTIFACT_NAME }}"
+
+          echo "filename=${ARCHIVE_NAME}" >> $GITHUB_OUTPUT
+
+          SIZE=$(stat -c%s "${ARCHIVE_NAME}")
+          echo "size=${SIZE}" >> $GITHUB_OUTPUT
+
+      - name: Generate SHA256 checksum
+        id: checksum
+        run: |
+          cd "${{ env.BUILD_DIR }}"
+          ARCHIVE="${{ steps.archive.outputs.filename }}"
+
+          sha256sum "$ARCHIVE" > "$ARCHIVE.sha256"
+          CHECKSUM=$(awk '{print $1}' "$ARCHIVE.sha256")
+          echo "sha256=${CHECKSUM}" >> $GITHUB_OUTPUT
+
+      - name: Set artifact name
+        id: artifact
+        run: |
+          NAME="${{ env.ARTIFACT_NAME }}-${{ steps.version.outputs.version }}"
+          echo "name=${NAME}" >> $GITHUB_OUTPUT
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: |
+            ${{ env.BUILD_DIR }}/*.tar.gz
+            ${{ env.BUILD_DIR }}/*.sha256
+          retention-days: 30
+          compression-level: 0

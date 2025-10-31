@@ -1,0 +1,253 @@
+name: Portable Release Orchestrator
+
+# Orchestrates Linux and Windows portable builds for releases
+# Generates unified manifest and uploads to GitHub releases
+
+on:
+  release:
+    types: [published]
+
+  workflow_dispatch:
+    inputs:
+      platform_filter:
+        description: 'Platform filter (all, linux, windows)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - linux
+          - windows
+      language_set:
+        description: 'Language set to include'
+        required: false
+        default: 'standard'
+        type: choice
+        options:
+          - minimal
+          - standard
+          - full
+      skip_tests:
+        description: 'Skip integration tests (faster builds)'
+        required: false
+        default: false
+        type: boolean
+      release_tag:
+        description: 'Release tag (leave empty for auto-detect)'
+        required: false
+        default: ''
+        type: string
+
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  CACHE_VERSION: 'v3'
+
+jobs:
+  prepare-release:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      language_config: ${{ steps.config.outputs.language_config }}
+      build_linux: ${{ steps.platforms.outputs.build_linux }}
+      build_windows: ${{ steps.platforms.outputs.build_windows }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ -n "${{ github.event.inputs.release_tag }}" ]]; then
+            VERSION="${{ github.event.inputs.release_tag }}"
+          elif [[ "${{ github.event_name }}" == "release" ]]; then
+            VERSION="${{ github.event.release.tag_name }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="v$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')"
+          fi
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "::notice::Release version: ${VERSION}"
+
+      - name: Set configuration
+        id: config
+        run: |
+          LANG_CONFIG="${{ github.event.inputs.language_set || 'standard' }}"
+          echo "language_config=${LANG_CONFIG}" >> $GITHUB_OUTPUT
+
+      - name: Determine platforms
+        id: platforms
+        run: |
+          FILTER="${{ github.event.inputs.platform_filter || 'all' }}"
+
+          if [[ "$FILTER" == "all" ]]; then
+            echo "build_linux=true" >> $GITHUB_OUTPUT
+            echo "build_windows=true" >> $GITHUB_OUTPUT
+          elif [[ "$FILTER" == "linux" ]]; then
+            echo "build_linux=true" >> $GITHUB_OUTPUT
+            echo "build_windows=false" >> $GITHUB_OUTPUT
+          elif [[ "$FILTER" == "windows" ]]; then
+            echo "build_linux=false" >> $GITHUB_OUTPUT
+            echo "build_windows=true" >> $GITHUB_OUTPUT
+          fi
+
+  build-linux:
+    name: Build Linux Package
+    needs: prepare-release
+    if: needs.prepare-release.outputs.build_linux == 'true'
+    uses: ./.github/workflows/portable-build-linux.yml
+    with:
+      version: ${{ needs.prepare-release.outputs.version }}
+      language_set: ${{ needs.prepare-release.outputs.language_config }}
+      skip_tests: ${{ github.event.inputs.skip_tests == 'true' }}
+      cache_version: v3
+    secrets: inherit
+
+  build-windows:
+    name: Build Windows Package
+    needs: prepare-release
+    if: needs.prepare-release.outputs.build_windows == 'true'
+    uses: ./.github/workflows/portable-build-windows.yml
+    with:
+      version: ${{ needs.prepare-release.outputs.version }}
+      language_set: ${{ needs.prepare-release.outputs.language_config }}
+      skip_tests: ${{ github.event.inputs.skip_tests == 'true' }}
+      cache_version: v3
+    secrets: inherit
+
+  generate-manifest:
+    name: Generate Manifest
+    needs: [prepare-release, build-linux, build-windows]
+    if: |
+      always() &&
+      needs.prepare-release.result == 'success' &&
+      (needs.build-linux.result == 'success' || needs.build-windows.result == 'success')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Linux artifacts
+        if: needs.build-linux.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: serena-linux-x64-*
+          path: artifacts/linux
+          merge-multiple: true
+
+      - name: Download Windows artifacts
+        if: needs.build-windows.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: serena-windows-x64-*
+          path: artifacts/windows
+          merge-multiple: true
+
+      - name: Generate latest.json
+        run: |
+          VERSION="${{ needs.prepare-release.outputs.version }}"
+          LANGUAGE_CONFIG="${{ needs.prepare-release.outputs.language_config }}"
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          cat > latest.json << EOF
+          {
+            "version": "${VERSION}",
+            "released_at": "${TIMESTAMP}",
+            "language_config": "${LANGUAGE_CONFIG}",
+            "platforms": {
+          EOF
+
+          FIRST=true
+
+          # Add Linux platform if successful
+          if [[ "${{ needs.build-linux.result }}" == "success" ]]; then
+            LINUX_ARCHIVE=$(find artifacts/linux -name "*.tar.gz" | head -1)
+            if [[ -n "$LINUX_ARCHIVE" ]]; then
+              SIZE=$(stat -c%s "$LINUX_ARCHIVE")
+              CHECKSUM=$(awk '{print $1}' "${LINUX_ARCHIVE}.sha256")
+              FILENAME=$(basename "$LINUX_ARCHIVE")
+
+              [[ "$FIRST" == "false" ]] && echo "," >> latest.json
+
+              cat >> latest.json << EOF
+              "serena-linux-x64": {
+                "filename": "${FILENAME}",
+                "size": ${SIZE},
+                "sha256": "${CHECKSUM}",
+                "download_url": "https://github.com/${{ github.repository }}/releases/download/${VERSION}/${FILENAME}"
+              }
+          EOF
+              FIRST=false
+            fi
+          fi
+
+          # Add Windows platform if successful
+          if [[ "${{ needs.build-windows.result }}" == "success" ]]; then
+            WINDOWS_ARCHIVE=$(find artifacts/windows -name "*.zip" | head -1)
+            if [[ -n "$WINDOWS_ARCHIVE" ]]; then
+              SIZE=$(stat -c%s "$WINDOWS_ARCHIVE")
+              CHECKSUM=$(awk '{print $1}' "${WINDOWS_ARCHIVE}.sha256")
+              FILENAME=$(basename "$WINDOWS_ARCHIVE")
+
+              [[ "$FIRST" == "false" ]] && echo "," >> latest.json
+
+              cat >> latest.json << EOF
+              "serena-windows-x64": {
+                "filename": "${FILENAME}",
+                "size": ${SIZE},
+                "sha256": "${CHECKSUM}",
+                "download_url": "https://github.com/${{ github.repository }}/releases/download/${VERSION}/${FILENAME}"
+              }
+          EOF
+              FIRST=false
+            fi
+          fi
+
+          cat >> latest.json << EOF
+            }
+          }
+          EOF
+
+          echo "::group::Manifest"
+          cat latest.json
+          echo "::endgroup::"
+
+      - name: Upload manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest
+          path: latest.json
+          retention-days: 90
+
+  upload-to-release:
+    name: Upload to Release
+    needs: [prepare-release, build-linux, build-windows, generate-manifest]
+    if: |
+      always() &&
+      needs.generate-manifest.result == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Organize artifacts
+        run: |
+          mkdir -p upload
+          find release-artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" -o -name "latest.json" \) -exec cp {} upload/ \;
+          ls -lh upload/
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare-release.outputs.version }}
+          files: upload/*
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
