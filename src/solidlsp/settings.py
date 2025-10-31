@@ -3,9 +3,10 @@ Defines settings for Solid-LSP
 """
 
 import os
-import pathlib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
+
+from serena.portable import get_language_server_dir, get_solidlsp_data_dir, is_portable_mode
 
 if TYPE_CHECKING:
     from solidlsp.ls_config import Language
@@ -13,7 +14,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class SolidLSPSettings:
-    solidlsp_dir: str = str(pathlib.Path.home() / ".solidlsp")
+    solidlsp_dir: str = field(default_factory=lambda: str(get_solidlsp_data_dir()))
     """
     Path to the directory in which to store global Solid-LSP data (which is not project-specific)
     """
@@ -36,4 +37,6 @@ class SolidLSPSettings:
 
     @property
     def ls_resources_dir(self):
+        if is_portable_mode():
+            return str(get_language_server_dir())
         return os.path.join(str(self.solidlsp_dir), "language_servers", "static")
