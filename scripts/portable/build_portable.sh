@@ -295,6 +295,9 @@ if [[ -d "$HOME/.serena/language_servers" ]]; then
     cp -r "$HOME/.serena/language_servers"/* "$PACKAGE_DIR/language_servers/" 2>/dev/null || true
 fi
 
+# Detect Python version from embedded runtime
+PYTHON_VERSION=$("$PACKAGE_DIR/python/bin/python3" --version 2>&1 | awk '{print $2}')
+
 # Create README
 log_info "Creating README..."
 cat > "$PACKAGE_DIR/README.md" << README
