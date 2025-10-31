@@ -820,9 +820,19 @@ jobs:
           $directories | ForEach-Object {
             New-Item -ItemType Directory -Force -Path $_ | Out-Null
           }
-          
+
           # Copy executable
           Copy-Item "dist/${outputName}.exe" "$bundleDir/bin/serena.exe"
+
+          # Copy language servers to bundle (if they exist)
+          if (Test-Path "build/language_servers") {
+            Write-Host "Copying language servers to bundle..."
+            Copy-Item "build/language_servers" "$bundleDir/language_servers" -Recurse -Force
+            $lsCount = (Get-ChildItem "$bundleDir/language_servers" -Directory).Count
+            Write-Host "Copied $lsCount language server(s) to bundle" -ForegroundColor Green
+          } else {
+            Write-Warning "Language servers directory not found at build/language_servers"
+          }
 
           # Create VERSION.txt file
           $version | Out-File -FilePath "$bundleDir/VERSION.txt" -Encoding ascii
