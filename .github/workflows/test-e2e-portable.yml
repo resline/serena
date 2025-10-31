@@ -43,6 +43,7 @@ jobs:
   test-e2e-windows:
     name: E2E Tests (Windows ${{ inputs.architecture }} - ${{ inputs.tier }})
     runs-on: windows-2022
+    if: contains(inputs.build_artifact_name, 'windows') || inputs.build_artifact_name == ''
 
     steps:
       - name: Checkout repository
@@ -97,6 +98,9 @@ jobs:
           }
 
           Write-Host "Extracted to: $($extractedDir.FullName)"
+
+      - name: Create virtual environment
+        run: uv venv
 
       - name: Install test dependencies
         run: |
@@ -243,6 +247,7 @@ jobs:
   test-e2e-linux:
     name: E2E Tests (Linux ${{ inputs.architecture }} - ${{ inputs.tier }})
     runs-on: ubuntu-latest
+    if: contains(inputs.build_artifact_name, 'linux') || inputs.build_artifact_name == ''
 
     steps:
       - name: Checkout repository
@@ -301,6 +306,9 @@ jobs:
           fi
 
           echo "Extracted to: $EXTRACTED_DIR"
+
+      - name: Create virtual environment
+        run: uv venv
 
       - name: Install test dependencies
         run: |
@@ -441,6 +449,7 @@ jobs:
   test-e2e-macos:
     name: E2E Tests (macOS ${{ inputs.architecture }} - ${{ inputs.tier }})
     runs-on: macos-14
+    if: contains(inputs.build_artifact_name, 'macos') || inputs.build_artifact_name == ''
 
     steps:
       - name: Checkout repository
@@ -498,6 +507,9 @@ jobs:
           fi
 
           echo "Extracted to: $extracted_dir"
+
+      - name: Create virtual environment
+        run: uv venv
 
       - name: Install test dependencies
         run: |
