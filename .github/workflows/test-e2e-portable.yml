@@ -89,7 +89,7 @@ jobs:
           }
 
           # Find extracted directory
-          $extractedDir = Get-ChildItem -Path dist\extracted\serena-portable-* -Directory | Select-Object -First 1
+          $extractedDir = Get-ChildItem -Path dist\extracted\serena-windows-*-bundle -Directory | Select-Object -First 1
 
           if (-not $extractedDir) {
             Write-Error "Failed to find extracted build directory"
@@ -105,10 +105,10 @@ jobs:
 
       - name: Set build directory environment variable
         run: |
-          if (Test-Path "dist\extracted\serena-portable-*") {
-            $buildDir = (Get-ChildItem -Path "dist\extracted\serena-portable-*" -Directory | Select-Object -First 1).FullName
+          if (Test-Path "dist\extracted\serena-windows-*-bundle") {
+            $buildDir = (Get-ChildItem -Path "dist\extracted\serena-windows-*-bundle" -Directory | Select-Object -First 1).FullName
           } else {
-            $buildDir = (Get-ChildItem -Path "dist\windows\serena-portable-*-${{ inputs.tier }}" -Directory | Select-Object -First 1).FullName
+            $buildDir = (Get-ChildItem -Path "dist\windows\serena-windows-*-${{ inputs.tier }}-*-bundle" -Directory | Select-Object -First 1).FullName
           }
 
           Write-Host "Build directory: $buildDir"
@@ -385,37 +385,37 @@ jobs:
 
           if [ -f "test-results/junit.xml" ]; then
             # Parse XML using Python for portability
-            python3 - <<-'PYTHON_EOF'
-            import xml.etree.ElementTree as ET
-            import os
+            python3 - <<'PYTHON_EOF'
+import xml.etree.ElementTree as ET
+import os
 
-            try:
-                tree = ET.parse('test-results/junit.xml')
-                root = tree.getroot()
-                testsuite = root.find('.//testsuite')
+try:
+    tree = ET.parse('test-results/junit.xml')
+    root = tree.getroot()
+    testsuite = root.find('.//testsuite')
 
-                if testsuite is not None:
-                    tests = testsuite.get('tests', '0')
-                    failures = testsuite.get('failures', '0')
-                    errors = testsuite.get('errors', '0')
-                    time = testsuite.get('time', '0')
+    if testsuite is not None:
+        tests = testsuite.get('tests', '0')
+        failures = testsuite.get('failures', '0')
+        errors = testsuite.get('errors', '0')
+        time = testsuite.get('time', '0')
 
-                    with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
-                        f.write("| Metric | Value |\n")
-                        f.write("|--------|-------|\n")
-                        f.write(f"| Total Tests | {tests} |\n")
-                        f.write(f"| Failures | {failures} |\n")
-                        f.write(f"| Errors | {errors} |\n")
-                        f.write(f"| Duration | {time}s |\n")
-                        f.write("\n")
+        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+            f.write("| Metric | Value |\n")
+            f.write("|--------|-------|\n")
+            f.write(f"| Total Tests | {tests} |\n")
+            f.write(f"| Failures | {failures} |\n")
+            f.write(f"| Errors | {errors} |\n")
+            f.write(f"| Duration | {time}s |\n")
+            f.write("\n")
 
-                        if int(failures) == 0 and int(errors) == 0:
-                            f.write("✅ All tests passed!\n")
-                        else:
-                            f.write("❌ Some tests failed. Check artifacts for details.\n")
-            except Exception as e:
-                print(f"Failed to parse test results: {e}")
-            PYTHON_EOF
+            if int(failures) == 0 and int(errors) == 0:
+                f.write("✅ All tests passed!\n")
+            else:
+                f.write("❌ Some tests failed. Check artifacts for details.\n")
+except Exception as e:
+    print(f"Failed to parse test results: {e}")
+PYTHON_EOF
           else
             echo "⚠️ Test results file not found" >> $GITHUB_STEP_SUMMARY
           fi
@@ -520,7 +520,7 @@ jobs:
           done
 
           # Find extracted directory
-          extracted_dir=$(find dist/extracted -maxdepth 1 -type d -name "*serena-*-bundle" | head -1)
+          extracted_dir=$(find dist/extracted -maxdepth 1 -type d -name "serena-macos-*-bundle" | head -1)
 
           if [ -z "$extracted_dir" ]; then
             echo "ERROR: Failed to find extracted build directory"
@@ -537,9 +537,9 @@ jobs:
       - name: Set build directory environment variable
         run: |
           if [ -d "dist/extracted/serena-macos"*"-bundle" ]; then
-            build_dir=$(find dist/extracted -maxdepth 1 -type d -name "*serena-macos*-bundle" | head -1)
+            build_dir=$(find dist/extracted -maxdepth 1 -type d -name "serena-macos-*-bundle" | head -1)
           else
-            build_dir=$(find dist -maxdepth 1 -type d -name "*serena-macos*-bundle" | head -1)
+            build_dir=$(find dist -maxdepth 1 -type d -name "serena-macos-*-bundle" | head -1)
           fi
 
           echo "Build directory: $build_dir"
@@ -610,36 +610,36 @@ jobs:
           if [ -f "test-results/junit.xml" ]; then
             # Parse XML with Python since macOS doesn't have xml2js by default
             python3 - <<'PYTHON_EOF'
-            import xml.etree.ElementTree as ET
-            import os
+import xml.etree.ElementTree as ET
+import os
 
-            try:
-                tree = ET.parse('test-results/junit.xml')
-                root = tree.getroot()
-                testsuite = root.find('.//testsuite')
+try:
+    tree = ET.parse('test-results/junit.xml')
+    root = tree.getroot()
+    testsuite = root.find('.//testsuite')
 
-                if testsuite is not None:
-                    tests = testsuite.get('tests', '0')
-                    failures = testsuite.get('failures', '0')
-                    errors = testsuite.get('errors', '0')
-                    time = testsuite.get('time', '0')
+    if testsuite is not None:
+        tests = testsuite.get('tests', '0')
+        failures = testsuite.get('failures', '0')
+        errors = testsuite.get('errors', '0')
+        time = testsuite.get('time', '0')
 
-                    with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
-                        f.write("| Metric | Value |\n")
-                        f.write("|--------|-------|\n")
-                        f.write(f"| Total Tests | {tests} |\n")
-                        f.write(f"| Failures | {failures} |\n")
-                        f.write(f"| Errors | {errors} |\n")
-                        f.write(f"| Duration | {time}s |\n")
-                        f.write("\n")
+        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+            f.write("| Metric | Value |\n")
+            f.write("|--------|-------|\n")
+            f.write(f"| Total Tests | {tests} |\n")
+            f.write(f"| Failures | {failures} |\n")
+            f.write(f"| Errors | {errors} |\n")
+            f.write(f"| Duration | {time}s |\n")
+            f.write("\n")
 
-                        if int(failures) == 0 and int(errors) == 0:
-                            f.write("✅ All tests passed!\n")
-                        else:
-                            f.write("❌ Some tests failed. Check artifacts for details.\n")
-            except Exception as e:
-                print(f"Failed to parse test results: {e}")
-            PYTHON_EOF
+            if int(failures) == 0 and int(errors) == 0:
+                f.write("✅ All tests passed!\n")
+            else:
+                f.write("❌ Some tests failed. Check artifacts for details.\n")
+except Exception as e:
+    print(f"Failed to parse test results: {e}")
+PYTHON_EOF
           else
             echo "⚠️ Test results file not found" >> $GITHUB_STEP_SUMMARY
           fi
