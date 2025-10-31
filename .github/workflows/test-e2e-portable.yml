@@ -99,6 +99,9 @@ jobs:
 
           Write-Host "Extracted to: $($extractedDir.FullName)"
 
+      - name: Create virtual environment
+        run: uv venv
+
       - name: Install test dependencies
         run: |
           uv pip install -e ".[dev]"
@@ -304,6 +307,9 @@ jobs:
 
           echo "Extracted to: $EXTRACTED_DIR"
 
+      - name: Create virtual environment
+        run: uv venv
+
       - name: Install test dependencies
         run: |
           uv pip install -e ".[dev]"
@@ -501,6 +507,9 @@ jobs:
           fi
 
           echo "Extracted to: $extracted_dir"
+
+      - name: Create virtual environment
+        run: uv venv
 
       - name: Install test dependencies
         run: |
