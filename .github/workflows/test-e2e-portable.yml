@@ -384,38 +384,8 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ -f "test-results/junit.xml" ]; then
-            # Parse XML using Python for portability
-            python3 - <<'EOF'
-import xml.etree.ElementTree as ET
-import os
-
-try:
-    tree = ET.parse('test-results/junit.xml')
-    root = tree.getroot()
-    testsuite = root.find('.//testsuite')
-
-    if testsuite is not None:
-        tests = testsuite.get('tests', '0')
-        failures = testsuite.get('failures', '0')
-        errors = testsuite.get('errors', '0')
-        time = testsuite.get('time', '0')
-
-        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
-            f.write("| Metric | Value |\n")
-            f.write("|--------|-------|\n")
-            f.write(f"| Total Tests | {tests} |\n")
-            f.write(f"| Failures | {failures} |\n")
-            f.write(f"| Errors | {errors} |\n")
-            f.write(f"| Duration | {time}s |\n")
-            f.write("\n")
-
-            if int(failures) == 0 and int(errors) == 0:
-                f.write("✅ All tests passed!\n")
-            else:
-                f.write("❌ Some tests failed. Check artifacts for details.\n")
-except Exception as e:
-    print(f"Failed to parse test results: {e}")
-EOF
+            # Parse XML using Python script
+            python3 .github/scripts/parse_junit_xml.py test-results/junit.xml
           else
             echo "⚠️ Test results file not found" >> $GITHUB_STEP_SUMMARY
           fi
@@ -608,38 +578,8 @@ EOF
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ -f "test-results/junit.xml" ]; then
-            # Parse XML with Python since macOS doesn't have xml2js by default
-            python3 - <<'EOF'
-import xml.etree.ElementTree as ET
-import os
-
-try:
-    tree = ET.parse('test-results/junit.xml')
-    root = tree.getroot()
-    testsuite = root.find('.//testsuite')
-
-    if testsuite is not None:
-        tests = testsuite.get('tests', '0')
-        failures = testsuite.get('failures', '0')
-        errors = testsuite.get('errors', '0')
-        time = testsuite.get('time', '0')
-
-        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
-            f.write("| Metric | Value |\n")
-            f.write("|--------|-------|\n")
-            f.write(f"| Total Tests | {tests} |\n")
-            f.write(f"| Failures | {failures} |\n")
-            f.write(f"| Errors | {errors} |\n")
-            f.write(f"| Duration | {time}s |\n")
-            f.write("\n")
-
-            if int(failures) == 0 and int(errors) == 0:
-                f.write("✅ All tests passed!\n")
-            else:
-                f.write("❌ Some tests failed. Check artifacts for details.\n")
-except Exception as e:
-    print(f"Failed to parse test results: {e}")
-EOF
+            # Parse XML using Python script
+            python3 .github/scripts/parse_junit_xml.py test-results/junit.xml
           else
             echo "⚠️ Test results file not found" >> $GITHUB_STEP_SUMMARY
           fi
