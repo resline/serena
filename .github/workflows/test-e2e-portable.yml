@@ -43,6 +43,7 @@ jobs:
   test-e2e-windows:
     name: E2E Tests (Windows ${{ inputs.architecture }} - ${{ inputs.tier }})
     runs-on: windows-2022
+    if: contains(inputs.build_artifact_name, 'windows') || inputs.build_artifact_name == ''
 
     steps:
       - name: Checkout repository
@@ -243,6 +244,7 @@ jobs:
   test-e2e-linux:
     name: E2E Tests (Linux ${{ inputs.architecture }} - ${{ inputs.tier }})
     runs-on: ubuntu-latest
+    if: contains(inputs.build_artifact_name, 'linux') || inputs.build_artifact_name == ''
 
     steps:
       - name: Checkout repository
@@ -441,6 +443,7 @@ jobs:
   test-e2e-macos:
     name: E2E Tests (macOS ${{ inputs.architecture }} - ${{ inputs.tier }})
     runs-on: macos-14
+    if: contains(inputs.build_artifact_name, 'macos') || inputs.build_artifact_name == ''
 
     steps:
       - name: Checkout repository
