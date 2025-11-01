@@ -213,8 +213,11 @@ jobs:
         run: |
           chmod +x scripts/portable/test_portable.sh
 
+          # Convert Windows path to Unix path for Git Bash
+          PACKAGE_PATH=$(cygpath -u "${{ env.BUILD_DIR }}/${{ env.ARTIFACT_NAME }}")
+
           ./scripts/portable/test_portable.sh \
-            --package "${{ env.BUILD_DIR }}/${{ env.ARTIFACT_NAME }}" \
+            --package "$PACKAGE_PATH" \
             --platform "${{ env.PLATFORM }}"
         timeout-minutes: 30
 
