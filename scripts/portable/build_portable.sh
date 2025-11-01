@@ -263,24 +263,24 @@ for lang in languages:
     try:
         if lang == "python":
             from solidlsp.language_servers import pyright_server
-            print(f"✓ {lang}")
+            print(f"[OK] {lang}")
         elif lang == "typescript":
             from solidlsp.language_servers import typescript_language_server
-            print(f"✓ {lang}")
+            print(f"[OK] {lang}")
         elif lang == "go":
             from solidlsp.language_servers import gopls
-            print(f"✓ {lang}")
+            print(f"[OK] {lang}")
         elif lang == "rust":
             from solidlsp.language_servers import rust_analyzer
-            print(f"✓ {lang}")
+            print(f"[OK] {lang}")
         elif lang == "java":
             from solidlsp.language_servers import eclipse_jdtls
-            print(f"✓ {lang}")
+            print(f"[OK] {lang}")
         # Add more as needed
         else:
-            print(f"⚠ {lang} (no pre-download)")
+            print(f"[WARN] {lang} (no pre-download)")
     except Exception as e:
-        print(f"✗ {lang}: {e}")
+        print(f"[ERROR] {lang}: {e}")
 
 print("Language server preparation complete")
 PYDOWNLOAD
@@ -297,8 +297,11 @@ fi
 
 # Detect Python version from embedded runtime
 log_info "Detecting Python version from embedded runtime..."
-if ! PYTHON_VERSION=$("$PACKAGE_DIR/python/bin/python3" --version 2>&1 | awk '{print $2}'); then
+
+# Use the PORTABLE_PYTHON variable which has the correct path for each platform
+if ! PYTHON_VERSION=$("$PORTABLE_PYTHON" --version 2>&1 | awk '{print $2}'); then
     log_error "Failed to detect Python version from embedded runtime"
+    log_error "Command: $PORTABLE_PYTHON --version"
     exit 1
 fi
 
