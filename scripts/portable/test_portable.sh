@@ -153,6 +153,7 @@ run_test "Python executable exists" "[[ -f '$PYTHON_EXE' ]]"
 run_test "VERSION file exists" "[[ -f '$PACKAGE/VERSION' ]]"
 run_test "BUILD_INFO.json exists" "[[ -f '$PACKAGE/BUILD_INFO.json' ]]"
 run_test "README exists" "[[ -f '$PACKAGE/README.md' ]]"
+run_test "README contains valid Python version" "grep -qE 'Python [0-9]+\.[0-9]+\.[0-9]+ runtime' '$PACKAGE/README.md'"
 
 echo ""
 log_info "=== Python Runtime Tests ==="

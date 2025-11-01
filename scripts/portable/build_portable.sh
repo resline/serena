@@ -296,7 +296,25 @@ if [[ -d "$HOME/.serena/language_servers" ]]; then
 fi
 
 # Detect Python version from embedded runtime
-PYTHON_VERSION=$("$PACKAGE_DIR/python/bin/python3" --version 2>&1 | awk '{print $2}')
+log_info "Detecting Python version from embedded runtime..."
+if ! PYTHON_VERSION=$("$PACKAGE_DIR/python/bin/python3" --version 2>&1 | awk '{print $2}'); then
+    log_error "Failed to detect Python version from embedded runtime"
+    exit 1
+fi
+
+# Validate PYTHON_VERSION is not empty
+if [[ -z "$PYTHON_VERSION" ]]; then
+    log_error "Python version detection returned empty value"
+    exit 1
+fi
+
+# Validate PYTHON_VERSION format (e.g., 3.11.10)
+if ! [[ "$PYTHON_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    log_error "Invalid Python version format: $PYTHON_VERSION"
+    exit 1
+fi
+
+log_info "Detected Python version: $PYTHON_VERSION"
 
 # Create README
 log_info "Creating README..."
