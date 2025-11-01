@@ -147,6 +147,9 @@ run_test() {
 echo ""
 log_info "=== Structure Tests ==="
 
+# Disable exit-on-error for tests (we want to run all tests even if some fail)
+set +e
+
 run_test "Package directory structure" "[[ -d '$PACKAGE/bin' && -d '$PACKAGE/python' && -d '$PACKAGE/serena' ]]"
 run_test "Launcher scripts exist" "[[ -f '$SERENA_CMD' && -f '$MCP_CMD' ]]"
 run_test "Python executable exists" "[[ -f '$PYTHON_EXE' ]]"
