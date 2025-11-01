@@ -66,7 +66,7 @@ env:
   PYTHON_PATCH_VERSION: '3.11.9'
   UV_VERSION: 'latest'
   PLATFORM: 'win-x64'
-  ARTIFACT_NAME: 'serena-windows-x64'
+  ARTIFACT_NAME: 'serena-win-x64'
 
 jobs:
   build-windows:
