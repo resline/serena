@@ -154,7 +154,34 @@ jobs:
 
           $PYTHON_URL = "https://www.python.org/ftp/python/${{ env.PYTHON_PATCH_VERSION }}/python-${{ env.PYTHON_PATCH_VERSION }}-embed-amd64.zip"
 
-          Invoke-WebRequest -Uri $PYTHON_URL -OutFile "$DEST/python-embed.zip"
+          # Retry logic for reliable download
+          $retries = 3
+          $delay = 5
+          $downloaded = $false
+
+          for ($i = 1; $i -le $retries; $i++) {
+              try {
+                  Write-Host "Attempting Python download (try $i of $retries)..."
+                  Invoke-WebRequest -Uri $PYTHON_URL -OutFile "$DEST/python-embed.zip" -TimeoutSec 60
+                  Write-Host "Download successful!"
+                  $downloaded = $true
+                  break
+              } catch {
+                  Write-Host "Download failed: $_"
+                  if ($i -lt $retries) {
+                      Write-Host "Retrying in $delay seconds..."
+                      Start-Sleep -Seconds $delay
+                  } else {
+                      Write-Error "Failed to download Python after $retries attempts"
+                      throw
+                  }
+              }
+          }
+
+          if (-not $downloaded) {
+              throw "Python download failed after all retry attempts"
+          }
+
           Expand-Archive -Path "$DEST/python-embed.zip" -DestinationPath $DEST -Force
           Remove-Item "$DEST/python-embed.zip"
 
