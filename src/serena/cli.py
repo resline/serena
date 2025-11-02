@@ -102,6 +102,28 @@ class TopLevelCommands(AutoRegisteringGroup):
     def __init__(self) -> None:
         super().__init__(name="serena", help="Serena CLI commands. You can run `<command> --help` for more info on each command.")
 
+    def get_params(self, ctx: Any) -> list[Any]:  # type: ignore[no-untyped-def]
+        """Add version option to the group."""
+        params = super().get_params(ctx)
+        params.append(
+            click.Option(
+                ["--version"],
+                is_flag=True,
+                expose_value=True,
+                is_eager=True,
+                help="Show version and exit.",
+                callback=self._print_version,
+            )
+        )
+        return params
+
+    @staticmethod
+    def _print_version(ctx: Any, param: Any, value: Any) -> None:  # type: ignore[no-untyped-def]
+        """Print version and exit."""
+        if value:
+            click.echo("0.1.4")
+            ctx.exit()
+
     @staticmethod
     @click.command("start-mcp-server", help="Starts the Serena MCP server.")
     @click.option("--project", "project", type=PROJECT_TYPE, default=None, help="Path or name of project to activate at startup.")
@@ -138,7 +160,9 @@ class TopLevelCommands(AutoRegisteringGroup):
     )
     @click.option("--trace-lsp-communication", type=bool, is_flag=False, default=None, help="Whether to trace LSP communication.")
     @click.option("--tool-timeout", type=float, default=None, help="Override tool execution timeout in config.")
+    @click.pass_context
     def start_mcp_server(
+        ctx: click.Context,
         project: str | None,
         project_file_arg: str | None,
         context: str,
@@ -152,6 +176,10 @@ class TopLevelCommands(AutoRegisteringGroup):
         trace_lsp_communication: bool | None,
         tool_timeout: float | None,
     ) -> None:
+        # Skip initialization if Click is only parsing for help/validation (e.g., --help flag)
+        if ctx.resilient_parsing:
+            return
+
         # initialize logging, using INFO level initially (will later be adjusted by SerenaAgent according to the config)
         #   * memory log handler (for use by GUI/Dashboard)
         #   * stream handler for stderr (for direct console output, which will also be captured by clients like Claude Desktop)
