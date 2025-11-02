@@ -35,7 +35,7 @@ class TestPortableModeDetection:
             # With env var
             os.environ["SERENA_PORTABLE_DIR"] = "/tmp/serena-portable"
             assert is_portable_mode()
-            assert get_portable_root() == Path("/tmp/serena-portable")
+            assert get_portable_root() == Path("/tmp/serena-portable").resolve()
         finally:
             # Restore original state
             if original:

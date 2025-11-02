@@ -220,7 +220,7 @@ else
     # Unix shell launcher
     cat > "$PACKAGE_DIR/bin/serena" << 'UNIXLAUNCHER'
 #!/usr/bin/env bash
-SCRIPT_DIR="$(cd "$(dirname "$(realpath -s "${BASH_SOURCE[0]}")")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 SERENA_ROOT="$(dirname "$SCRIPT_DIR")"
 PYTHON_EXE="$SERENA_ROOT/python/bin/python3"
 
@@ -229,7 +229,7 @@ UNIXLAUNCHER
 
     cat > "$PACKAGE_DIR/bin/serena-mcp-server" << 'UNIXMCP'
 #!/usr/bin/env bash
-SCRIPT_DIR="$(cd "$(dirname "$(realpath -s "${BASH_SOURCE[0]}")")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 SERENA_ROOT="$(dirname "$SCRIPT_DIR")"
 PYTHON_EXE="$SERENA_ROOT/python/bin/python3"
 
