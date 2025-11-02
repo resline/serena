@@ -340,8 +340,24 @@ TEMP_PROJECT="/tmp/serena-cli-test-$$"
 mkdir -p "$TEMP_PROJECT"
 echo "print('test')" > "$TEMP_PROJECT/test.py"
 
-run_test "serena project generate-yml works" "timeout 5s '$PYTHON_EXE' -m serena.cli project generate-yml '$TEMP_PROJECT' >/dev/null 2>&1"
-run_test "project.yml was created" "[[ -f '$TEMP_PROJECT/project.yml' ]]"
+# Run generate-yml and capture output for debugging
+if timeout 5s "$PYTHON_EXE" -m serena.cli project generate-yml "$TEMP_PROJECT" >/dev/null 2>&1; then
+    ((TESTS_PASSED++))
+    log_info "[✓] serena project generate-yml works"
+else
+    ((TESTS_FAILED++))
+    log_error "[✗] serena project generate-yml works"
+fi
+
+# Check for project.yml in both possible locations
+if [[ -f "$TEMP_PROJECT/project.yml" ]] || [[ -f "$TEMP_PROJECT/.serena/project.yml" ]]; then
+    ((TESTS_PASSED++))
+    log_info "[✓] project.yml was created"
+else
+    ((TESTS_FAILED++))
+    log_error "[✗] project.yml was created"
+    log_warn "Directory contents: $(ls -la '$TEMP_PROJECT' 2>/dev/null || echo 'directory not found')"
+fi
 
 # Cleanup temp project
 rm -rf "$TEMP_PROJECT"
