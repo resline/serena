@@ -82,9 +82,7 @@ class TestGenerateYmlCommand:
         (self.project_path / "main.py").write_text("print('hello')\n")
 
         # Execute: Override with Go language
-        result = self.runner.invoke(
-            ProjectCommands.generate_yml, [str(self.project_path), "--language", "go"]
-        )
+        result = self.runner.invoke(ProjectCommands.generate_yml, [str(self.project_path), "--language", "go"])
 
         # Verify: Command succeeded
         assert result.exit_code == 0, f"Command failed: {result.output}"
@@ -161,6 +159,9 @@ class TestGenerateYmlCommand:
 
         # Execute: Generate configuration
         result = self.runner.invoke(ProjectCommands.generate_yml, [str(self.project_path)])
+
+        # Verify: Command succeeded
+        assert result.exit_code == 0, f"Command failed: {result.output}"
 
         # Verify: Project name matches directory
         yml_path = self.project_path / ".serena" / "project.yml"
@@ -259,9 +260,7 @@ class TestIsIgnoredPathCommand:
 
         # Execute: Check if ignored files match gitignore
         log_result = self.runner.invoke(ProjectCommands.is_ignored_path, ["debug.log", str(self.project_path)])
-        build_result = self.runner.invoke(
-            ProjectCommands.is_ignored_path, [str(build_dir / "output.py"), str(self.project_path)]
-        )
+        build_result = self.runner.invoke(ProjectCommands.is_ignored_path, [str(build_dir / "output.py"), str(self.project_path)])
 
         # Verify: Both are ignored due to gitignore
         assert "IS ignored" in log_result.output
@@ -307,9 +306,7 @@ class TestIsIgnoredPathCommand:
         (subdir / "helpers.py").write_text("pass\n")
 
         # Execute: Check nested file
-        result = self.runner.invoke(
-            ProjectCommands.is_ignored_path, ["src/utils/helpers.py", str(self.project_path)]
-        )
+        result = self.runner.invoke(ProjectCommands.is_ignored_path, ["src/utils/helpers.py", str(self.project_path)])
 
         # Verify: Nested source file is not ignored
         assert result.exit_code == 0
@@ -332,12 +329,8 @@ class TestIsIgnoredPathCommand:
         (self.project_path / "app.log").write_text("app log\n")
 
         # Execute: Check log files
-        debug_result = self.runner.invoke(
-            ProjectCommands.is_ignored_path, ["debug.log", str(self.project_path)]
-        )
-        app_result = self.runner.invoke(
-            ProjectCommands.is_ignored_path, ["app.log", str(self.project_path)]
-        )
+        debug_result = self.runner.invoke(ProjectCommands.is_ignored_path, ["debug.log", str(self.project_path)])
+        app_result = self.runner.invoke(ProjectCommands.is_ignored_path, ["app.log", str(self.project_path)])
 
         # Verify: Both log files are ignored by gitignore pattern
         assert "IS ignored" in debug_result.output
@@ -381,9 +374,7 @@ class TestPrintSystemPromptCommand:
     def test_print_system_prompt_basic_output(self) -> None:
         """Test that print-system-prompt generates output."""
         # Execute: Run print-system-prompt command
-        result = self.runner.invoke(
-            TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"]
-        )
+        result = self.runner.invoke(TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"])
 
         # Verify: Command succeeded and produced output
         assert result.exit_code == 0, f"Command failed: {result.output}"
@@ -404,16 +395,13 @@ class TestPrintSystemPromptCommand:
         output_lower = result.output.lower()
         # Check for common instruction keywords
         assert any(
-            keyword in output_lower
-            for keyword in ["tool", "use", "guid", "instruct", "serena"]
+            keyword in output_lower for keyword in ["tool", "use", "guid", "instruct", "serena"]
         ), "Output doesn't contain expected instruction content"
 
     def test_print_system_prompt_with_prefix_postfix(self) -> None:
         """Test that system prompt includes prefix and postfix when not using --only-instructions."""
         # Execute: Run command without only-instructions flag
-        result = self.runner.invoke(
-            TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"]
-        )
+        result = self.runner.invoke(TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"])
 
         # Verify: Output contains expected markers
         assert result.exit_code == 0
@@ -424,9 +412,7 @@ class TestPrintSystemPromptCommand:
     def test_print_system_prompt_default_context(self) -> None:
         """Test print-system-prompt uses default context when not specified."""
         # Execute: Run without explicit context
-        result = self.runner.invoke(
-            TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"]
-        )
+        result = self.runner.invoke(TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"])
 
         # Verify: Command succeeded (default context is valid)
         assert result.exit_code == 0, f"Failed with default context: {result.output}"
@@ -434,9 +420,7 @@ class TestPrintSystemPromptCommand:
     def test_print_system_prompt_default_mode(self) -> None:
         """Test print-system-prompt uses default modes when not specified."""
         # Execute: Run without explicit mode
-        result = self.runner.invoke(
-            TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"]
-        )
+        result = self.runner.invoke(TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"])
 
         # Verify: Command succeeded (default modes are valid)
         assert result.exit_code == 0, f"Failed with default modes: {result.output}"
@@ -444,9 +428,7 @@ class TestPrintSystemPromptCommand:
     def test_print_system_prompt_log_level_warning(self) -> None:
         """Test print-system-prompt with WARNING log level."""
         # Execute: Specify WARNING log level
-        result = self.runner.invoke(
-            TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"]
-        )
+        result = self.runner.invoke(TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"])
 
         # Verify: Command succeeded
         assert result.exit_code == 0
@@ -455,9 +437,7 @@ class TestPrintSystemPromptCommand:
     def test_print_system_prompt_log_level_info(self) -> None:
         """Test print-system-prompt with INFO log level."""
         # Execute: Specify INFO log level
-        result = self.runner.invoke(
-            TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "INFO"]
-        )
+        result = self.runner.invoke(TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "INFO"])
 
         # Verify: Command succeeded
         assert result.exit_code == 0
@@ -466,9 +446,7 @@ class TestPrintSystemPromptCommand:
     def test_print_system_prompt_works_with_project_path(self) -> None:
         """Test that command works with explicit project path argument."""
         # Execute: Pass project path as positional argument
-        result = self.runner.invoke(
-            TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"]
-        )
+        result = self.runner.invoke(TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"])
 
         # Verify: Command succeeded
         assert result.exit_code == 0
@@ -477,9 +455,7 @@ class TestPrintSystemPromptCommand:
     def test_print_system_prompt_output_length(self) -> None:
         """Test that system prompt output is substantial (not empty)."""
         # Execute: Run command
-        result = self.runner.invoke(
-            TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"]
-        )
+        result = self.runner.invoke(TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"])
 
         # Verify: Output is substantial
         assert result.exit_code == 0
@@ -488,12 +464,8 @@ class TestPrintSystemPromptCommand:
     def test_print_system_prompt_consistent_output(self) -> None:
         """Test that multiple runs produce consistent output."""
         # Execute: Run command twice
-        result1 = self.runner.invoke(
-            TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"]
-        )
-        result2 = self.runner.invoke(
-            TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"]
-        )
+        result1 = self.runner.invoke(TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"])
+        result2 = self.runner.invoke(TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"])
 
         # Verify: Both runs succeeded and produced identical output
         assert result1.exit_code == 0
@@ -527,23 +499,17 @@ class TestCLICommandsIntegration:
         assert gen_result.exit_code == 0, f"Generation failed: {gen_result.output}"
 
         # Step 2: Check that source file is not ignored
-        src_result = self.runner.invoke(
-            ProjectCommands.is_ignored_path, ["main.py", str(self.project_path)]
-        )
+        src_result = self.runner.invoke(ProjectCommands.is_ignored_path, ["main.py", str(self.project_path)])
         assert src_result.exit_code == 0
         assert "IS NOT ignored" in src_result.output
 
         # Step 3: Check that gitignored file is ignored
-        log_result = self.runner.invoke(
-            ProjectCommands.is_ignored_path, ["debug.log", str(self.project_path)]
-        )
+        log_result = self.runner.invoke(ProjectCommands.is_ignored_path, ["debug.log", str(self.project_path)])
         assert log_result.exit_code == 0
         assert "IS ignored" in log_result.output
 
         # Step 4: Generate system prompt
-        prompt_result = self.runner.invoke(
-            TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"]
-        )
+        prompt_result = self.runner.invoke(TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"])
         assert prompt_result.exit_code == 0
         assert len(prompt_result.output) > 0
 
@@ -563,15 +529,11 @@ class TestCLICommandsIntegration:
         commands_results.append(("generate-yml", gen_result.exit_code == 0))
 
         # Command 2: is_ignored_path (requires config)
-        ignore_result = self.runner.invoke(
-            ProjectCommands.is_ignored_path, ["main.py", str(self.project_path)]
-        )
+        ignore_result = self.runner.invoke(ProjectCommands.is_ignored_path, ["main.py", str(self.project_path)])
         commands_results.append(("is_ignored_path", ignore_result.exit_code == 0))
 
         # Command 3: print-system-prompt
-        prompt_result = self.runner.invoke(
-            TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"]
-        )
+        prompt_result = self.runner.invoke(TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"])
         commands_results.append(("print-system-prompt", prompt_result.exit_code == 0))
 
         # Verify all commands succeeded
@@ -589,17 +551,13 @@ class TestCLICommandsIntegration:
 
         # Run is_ignored_path multiple times
         for _ in range(3):
-            ignore_result = self.runner.invoke(
-                ProjectCommands.is_ignored_path, ["main.py", str(self.project_path)]
-            )
+            ignore_result = self.runner.invoke(ProjectCommands.is_ignored_path, ["main.py", str(self.project_path)])
             assert ignore_result.exit_code == 0
 
         # Run print-system-prompt multiple times
         outputs = []
         for _ in range(3):
-            prompt_result = self.runner.invoke(
-                TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"]
-            )
+            prompt_result = self.runner.invoke(TopLevelCommands.print_system_prompt, [str(self.project_path), "--log-level", "WARNING"])
             assert prompt_result.exit_code == 0
             outputs.append(prompt_result.output)
 

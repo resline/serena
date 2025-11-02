@@ -214,16 +214,16 @@ if [[ "$PLATFORM" == win-* ]]; then
     # Test Python.exe from Windows path
     run_test "python.exe exists at Windows path" "[[ -f '$PYTHON_EXE' ]]"
     run_test "python.exe is executable from Windows context" "cmd /c \"'$PYTHON_EXE' --version\" 1>/dev/null 2>&1"
-    run_test "python.exe returns valid version" "cmd /c \"'$PYTHON_EXE' --version 2>&1\" | findstr /R \"Python\" 1>/dev/null 2>&1" || true
+    run_test "python.exe returns valid version" "cmd /c \"'$PYTHON_EXE' --version 2>&1 | findstr /R Python >nul 2>&1\"" || true
 
     # Test batch environment variables
     run_test "Batch file sets SERENA_ROOT variable" "cmd /c \"set SERENA_ROOT && echo %SERENA_ROOT% | findstr /I serena\" 1>/dev/null 2>&1" || true
 
     # Test subprocess execution
-    run_test "cmd.exe subprocess inherits environment" "cmd /c \"'$PYTHON_EXE' -c 'import os; assert os.environ' 1>/dev/null 2>&1"
+    run_test "cmd.exe subprocess inherits environment" "cmd /c \"'$PYTHON_EXE' -c \"import os; assert os.environ\" >nul 2>&1\""
 
     # Test error handling
-    run_test "Invalid args return non-zero exit code" "cmd /c \"'$SERENA_CMD' --invalid-flag 2>/dev/null\" ; test \$? -ne 0" || true
+    run_test "Invalid args return non-zero exit code" "! cmd /c \"'$SERENA_CMD' --invalid-flag >nul 2>&1\"" || true
 
     # Test pip availability in Windows Python
     run_test "pip available in embedded Python" "cmd /c \"'$PYTHON_EXE' -m pip --version\" 1>/dev/null 2>&1"
