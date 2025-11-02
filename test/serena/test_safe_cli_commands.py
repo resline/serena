@@ -10,7 +10,6 @@ These commands do not modify git state, install dependencies, or require externa
 """
 
 import os
-import shutil
 import tempfile
 from pathlib import Path
 
@@ -19,6 +18,7 @@ import yaml
 from click.testing import CliRunner
 
 from serena.cli import ProjectCommands, TopLevelCommands
+from test.serena.cleanup_utils import retry_rmtree
 
 
 class TestGenerateYmlCommand:
@@ -33,7 +33,7 @@ class TestGenerateYmlCommand:
     def teardown_method(self) -> None:
         """Clean up test project directory."""
         if os.path.exists(self.test_dir):
-            shutil.rmtree(self.test_dir)
+            retry_rmtree(self.test_dir)
 
     def test_generate_yml_with_python_project(self) -> None:
         """Test generate-yml creates valid project.yml for Python project."""
@@ -214,7 +214,7 @@ class TestIsIgnoredPathCommand:
     def teardown_method(self) -> None:
         """Clean up test project directory."""
         if os.path.exists(self.test_dir):
-            shutil.rmtree(self.test_dir)
+            retry_rmtree(self.test_dir)
 
     def _initialize_project(self) -> None:
         """Initialize a valid test project with configuration."""
@@ -360,7 +360,7 @@ class TestPrintSystemPromptCommand:
     def teardown_method(self) -> None:
         """Clean up test project directory."""
         if os.path.exists(self.test_dir):
-            shutil.rmtree(self.test_dir)
+            retry_rmtree(self.test_dir)
 
     def _initialize_project(self) -> None:
         """Initialize a valid test project."""
@@ -485,7 +485,7 @@ class TestCLICommandsIntegration:
     def teardown_method(self) -> None:
         """Clean up test project directory."""
         if os.path.exists(self.test_dir):
-            shutil.rmtree(self.test_dir)
+            retry_rmtree(self.test_dir)
 
     def test_full_workflow_generate_check_prompt(self) -> None:
         """Test complete workflow: generate config, check paths, print prompt."""
