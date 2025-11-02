@@ -337,8 +337,12 @@ run_test "serena tools description works" "timeout 5s '$PYTHON_EXE' -m serena.cl
 
 # Test project commands (safe, no side effects)
 TEMP_PROJECT="/tmp/serena-cli-test-$$"
+
+# Verify we can create the directory (temporarily re-enable exit-on-error)
+set -e
 mkdir -p "$TEMP_PROJECT"
 echo "print('test')" > "$TEMP_PROJECT/test.py"
+set +e
 
 # Run generate-yml and capture output for debugging
 if timeout 5s "$PYTHON_EXE" -m serena.cli project generate-yml "$TEMP_PROJECT" >/dev/null 2>&1; then
@@ -356,7 +360,12 @@ if [[ -f "$TEMP_PROJECT/project.yml" ]] || [[ -f "$TEMP_PROJECT/.serena/project.
 else
     ((TESTS_FAILED++))
     log_error "[✗] project.yml was created"
-    log_warn "Directory contents: $(ls -la '$TEMP_PROJECT' 2>/dev/null || echo 'directory not found')"
+    # Fixed: use double quotes so variable expands
+    if [[ -d "$TEMP_PROJECT" ]]; then
+        log_warn "Directory contents: $(ls -la "$TEMP_PROJECT" 2>&1)"
+    else
+        log_warn "Temp directory $TEMP_PROJECT does not exist!"
+    fi
 fi
 
 # Cleanup temp project
