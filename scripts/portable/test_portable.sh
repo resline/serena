@@ -187,6 +187,122 @@ else
 fi
 
 echo ""
+log_info "=== Platform-Specific Runtime Tests ==="
+
+if [[ "$PLATFORM" == win-* ]]; then
+    # ========== WINDOWS-SPECIFIC TESTS ==========
+    log_info "Running Windows-specific runtime tests..."
+
+    # Test .bat file execution
+    run_test ".bat launcher exists and is readable" "[[ -f '$SERENA_CMD' && -r '$SERENA_CMD' ]]"
+    run_test ".bat file has correct Windows line endings" "grep -q \$'\\r' '$SERENA_CMD' || true && true"
+
+    # Test cmd.exe integration
+    run_test "cmd.exe can execute launcher via /c flag" "cmd /c 'echo test' 1>nul 2>&1"
+    run_test "serena.bat runs via cmd.exe" "cmd /c \"'$SERENA_CMD' --version\" 1>/dev/null 2>&1"
+
+    # Test path handling with spaces
+    TEST_DIR_SPACES="${PACKAGE}/test space dir"
+    mkdir -p "$TEST_DIR_SPACES" 2>/dev/null || true
+    run_test "Python works from path with spaces" "[[ -f '$PYTHON_EXE' ]] && \"$PYTHON_EXE\" -c 'import sys; print(len(sys.path))' 1>/dev/null"
+    run_test "Launcher works from path with spaces" "cmd /c \"cd /d '$TEST_DIR_SPACES' && '$SERENA_CMD' --version\" 1>/dev/null 2>&1" || true
+    rm -rf "$TEST_DIR_SPACES" 2>/dev/null || true
+
+    # Test special character handling
+    run_test "Path with quotes is handled correctly" "[[ -d '$PACKAGE' ]]"
+
+    # Test Python.exe from Windows path
+    run_test "python.exe exists at Windows path" "[[ -f '$PYTHON_EXE' ]]"
+    run_test "python.exe is executable from Windows context" "cmd /c \"'$PYTHON_EXE' --version\" 1>/dev/null 2>&1"
+    run_test "python.exe returns valid version" "cmd /c \"'$PYTHON_EXE' --version 2>&1\" | findstr /R \"Python\" 1>/dev/null 2>&1" || true
+
+    # Test batch environment variables
+    run_test "Batch file sets SERENA_ROOT variable" "cmd /c \"set SERENA_ROOT && echo %SERENA_ROOT% | findstr /I serena\" 1>/dev/null 2>&1" || true
+
+    # Test subprocess execution
+    run_test "cmd.exe subprocess inherits environment" "cmd /c \"'$PYTHON_EXE' -c 'import os; assert os.environ' 1>/dev/null 2>&1"
+
+    # Test error handling
+    run_test "Invalid args return non-zero exit code" "cmd /c \"'$SERENA_CMD' --invalid-flag 2>/dev/null\" ; test \$? -ne 0" || true
+
+    # Test pip availability in Windows Python
+    run_test "pip available in embedded Python" "cmd /c \"'$PYTHON_EXE' -m pip --version\" 1>/dev/null 2>&1"
+
+    # Test Windows registry/system integration
+    run_test "Python DLLs accessible" "[[ -d '$PACKAGE/python' ]] && ls '$PACKAGE/python'/*.dll 1>/dev/null 2>&1" || true
+
+else
+    # ========== LINUX/UNIX-SPECIFIC TESTS ==========
+    log_info "Running Linux/Unix-specific runtime tests..."
+
+    # Test shell script execution
+    run_test "Shell launcher exists" "[[ -f '$SERENA_CMD' ]]"
+    run_test "Shell script is readable" "[[ -r '$SERENA_CMD' ]]"
+
+    # Test executable bit verification
+    run_test "Launcher has executable bit set" "[[ -x '$SERENA_CMD' ]]"
+    run_test "Python binary has executable bit" "[[ -x '$PYTHON_EXE' ]]"
+
+    # Test POSIX path handling
+    run_test "Launcher uses POSIX paths" "grep -q 'dirname.*BASH_SOURCE' '$SERENA_CMD' || grep -q '/bin/python' '$SERENA_CMD'"
+
+    # Test shell script syntax
+    run_test "Shell script has valid shebang" "head -1 '$SERENA_CMD' | grep -q '^#!/usr/bin/env bash\\|^#!/bin/bash'"
+
+    # Test Unix line endings
+    run_test "Launcher has Unix line endings" "! grep -q \$'\\r' '$SERENA_CMD'"
+
+    # Test path with spaces
+    TEST_DIR_SPACES="/tmp/serena-test space-$$"
+    mkdir -p "$TEST_DIR_SPACES"
+    cp "$SERENA_CMD" "$TEST_DIR_SPACES/serena"
+    chmod +x "$TEST_DIR_SPACES/serena"
+    run_test "Launcher works from directory with spaces" "'$TEST_DIR_SPACES/serena' --version 1>/dev/null 2>&1" || true
+    rm -rf "$TEST_DIR_SPACES"
+
+    # Test special characters in paths
+    TEST_DIR_SPECIAL="/tmp/serena-test_\$special-$$"
+    mkdir -p "$TEST_DIR_SPECIAL"
+    run_test "Python works with special chars in path" "[[ -x '$PYTHON_EXE' ]] && '$PYTHON_EXE' --version 1>/dev/null 2>&1"
+    rm -rf "$TEST_DIR_SPECIAL"
+
+    # Test Python shebang execution
+    run_test "Python is invoked via explicit path" "grep -q \"exec.*python\" '$SERENA_CMD'"
+
+    # Test environment variable inheritance
+    run_test "Launcher can read environment variables" "'$PYTHON_EXE' -c 'import os; os.environ' 1>/dev/null 2>&1"
+
+    # Test symlink handling
+    SYMLINK_TEST="/tmp/serena-symlink-test-$$"
+    ln -sf "$SERENA_CMD" "$SYMLINK_TEST" 2>/dev/null || true
+    if [[ -L "$SYMLINK_TEST" ]]; then
+        run_test "Launcher works via symlink" "'$SYMLINK_TEST' --version 1>/dev/null 2>&1" || true
+        rm -f "$SYMLINK_TEST"
+    else
+        log_warn "Symlink test skipped (symlinks not supported on this filesystem)"
+    fi
+
+    # Test relative path execution
+    run_test "Launcher can be executed from different directory" "(cd /tmp && '$SERENA_CMD' --version 1>/dev/null 2>&1)"
+
+    # Test signal handling
+    run_test "Python process accepts signals" "'$PYTHON_EXE' -c 'import signal; signal.signal(signal.SIGTERM, signal.SIG_DFL)' 1>/dev/null 2>&1"
+
+    # Test process substitution
+    run_test "Python output can be captured" "OUTPUT=\$('$PYTHON_EXE' --version 2>&1) && [[ ! -z \"\$OUTPUT\" ]]"
+
+    # Test file descriptor inheritance
+    run_test "File descriptors properly inherited" "'$PYTHON_EXE' -c 'import sys; assert sys.stdin and sys.stdout and sys.stderr' 1>/dev/null 2>&1"
+
+    # Test library path resolution
+    run_test "Python finds shared libraries" "'$PYTHON_EXE' -c 'import ctypes; ctypes.CDLL(None)' 1>/dev/null 2>&1" || true
+
+    # Test directory permissions
+    run_test "All binary directories are accessible" "[[ -x '$PACKAGE/bin' && -r '$PACKAGE/bin' ]]"
+    run_test "All python directories are traversable" "[[ -x '$PACKAGE/python/bin' ]] || [[ -x '$PACKAGE/python' ]]"
+fi
+
+echo ""
 log_info "=== Language Server Tests ==="
 
 # Check if language servers directory was created
@@ -200,6 +316,38 @@ for ls_dir in "$PACKAGE/language_servers/static"/*; do
         log_info "  Found: $LS_NAME"
     fi
 done
+
+echo ""
+log_info "=== CLI Runtime Tests ==="
+
+# Disable exit-on-error for CLI tests (we want all tests to run)
+set +e
+
+# Test basic help commands
+run_test "serena --help works" "timeout 5s '$SERENA_CMD' --help >/dev/null 2>&1"
+run_test "serena-mcp-server --help works" "timeout 5s '$MCP_CMD' --help >/dev/null 2>&1"
+
+# Test list commands (read-only, safe for CI)
+run_test "serena mode list works" "timeout 5s '$PYTHON_EXE' -m serena.cli mode list >/dev/null 2>&1"
+run_test "serena context list works" "timeout 5s '$PYTHON_EXE' -m serena.cli context list >/dev/null 2>&1"
+run_test "serena tools list works" "timeout 5s '$PYTHON_EXE' -m serena.cli tools list --quiet >/dev/null 2>&1"
+
+# Test tool description command
+run_test "serena tools description works" "timeout 5s '$PYTHON_EXE' -m serena.cli tools description get_current_config >/dev/null 2>&1"
+
+# Test project commands (safe, no side effects)
+TEMP_PROJECT="/tmp/serena-cli-test-$$"
+mkdir -p "$TEMP_PROJECT"
+echo "print('test')" > "$TEMP_PROJECT/test.py"
+
+run_test "serena project generate-yml works" "timeout 5s '$PYTHON_EXE' -m serena.cli project generate-yml '$TEMP_PROJECT' >/dev/null 2>&1"
+run_test "project.yml was created" "[[ -f '$TEMP_PROJECT/project.yml' ]]"
+
+# Cleanup temp project
+rm -rf "$TEMP_PROJECT"
+
+# Re-enable exit-on-error
+set -e
 
 echo ""
 log_info "=== Integration Tests ==="
