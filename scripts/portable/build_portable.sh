@@ -213,7 +213,7 @@ set "SCRIPT_DIR=%~dp0"
 set "SERENA_ROOT=%SCRIPT_DIR%.."
 set "PYTHON_EXE=%SERENA_ROOT%\python\python.exe"
 
-"%PYTHON_EXE%" -m serena.cli start_mcp_server %*
+"%PYTHON_EXE%" -m serena.cli start-mcp-server %*
 WINMCP
 
 else
@@ -233,7 +233,7 @@ SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 SERENA_ROOT="$(dirname "$SCRIPT_DIR")"
 PYTHON_EXE="$SERENA_ROOT/python/bin/python3"
 
-exec "$PYTHON_EXE" -m serena.cli start_mcp_server "$@"
+exec "$PYTHON_EXE" -m serena.cli start-mcp-server "$@"
 UNIXMCP
 
     chmod +x "$PACKAGE_DIR/bin/serena"
