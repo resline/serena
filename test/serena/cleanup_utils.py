@@ -85,7 +85,10 @@ def retry_rmtree(
                 # On non-Windows, still retry for general permission errors
                 if attempt < max_attempts:
                     if log_warnings:
-                        logger.warning(f"Failed to remove {path} (attempt {attempt}/{max_attempts}): {e}. " f"Retrying in {delay}s...")
+                        logger.warning(
+                            f"Failed to remove {path} (attempt {attempt}/{max_attempts}): {e}. "
+                            f"Retrying in {delay}s..."
+                        )
                     gc.collect()
                     time.sleep(delay)
                     delay *= 2
