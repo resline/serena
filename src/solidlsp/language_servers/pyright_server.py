@@ -32,10 +32,16 @@ class PyrightServer(SolidLanguageServer):
         Use LanguageServer.create() instead.
         """
         import os
+        import sys
 
-        # Normalize path for Windows subprocess compatibility (fixes WinError 267)
-        # Windows subprocess.Popen requires normalized paths with proper separators
+        # Normalize path for Windows subprocess compatibility
         normalized_cwd = os.path.normpath(str(repository_root_path))
+
+        # Use sys.executable instead of "python" for Windows compatibility (fixes WinError 267)
+        # Windows subprocess.Popen with shell=True has issues resolving "python" in PATH
+        # Using the exact interpreter running the current process avoids resolution issues
+        python_cmd = sys.executable
+        pyright_cmd = f'"{python_cmd}" -m pyright.langserver --stdio'
 
         super().__init__(
             config,
@@ -43,7 +49,7 @@ class PyrightServer(SolidLanguageServer):
             repository_root_path,
             # Note 1: we can also use `pyright-langserver --stdio` but it requires pyright to be installed with npm
             # Note 2: we can also use `bpyright-langserver --stdio` if we ever are unhappy with pyright
-            ProcessLaunchInfo(cmd="python -m pyright.langserver --stdio", cwd=normalized_cwd),
+            ProcessLaunchInfo(cmd=pyright_cmd, cwd=normalized_cwd),
             "python",
             solidlsp_settings,
         )
