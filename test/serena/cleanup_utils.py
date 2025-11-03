@@ -70,7 +70,10 @@ def retry_rmtree(
                 # WinError 267 indicates "The directory is not empty" or locked
                 is_windows_lock_error = (
                     (hasattr(e, "winerror") and e.winerror == 267)
-                    or ("267" in str(e) or "locked" in str(e).lower())
+                    or (
+                        "267" in str(e)
+                        or "locked" in str(e).lower()
+                    )
                 )
 
                 if is_windows_lock_error and attempt < max_attempts:
