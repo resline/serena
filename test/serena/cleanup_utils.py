@@ -68,13 +68,7 @@ def retry_rmtree(
             # Platform-specific error handling
             if sys.platform == "win32":
                 # WinError 267 indicates "The directory is not empty" or locked
-                is_windows_lock_error = (
-                    (hasattr(e, "winerror") and e.winerror == 267)
-                    or (
-                        "267" in str(e)
-                        or "locked" in str(e).lower()
-                    )
-                )
+                is_windows_lock_error = (hasattr(e, "winerror") and e.winerror == 267) or ("267" in str(e) or "locked" in str(e).lower())
 
                 if is_windows_lock_error and attempt < max_attempts:
                     if log_warnings:
@@ -91,10 +85,7 @@ def retry_rmtree(
                 # On non-Windows, still retry for general permission errors
                 if attempt < max_attempts:
                     if log_warnings:
-                        logger.warning(
-                            f"Failed to remove {path} (attempt {attempt}/{max_attempts}): {e}. "
-                            f"Retrying in {delay}s..."
-                        )
+                        logger.warning(f"Failed to remove {path} (attempt {attempt}/{max_attempts}): {e}. Retrying in {delay}s...")
                     gc.collect()
                     time.sleep(delay)
                     delay *= 2
