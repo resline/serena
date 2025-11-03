@@ -31,13 +31,19 @@ class PyrightServer(SolidLanguageServer):
         Creates a PyrightServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
+        import os
+
+        # Normalize path for Windows subprocess compatibility (fixes WinError 267)
+        # Windows subprocess.Popen requires normalized paths with proper separators
+        normalized_cwd = os.path.normpath(str(repository_root_path))
+
         super().__init__(
             config,
             logger,
             repository_root_path,
             # Note 1: we can also use `pyright-langserver --stdio` but it requires pyright to be installed with npm
             # Note 2: we can also use `bpyright-langserver --stdio` if we ever are unhappy with pyright
-            ProcessLaunchInfo(cmd="python -m pyright.langserver --stdio", cwd=repository_root_path),
+            ProcessLaunchInfo(cmd="python -m pyright.langserver --stdio", cwd=normalized_cwd),
             "python",
             solidlsp_settings,
         )

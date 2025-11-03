@@ -67,8 +67,14 @@ def retry_rmtree(
 
             # Platform-specific error handling
             if sys.platform == "win32":
-                # WinError 267 indicates "The directory is not empty" or locked
-                is_windows_lock_error = (hasattr(e, "winerror") and e.winerror == 267) or ("267" in str(e) or "locked" in str(e).lower())
+                # WinError 32: File in use by another process
+                # WinError 267: The directory name is invalid / directory not empty
+                is_windows_lock_error = (
+                    (hasattr(e, "winerror") and e.winerror in (32, 267))
+                    or any(code in str(e) for code in ("32", "267"))
+                    or "locked" in str(e).lower()
+                    or "being used by another process" in str(e).lower()
+                )
 
                 if is_windows_lock_error and attempt < max_attempts:
                     if log_warnings:
