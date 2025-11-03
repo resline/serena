@@ -214,7 +214,7 @@ if [[ "$PLATFORM" == win-* ]]; then
     # Test Python.exe from Windows path
     run_test "python.exe exists at Windows path" "[[ -f '$PYTHON_EXE' ]]"
     run_test "python.exe is executable from Windows context" "cmd /c \"'$PYTHON_EXE' --version\" 1>/dev/null 2>&1"
-    run_test "python.exe returns valid version" "cmd /c \"'$PYTHON_EXE' --version 2>&1\" | grep -i python" || true
+    run_test "python.exe returns valid version" "'$PYTHON_EXE' --version 2>&1 | grep -i python" || true
 
     # Test batch environment variables
     run_test "Batch file sets SERENA_ROOT variable" "cmd /c \"echo %SERENA_ROOT%\" 2>&1 | grep -i serena" || true
