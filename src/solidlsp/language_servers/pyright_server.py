@@ -37,11 +37,11 @@ class PyrightServer(SolidLanguageServer):
         # Normalize path for Windows subprocess compatibility
         normalized_cwd = os.path.normpath(str(repository_root_path))
 
-        # Use sys.executable instead of "python" for Windows compatibility (fixes WinError 267)
-        # Windows subprocess.Popen with shell=True has issues resolving "python" in PATH
-        # Using the exact interpreter running the current process avoids resolution issues
+        # Use sys.executable with command list for Windows compatibility (fixes WinError 267)
+        # Windows subprocess requires command as LIST when using shell=True to avoid quote parsing issues
+        # ls_handler.py handles list-to-string conversion for Linux/macOS (line 189-192)
         python_cmd = sys.executable
-        pyright_cmd = f'"{python_cmd}" -m pyright.langserver --stdio'
+        pyright_cmd = [python_cmd, "-m", "pyright.langserver", "--stdio"]
 
         super().__init__(
             config,
