@@ -1,7 +1,6 @@
 import logging
 import os
 import pathlib
-import platform
 import shutil
 import subprocess
 
@@ -30,20 +29,9 @@ class JuliaLanguageServer(SolidLanguageServer):
         julia_executable = self._setup_runtime_dependency(logger)  # PASS LOGGER
         julia_code = "using LanguageServer; runserver()"
 
-        if platform.system() == "Windows":
-            # On Windows, pass as list (Serena handles shell=True differently)
-            julia_ls_cmd = [julia_executable, "--startup-file=no", "--history-file=no", "-e", julia_code, repository_root_path]
-        else:
-            # On Linux/macOS, build shell-escaped string
-            import shlex
-
-            julia_ls_cmd = (
-                f"{shlex.quote(julia_executable)} "
-                f"--startup-file=no "
-                f"--history-file=no "
-                f"-e {shlex.quote(julia_code)} "
-                f"{shlex.quote(repository_root_path)}"
-            )
+        # Pass command as list for all platforms - ls_handler.py will convert to
+        # properly shell-escaped string using shlex.join()
+        julia_ls_cmd = [julia_executable, "--startup-file=no", "--history-file=no", "-e", julia_code, repository_root_path]
 
         logger.log(f"[JULIA DEBUG] Command: {julia_ls_cmd}", logging.INFO)
 

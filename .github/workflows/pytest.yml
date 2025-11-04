@@ -14,6 +14,7 @@ jobs:
   cpu:
     name: Tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -49,6 +50,9 @@ jobs:
             ~/go/bin
             ~/.cache/go-build
           key: go-binaries-${{ runner.os }}-gopls-latest
+          restore-keys: |
+            go-binaries-${{ runner.os }}-gopls-
+            go-binaries-${{ runner.os }}-
       - name: Install gopls
         if: steps.cache-go-binaries.outputs.cache-hit != 'true'
         shell: bash
@@ -181,6 +185,7 @@ jobs:
         shell: bash
       - name: Pre-build Haskell test project for HLS
         if: runner.os != 'Windows'
+        timeout-minutes: 15
         run: |
           cd test/resources/repos/haskell/test_repo
           cabal update
@@ -339,6 +344,9 @@ jobs:
         with:
           path: .venv
           key: uv-venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            uv-venv-${{ runner.os }}-${{ matrix.python-version }}-
+            uv-venv-${{ runner.os }}-
       - name: Cache language servers
         id: cache-language-servers
         uses: actions/cache@v3
@@ -362,3 +370,4 @@ jobs:
       - name: Test with pytest
         shell: bash
         run: uv run poe test
+        timeout-minutes: 75

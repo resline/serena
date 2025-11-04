@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import shlex
 import subprocess
 import threading
 import time
@@ -186,9 +187,9 @@ class SolidLanguageServerHandler:
         cmd = self.process_launch_info.cmd
         if not isinstance(cmd, str):
             # Since we are using shell=True (line 203), all platforms require a string command.
-            # Convert list to string by joining with spaces.
-            # This applies to Windows, Linux, and macOS.
-            cmd = " ".join(cmd)
+            # Convert list to properly shell-escaped string using shlex.join().
+            # This handles paths with spaces correctly on all platforms (Windows, Linux, macOS).
+            cmd = shlex.join(cmd)
         log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
         kwargs = subprocess_kwargs()
         kwargs["start_new_session"] = self.start_independent_lsp_process
