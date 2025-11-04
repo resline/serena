@@ -66,6 +66,11 @@ class Intelephense(SolidLanguageServer):
         intelephense_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "php-lsp")
         os.makedirs(intelephense_ls_dir, exist_ok=True)
         intelephense_executable_path = os.path.join(intelephense_ls_dir, "node_modules", ".bin", "intelephense")
+
+        # Handle Windows executable extension (npm creates .cmd files on Windows)
+        if os.name == "nt":
+            intelephense_executable_path += ".cmd"
+
         if not os.path.exists(intelephense_executable_path):
             deps = RuntimeDependencyCollection(
                 [

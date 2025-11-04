@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import platform
+import shlex
 import subprocess
 import threading
 import time
@@ -185,11 +186,25 @@ class SolidLanguageServerHandler:
         child_proc_env.update(self.process_launch_info.env)
 
         cmd = self.process_launch_info.cmd
-        is_windows = platform.system() == "Windows"
-        if not isinstance(cmd, str) and not is_windows:
-            # Since we are using the shell, we need to convert the command list to a single string
-            # on Linux/macOS
-            cmd = " ".join(cmd)
+        if not isinstance(cmd, str):
+            # Since we are using shell=True (line 203), all platforms require a string command.
+            if platform.system() == "Windows":
+                # On Windows, especially when using bash shell (like in GitHub Actions),
+                # shlex.join() produces single-quoted strings that don't handle backslashes
+                # correctly in Windows paths. Use double-quote escaping instead.
+                escaped_parts = []
+                for arg in cmd:
+                    # Quote arguments that contain spaces or backslashes
+                    if " " in arg or "\\" in arg:
+                        # Escape any existing double quotes
+                        escaped = arg.replace('"', '\\"')
+                        escaped_parts.append(f'"{escaped}"')
+                    else:
+                        escaped_parts.append(arg)
+                cmd = " ".join(escaped_parts)
+            else:
+                # On Unix systems, shlex.join() works correctly
+                cmd = shlex.join(cmd)
         log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
         kwargs = subprocess_kwargs()
         kwargs["start_new_session"] = self.start_independent_lsp_process

@@ -31,13 +31,24 @@ class PyrightServer(SolidLanguageServer):
         Creates a PyrightServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
+        import os
+        import sys
+
+        # Normalize path for Windows subprocess compatibility
+        normalized_cwd = os.path.normpath(str(repository_root_path))
+
+        # Use sys.executable with command list for cross-platform compatibility
+        # ls_handler.py converts command list to string when shell=True is used (required on all platforms)
+        python_cmd = sys.executable
+        pyright_cmd = [python_cmd, "-m", "pyright.langserver", "--stdio"]
+
         super().__init__(
             config,
             logger,
             repository_root_path,
             # Note 1: we can also use `pyright-langserver --stdio` but it requires pyright to be installed with npm
             # Note 2: we can also use `bpyright-langserver --stdio` if we ever are unhappy with pyright
-            ProcessLaunchInfo(cmd="python -m pyright.langserver --stdio", cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=pyright_cmd, cwd=normalized_cwd),
             "python",
             solidlsp_settings,
         )

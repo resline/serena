@@ -8,6 +8,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, cast
 
+from serena.portable import get_language_server_dir, is_portable_mode
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
 from solidlsp.util.subprocess_util import subprocess_kwargs
@@ -82,11 +83,30 @@ class RuntimeDependencyCollection:
     def install(self, logger: LanguageServerLogger, target_dir: str) -> dict[str, str]:
         """Install all dependencies for the current platform into *target_dir*.
 
+        In portable mode, checks for pre-downloaded language servers before downloading.
+
         Returns a mapping from dependency id to the resolved binary path.
         """
         os.makedirs(target_dir, exist_ok=True)
         results: dict[str, str] = {}
+
         for dep in self.get_dependencies_for_current_platform():
+            # In portable mode, check if LS is pre-downloaded
+            if is_portable_mode() and dep.binary_name:
+                portable_ls_dir = get_language_server_dir()
+                pre_downloaded_path = os.path.join(portable_ls_dir, dep.id, dep.binary_name)
+                if os.path.exists(pre_downloaded_path):
+                    logger.log(f"Using pre-downloaded language server: {dep.id}", logging.INFO)
+                    # Copy to target directory
+                    import shutil
+
+                    dest_dir = os.path.join(target_dir, dep.id)
+                    os.makedirs(dest_dir, exist_ok=True)
+                    shutil.copy2(pre_downloaded_path, os.path.join(dest_dir, dep.binary_name))
+                    results[dep.id] = os.path.join(dest_dir, dep.binary_name)
+                    continue
+
+            # Original download logic
             if dep.url:
                 self._install_from_url(dep, logger, target_dir)
             if dep.command:
