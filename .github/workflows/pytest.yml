@@ -369,5 +369,12 @@ jobs:
         run: uv run poe lint
       - name: Test with pytest
         shell: bash
-        run: uv run poe test
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            # Skip Ruby tests on Windows due to extreme slowness (68+ minutes for 43 tests)
+            # Ruby LS functionality is verified on Ubuntu and macOS where tests complete in ~7-8 minutes
+            uv run poe test -m "not ruby"
+          else
+            uv run poe test
+          fi
         timeout-minutes: 75

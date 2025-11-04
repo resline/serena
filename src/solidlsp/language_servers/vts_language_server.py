@@ -102,6 +102,10 @@ class VtsLanguageServer(SolidLanguageServer):
 
         vts_executable_path = os.path.join(vts_ls_dir, "node_modules", ".bin", "vtsls")
 
+        # Handle Windows executable extension (npm creates .cmd files on Windows)
+        if os.name == "nt":
+            vts_executable_path += ".cmd"
+
         assert os.path.exists(vts_executable_path), "vtsls executable not found. Please install @vtsls/language-server and try again."
         return f"{vts_executable_path} --stdio"
 

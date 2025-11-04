@@ -85,6 +85,11 @@ class ElmLanguageServer(SolidLanguageServer):
         # Install elm-language-server if not already installed
         elm_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "elm-lsp")
         elm_ls_executable_path = os.path.join(elm_ls_dir, "node_modules", ".bin", "elm-language-server")
+
+        # Handle Windows executable extension (npm creates .cmd files on Windows)
+        if os.name == "nt":
+            elm_ls_executable_path += ".cmd"
+
         if not os.path.exists(elm_ls_executable_path):
             logger.log(f"Elm Language Server executable not found at {elm_ls_executable_path}. Installing...", logging.INFO)
             with LogTime("Installation of Elm language server dependencies", logger=logger.logger):

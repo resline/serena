@@ -121,6 +121,11 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         # Install typescript and typescript-language-server if not already installed
         tsserver_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "ts-lsp")
         tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
+
+        # Handle Windows executable extension (npm creates .cmd files on Windows)
+        if os.name == "nt":
+            tsserver_executable_path += ".cmd"
+
         if not os.path.exists(tsserver_executable_path):
             logger.log(f"Typescript Language Server executable not found at {tsserver_executable_path}. Installing...", logging.INFO)
             with LogTime("Installation of TypeScript language server dependencies", logger=logger.logger):
