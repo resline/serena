@@ -37,9 +37,8 @@ class PyrightServer(SolidLanguageServer):
         # Normalize path for Windows subprocess compatibility
         normalized_cwd = os.path.normpath(str(repository_root_path))
 
-        # Use sys.executable with command list for Windows compatibility (fixes WinError 267)
-        # Windows subprocess requires command as LIST when using shell=True to avoid quote parsing issues
-        # ls_handler.py handles list-to-string conversion for Linux/macOS (line 189-192)
+        # Use sys.executable with command list for cross-platform compatibility
+        # ls_handler.py converts command list to string when shell=True is used (required on all platforms)
         python_cmd = sys.executable
         pyright_cmd = [python_cmd, "-m", "pyright.langserver", "--stdio"]
 

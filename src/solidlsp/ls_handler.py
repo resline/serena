@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 import os
-import platform
 import subprocess
 import threading
 import time
@@ -185,10 +184,10 @@ class SolidLanguageServerHandler:
         child_proc_env.update(self.process_launch_info.env)
 
         cmd = self.process_launch_info.cmd
-        is_windows = platform.system() == "Windows"
-        if not isinstance(cmd, str) and not is_windows:
-            # Since we are using the shell, we need to convert the command list to a single string
-            # on Linux/macOS
+        if not isinstance(cmd, str):
+            # Since we are using shell=True (line 203), all platforms require a string command.
+            # Convert list to string by joining with spaces.
+            # This applies to Windows, Linux, and macOS.
             cmd = " ".join(cmd)
         log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
         kwargs = subprocess_kwargs()
