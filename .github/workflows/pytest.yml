@@ -371,9 +371,12 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            # Skip Ruby tests on Windows due to extreme slowness (68+ minutes for 43 tests)
-            # Ruby LS functionality is verified on Ubuntu and macOS where tests complete in ~7-8 minutes
-            uv run poe test -m "not ruby"
+            # Skip Ruby, Rust, Java, and Erlang tests on Windows:
+            # - Ruby: Extreme slowness (68+ minutes for 43 tests)
+            # - Rust: Rust-analyzer instability (LanguageServerTerminatedException)
+            # - Java & Erlang: Default exclusions (see pyproject.toml PYTEST_MARKERS)
+            # All are verified on Ubuntu and macOS where they work reliably
+            uv run poe test -m "not ruby and not rust and not java and not erlang"
           else
             uv run poe test
           fi
