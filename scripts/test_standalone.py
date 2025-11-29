@@ -62,7 +62,6 @@ class StandaloneTestRunner:
         print(f"TEST: {name}")
         print("=" * 60)
 
-        last_error = None
         for attempt in range(retries + 1):
             try:
                 fn()
@@ -78,10 +77,9 @@ class StandaloneTestRunner:
                 return
             except RuntimeError as e:
                 # Timeout errors - retry
-                last_error = e
                 if attempt < retries:
                     print(f"[RETRY] {name} (attempt {attempt + 1}/{retries + 1})")
-                    print(f"  Timeout, retrying...")
+                    print("  Timeout, retrying...")
                     continue
                 self.tests_failed += 1
                 self.test_results.append({"name": name, "status": "ERROR", "error": str(e)})
