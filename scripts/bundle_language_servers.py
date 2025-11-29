@@ -314,7 +314,7 @@ LANGUAGE_SERVERS: list[LanguageServerBundle] = [
         platforms={
             "linux-x64": {
                 "url": "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-linux-x64.tar.gz",
-                "archive_type": "tar.gz",
+                "archive_type": "gztar",  # shutil.unpack_archive format
                 "binary_path": "bin/lua-language-server",
                 "target_dir": "lua-ls",
             },
@@ -326,13 +326,13 @@ LANGUAGE_SERVERS: list[LanguageServerBundle] = [
             },
             "osx-x64": {
                 "url": "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-darwin-x64.tar.gz",
-                "archive_type": "tar.gz",
+                "archive_type": "gztar",  # shutil.unpack_archive format
                 "binary_path": "bin/lua-language-server",
                 "target_dir": "lua-ls",
             },
             "osx-arm64": {
                 "url": "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-darwin-arm64.tar.gz",
-                "archive_type": "tar.gz",
+                "archive_type": "gztar",  # shutil.unpack_archive format
                 "binary_path": "bin/lua-language-server",
                 "target_dir": "lua-ls",
             },
