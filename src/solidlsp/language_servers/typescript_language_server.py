@@ -5,7 +5,6 @@ Provides TypeScript specific instantiation of the LanguageServer class. Contains
 import logging
 import os
 import pathlib
-import shutil
 import threading
 from typing import Any, cast
 
@@ -19,7 +18,12 @@ from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
-from .common import RuntimeDependency, RuntimeDependencyCollection
+from .common import (
+    RuntimeDependency,
+    RuntimeDependencyCollection,
+    get_bundled_npm_package_path,
+    verify_node_npm_available,
+)
 
 log = logging.getLogger(__name__)
 
@@ -77,6 +81,11 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> list[str]:
         """
         Setup runtime dependencies for TypeScript Language Server and return the command to start the server.
+
+        This method supports both online (npm install) and offline (bundled) modes:
+        1. First checks for bundled language server in standalone builds
+        2. Falls back to checking locally installed version
+        3. If not found and download is allowed, installs via npm
         """
         platform_id = PlatformUtils.get_platform_id()
 
@@ -90,6 +99,39 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             PlatformId.WIN_arm64,
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
+
+        # 1. Check for bundled language server (for standalone/offline builds)
+        bundled_path = get_bundled_npm_package_path(
+            solidlsp_settings,
+            package_dir_name="ts-lsp",
+            binary_name="typescript-language-server",
+        )
+        if bundled_path:
+            log.info(f"Using bundled TypeScript Language Server at {bundled_path}")
+            return [bundled_path, "--stdio"]
+
+        # 2. Check for locally installed version
+        tsserver_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "ts-lsp")
+        tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
+
+        # Handle Windows executable extension
+        if os.name == "nt":
+            tsserver_executable_path_cmd = tsserver_executable_path + ".cmd"
+            if os.path.exists(tsserver_executable_path_cmd):
+                return [tsserver_executable_path_cmd, "--stdio"]
+        elif os.path.exists(tsserver_executable_path):
+            return [tsserver_executable_path, "--stdio"]
+
+        # 3. Not found - need to install via npm
+        # Check if download/install is allowed
+        if not solidlsp_settings.allow_download_fallback:
+            raise FileNotFoundError(
+                f"TypeScript Language Server not found and download is disabled. "
+                f"Expected at: {tsserver_executable_path} or bundled at: {solidlsp_settings.bundled_ls_dir}"
+            )
+
+        # Verify node and npm are available (bundled or system)
+        verify_node_npm_available(solidlsp_settings)
 
         deps = RuntimeDependencyCollection(
             [
@@ -108,25 +150,13 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             ]
         )
 
-        # Verify both node and npm are installed
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
+        log.info(f"TypeScript Language Server not found at {tsserver_executable_path}. Installing...")
+        with LogTime("Installation of TypeScript language server dependencies", logger=log):
+            deps.install(tsserver_ls_dir)
 
-        # Verify both node and npm are installed
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
-
-        # Install typescript and typescript-language-server if not already installed
-        tsserver_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "ts-lsp")
-        tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
-        if not os.path.exists(tsserver_executable_path):
-            log.info(f"Typescript Language Server executable not found at {tsserver_executable_path}. Installing...")
-            with LogTime("Installation of TypeScript language server dependencies", logger=log):
-                deps.install(tsserver_ls_dir)
+        # Check for the installed executable (handle Windows .cmd extension)
+        if os.name == "nt":
+            tsserver_executable_path = tsserver_executable_path + ".cmd"
 
         if not os.path.exists(tsserver_executable_path):
             raise FileNotFoundError(
