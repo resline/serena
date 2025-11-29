@@ -36,7 +36,7 @@ class StandaloneTestRunner:
         if not self.executable.exists():
             raise FileNotFoundError(f"Executable not found: {self.executable}")
 
-    def run_command(self, args: list[str], timeout: int = 30, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    def run_command(self, args: list[str], timeout: int = 60, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
         """Run the executable with given arguments."""
         cmd = [str(self.executable)] + args
         full_env = os.environ.copy()
@@ -104,7 +104,9 @@ class StandaloneTestRunner:
 
     def test_executable_starts(self):
         """Test executable starts without critical errors."""
-        result = self.run_command(["--help"], timeout=10)
+        # Use longer timeout for first run - PyInstaller needs to extract files on first execution
+        # Windows especially needs more time due to antivirus scanning and slower disk I/O
+        result = self.run_command(["--help"], timeout=120)
         self.assert_exit_code(result, 0)
         # Should not have Python import errors or missing module errors
         assert "ModuleNotFoundError" not in result.stderr, f"Import error in stderr: {result.stderr}"
