@@ -298,6 +298,16 @@ jobs:
           echo "Total size:"
           du -sh language_servers/
 
+      - name: Download binary Language Servers for bundling (full variant only)
+        if: needs.setup.outputs.variant == 'full'
+        shell: bash
+        run: |
+          echo "Downloading binary language servers for Windows..."
+          source .venv/Scripts/activate
+          python scripts/bundle_language_servers.py --platform win-x64 --output-dir ./language_servers --verbose
+          echo "Language servers bundled at ./language_servers/"
+          ls -la language_servers/
+
       - name: Build standalone executable
         shell: bash
         env:
@@ -491,6 +501,16 @@ jobs:
           du -sh language_servers/*
           echo "Total size:"
           du -sh language_servers/
+
+      - name: Download binary Language Servers for bundling (full variant only)
+        if: needs.setup.outputs.variant == 'full'
+        shell: bash
+        run: |
+          echo "Downloading binary language servers for Linux..."
+          source .venv/bin/activate
+          python scripts/bundle_language_servers.py --platform linux-x64 --output-dir ./language_servers --verbose
+          echo "Language servers bundled at ./language_servers/"
+          ls -la language_servers/
 
       - name: Build standalone executable
         shell: bash
@@ -686,6 +706,16 @@ jobs:
           du -sh language_servers/*
           echo "Total size:"
           du -sh language_servers/
+
+      - name: Download binary Language Servers for bundling (full variant only)
+        if: needs.setup.outputs.variant == 'full'
+        shell: bash
+        run: |
+          echo "Downloading binary language servers for macOS ARM64..."
+          source .venv/bin/activate
+          python scripts/bundle_language_servers.py --platform osx-arm64 --output-dir ./language_servers --verbose
+          echo "Language servers bundled at ./language_servers/"
+          ls -la language_servers/
 
       - name: Build standalone executable
         shell: bash

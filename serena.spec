@@ -248,9 +248,25 @@ if VARIANT == 'full':
         print(f"    [WARN] Node.js directory not found at {node_dir}")
         print(f"    [WARN] Full variant without Node.js - npm-based language servers may not work offline")
 
-    # Check for bundled language servers (npm packages)
+    # Check for bundled language servers (npm packages and binary LS)
+    # Expected structure:
+    #   language_servers/
+    #     # npm-based language servers:
+    #     ts-lsp/         - TypeScript language server
+    #     yaml-lsp/       - YAML language server
+    #     bash-lsp/       - Bash language server
+    #     php-lsp/        - PHP Intelephense
+    #     vts-lsp/        - VTS TypeScript language server
+    #     # Binary language servers (Level 2 offline support):
+    #     clangd/         - C/C++ language server (~100 MB)
+    #     terraform-ls/   - Terraform language server (~50 MB)
+    #     dart/           - Dart SDK for language server (~200 MB)
+    #     jdtls/          - Eclipse JDTLS for Java (optional, ~150 MB)
+    #     gradle/         - Gradle for Java builds (optional, ~50 MB)
     ls_static_dir = PROJECT_ROOT / "language_servers"
     if ls_static_dir.exists():
+        # List bundled language servers
+        bundled_ls = [d.name for d in ls_static_dir.iterdir() if d.is_dir()]
         datas.append((str(ls_static_dir), "language_servers"))
         # Calculate size and list included servers
         ls_size = sum(f.stat().st_size for f in ls_static_dir.rglob('*') if f.is_file()) / (1024 * 1024)
@@ -260,12 +276,9 @@ if VARIANT == 'full':
     else:
         print(f"    [WARN] Language servers directory not found at {ls_static_dir}")
         print(f"    [WARN] Full variant without bundled language servers")
-        print(f"    [INFO] To bundle language servers, create ./language_servers/ with:")
-        print(f"           - ts-lsp/node_modules/... (TypeScript)")
-        print(f"           - yaml-lsp/node_modules/... (YAML)")
-        print(f"           - bash-lsp/node_modules/... (Bash)")
-        print(f"           - php-lsp/node_modules/... (PHP/Intelephense)")
-        print(f"           - vts-lsp/node_modules/... (VTS TypeScript)")
+        print(f"    [INFO] To bundle language servers:")
+        print(f"           - npm-based: Create ./language_servers/ with ts-lsp/, yaml-lsp/, etc.")
+        print(f"           - binary LS: Run 'python scripts/bundle_language_servers.py'")
 
 # =============================================================================
 # ANALYSIS

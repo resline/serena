@@ -326,3 +326,134 @@ def get_npm_install_env(solidlsp_settings: "SolidLSPSettings") -> dict[str, str]
         log.debug(f"Added bundled Node.js to PATH: {node_dir}")
 
     return env
+
+
+# =============================================================================
+# Offline/Bundled Support for Binary Language Servers
+# =============================================================================
+
+
+def check_bundled_ls(
+    settings: "SolidLSPSettings",
+    ls_subdir: str,
+    binary_relative_path: str,
+) -> str | None:
+    """
+    Check if a bundled language server binary exists in the bundled LS directory.
+
+    This function should be called before downloading a language server to use
+    pre-bundled binaries in standalone/offline mode.
+
+    Args:
+        settings: SolidLSP settings containing bundled_ls_dir path
+        ls_subdir: Subdirectory within bundled_ls_dir for this LS (e.g., "clangd", "terraform-ls")
+        binary_relative_path: Path to the binary relative to ls_subdir (e.g., "clangd_19.1.2/bin/clangd")
+
+    Returns:
+        Full path to the bundled binary if it exists, None otherwise
+
+    Example:
+        >>> bundled_path = check_bundled_ls(settings, "clangd", "clangd_19.1.2/bin/clangd")
+        >>> if bundled_path:
+        ...     return bundled_path  # Use bundled binary
+        >>> # Fall through to download logic
+
+    """
+    if not settings.bundled_ls_dir:
+        return None
+
+    bundled_path = os.path.join(settings.bundled_ls_dir, ls_subdir, binary_relative_path)
+
+    if os.path.isfile(bundled_path):
+        log.info(f"Found bundled language server at {bundled_path}")
+        return bundled_path
+
+    log.debug(f"Bundled language server not found at {bundled_path}")
+    return None
+
+
+def copy_bundled_ls_to_cache(
+    settings: "SolidLSPSettings",
+    ls_subdir: str,
+    target_dir: str,
+) -> bool:
+    """
+    Copy bundled language server files to the cache directory.
+
+    This function copies the entire bundled LS subdirectory to the target cache
+    directory, preserving the directory structure. This is useful when the LS
+    expects to be in a specific location or needs write access to its directory.
+
+    Args:
+        settings: SolidLSP settings containing bundled_ls_dir path
+        ls_subdir: Subdirectory within bundled_ls_dir for this LS (e.g., "clangd")
+        target_dir: Target directory where the LS should be copied
+
+    Returns:
+        True if the copy was successful, False otherwise
+
+    Example:
+        >>> if copy_bundled_ls_to_cache(settings, "clangd", cache_dir):
+        ...     # Use the cached copy
+        ...     binary_path = os.path.join(cache_dir, "clangd_19.1.2/bin/clangd")
+
+    """
+    if not settings.bundled_ls_dir:
+        return False
+
+    bundled_source = os.path.join(settings.bundled_ls_dir, ls_subdir)
+
+    if not os.path.isdir(bundled_source):
+        log.debug(f"Bundled LS directory not found at {bundled_source}")
+        return False
+
+    try:
+        # If target exists, check if it's already populated
+        if os.path.exists(target_dir):
+            # Check if there are any files - if so, assume it's already set up
+            if any(os.scandir(target_dir)):
+                log.debug(f"Target directory {target_dir} already has content, skipping copy")
+                return True
+
+        # Copy the bundled LS to target
+        log.info(f"Copying bundled language server from {bundled_source} to {target_dir}")
+        os.makedirs(target_dir, exist_ok=True)
+
+        # Copy contents of bundled_source into target_dir
+        for item in os.listdir(bundled_source):
+            src = os.path.join(bundled_source, item)
+            dst = os.path.join(target_dir, item)
+            if os.path.isdir(src):
+                if os.path.exists(dst):
+                    shutil.rmtree(dst)
+                shutil.copytree(src, dst)
+            else:
+                shutil.copy2(src, dst)
+
+        log.info(f"Successfully copied bundled LS to {target_dir}")
+        return True
+
+    except Exception as e:
+        log.warning(f"Failed to copy bundled LS: {e}")
+        return False
+
+
+def should_download_ls(settings: "SolidLSPSettings") -> bool:
+    """
+    Determine if language servers should be downloaded.
+
+    In standalone mode with bundled LS available, downloading is skipped
+    unless allow_download_fallback is True and the bundled LS is not found.
+
+    Args:
+        settings: SolidLSP settings
+
+    Returns:
+        True if downloading is allowed, False if it should be skipped
+
+    """
+    if settings.standalone_mode and settings.bundled_ls_dir:
+        if not settings.allow_download_fallback:
+            log.info("Standalone mode: download disabled, using bundled LS only")
+            return False
+    return True
