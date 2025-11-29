@@ -246,6 +246,58 @@ jobs:
           echo "Node.js bundled at ./node/"
           ls -la node/
 
+      - name: Pre-install npm-based language servers (full variant only)
+        if: needs.setup.outputs.variant == 'full'
+        shell: bash
+        run: |
+          echo "Pre-installing npm-based language servers for offline use..."
+
+          # Use bundled Node.js for installation
+          export PATH="$(pwd)/node:$PATH"
+
+          # Create language_servers directory structure
+          mkdir -p language_servers
+
+          # TypeScript Language Server
+          echo "Installing TypeScript Language Server..."
+          mkdir -p language_servers/ts-lsp
+          cd language_servers/ts-lsp
+          npm install --prefix ./ typescript@5.5.4 typescript-language-server@4.3.3
+          cd ../..
+
+          # YAML Language Server
+          echo "Installing YAML Language Server..."
+          mkdir -p language_servers/yaml-lsp
+          cd language_servers/yaml-lsp
+          npm install --prefix ./ yaml-language-server@1.19.2
+          cd ../..
+
+          # Bash Language Server
+          echo "Installing Bash Language Server..."
+          mkdir -p language_servers/bash-lsp
+          cd language_servers/bash-lsp
+          npm install --prefix ./ bash-language-server@5.6.0
+          cd ../..
+
+          # PHP Intelephense
+          echo "Installing Intelephense (PHP)..."
+          mkdir -p language_servers/php-lsp
+          cd language_servers/php-lsp
+          npm install --prefix ./ intelephense@1.14.4
+          cd ../..
+
+          # VTS Language Server (TypeScript via VSCode)
+          echo "Installing VTS Language Server..."
+          mkdir -p language_servers/vts-lsp
+          cd language_servers/vts-lsp
+          npm install --prefix ./ @vtsls/language-server@0.2.9
+          cd ../..
+
+          echo "Language servers installed:"
+          du -sh language_servers/*
+          echo "Total size:"
+          du -sh language_servers/
+
       - name: Build standalone executable
         shell: bash
         env:
@@ -387,6 +439,58 @@ jobs:
           chmod +x node/node node/npm
           echo "Node.js bundled at ./node/"
           ls -la node/
+
+      - name: Pre-install npm-based language servers (full variant only)
+        if: needs.setup.outputs.variant == 'full'
+        shell: bash
+        run: |
+          echo "Pre-installing npm-based language servers for offline use..."
+
+          # Use bundled Node.js for installation
+          export PATH="$(pwd)/node:$PATH"
+
+          # Create language_servers directory structure
+          mkdir -p language_servers
+
+          # TypeScript Language Server
+          echo "Installing TypeScript Language Server..."
+          mkdir -p language_servers/ts-lsp
+          cd language_servers/ts-lsp
+          npm install --prefix ./ typescript@5.5.4 typescript-language-server@4.3.3
+          cd ../..
+
+          # YAML Language Server
+          echo "Installing YAML Language Server..."
+          mkdir -p language_servers/yaml-lsp
+          cd language_servers/yaml-lsp
+          npm install --prefix ./ yaml-language-server@1.19.2
+          cd ../..
+
+          # Bash Language Server
+          echo "Installing Bash Language Server..."
+          mkdir -p language_servers/bash-lsp
+          cd language_servers/bash-lsp
+          npm install --prefix ./ bash-language-server@5.6.0
+          cd ../..
+
+          # PHP Intelephense
+          echo "Installing Intelephense (PHP)..."
+          mkdir -p language_servers/php-lsp
+          cd language_servers/php-lsp
+          npm install --prefix ./ intelephense@1.14.4
+          cd ../..
+
+          # VTS Language Server (TypeScript via VSCode)
+          echo "Installing VTS Language Server..."
+          mkdir -p language_servers/vts-lsp
+          cd language_servers/vts-lsp
+          npm install --prefix ./ @vtsls/language-server@0.2.9
+          cd ../..
+
+          echo "Language servers installed:"
+          du -sh language_servers/*
+          echo "Total size:"
+          du -sh language_servers/
 
       - name: Build standalone executable
         shell: bash
@@ -530,6 +634,58 @@ jobs:
           chmod +x node/node node/npm
           echo "Node.js bundled at ./node/"
           ls -la node/
+
+      - name: Pre-install npm-based language servers (full variant only)
+        if: needs.setup.outputs.variant == 'full'
+        shell: bash
+        run: |
+          echo "Pre-installing npm-based language servers for offline use..."
+
+          # Use bundled Node.js for installation
+          export PATH="$(pwd)/node:$PATH"
+
+          # Create language_servers directory structure
+          mkdir -p language_servers
+
+          # TypeScript Language Server
+          echo "Installing TypeScript Language Server..."
+          mkdir -p language_servers/ts-lsp
+          cd language_servers/ts-lsp
+          npm install --prefix ./ typescript@5.5.4 typescript-language-server@4.3.3
+          cd ../..
+
+          # YAML Language Server
+          echo "Installing YAML Language Server..."
+          mkdir -p language_servers/yaml-lsp
+          cd language_servers/yaml-lsp
+          npm install --prefix ./ yaml-language-server@1.19.2
+          cd ../..
+
+          # Bash Language Server
+          echo "Installing Bash Language Server..."
+          mkdir -p language_servers/bash-lsp
+          cd language_servers/bash-lsp
+          npm install --prefix ./ bash-language-server@5.6.0
+          cd ../..
+
+          # PHP Intelephense
+          echo "Installing Intelephense (PHP)..."
+          mkdir -p language_servers/php-lsp
+          cd language_servers/php-lsp
+          npm install --prefix ./ intelephense@1.14.4
+          cd ../..
+
+          # VTS Language Server (TypeScript via VSCode)
+          echo "Installing VTS Language Server..."
+          mkdir -p language_servers/vts-lsp
+          cd language_servers/vts-lsp
+          npm install --prefix ./ @vtsls/language-server@0.2.9
+          cd ../..
+
+          echo "Language servers installed:"
+          du -sh language_servers/*
+          echo "Total size:"
+          du -sh language_servers/
 
       - name: Build standalone executable
         shell: bash

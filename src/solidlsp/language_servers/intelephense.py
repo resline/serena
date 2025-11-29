@@ -5,7 +5,6 @@ Provides PHP specific instantiation of the LanguageServer class using Intelephen
 import logging
 import os
 import pathlib
-import shutil
 from time import sleep
 
 from overrides import override
@@ -18,7 +17,12 @@ from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 from ..lsp_protocol_handler import lsp_types
-from .common import RuntimeDependency, RuntimeDependencyCollection
+from .common import (
+    RuntimeDependency,
+    RuntimeDependencyCollection,
+    get_bundled_npm_package_path,
+    verify_node_npm_available,
+)
 
 log = logging.getLogger(__name__)
 
@@ -41,6 +45,11 @@ class Intelephense(SolidLanguageServer):
     def _setup_runtime_dependencies(cls, solidlsp_settings: SolidLSPSettings) -> list[str]:
         """
         Setup runtime dependencies for Intelephense and return the command to start the server.
+
+        This method supports both online (npm install) and offline (bundled) modes:
+        1. First checks for bundled language server in standalone builds
+        2. Falls back to checking locally installed version
+        3. If not found and download is allowed, installs via npm
         """
         platform_id = PlatformUtils.get_platform_id()
 
@@ -55,31 +64,60 @@ class Intelephense(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported by {cls.__name__} at the moment"
 
-        # Verify both node and npm are installed
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
+        # 1. Check for bundled language server (for standalone/offline builds)
+        bundled_path = get_bundled_npm_package_path(
+            solidlsp_settings,
+            package_dir_name="php-lsp",
+            binary_name="intelephense",
+        )
+        if bundled_path:
+            log.info(f"Using bundled Intelephense at {bundled_path}")
+            return [bundled_path, "--stdio"]
 
-        # Install intelephense if not already installed
+        # 2. Check for locally installed version
         intelephense_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "php-lsp")
-        os.makedirs(intelephense_ls_dir, exist_ok=True)
         intelephense_executable_path = os.path.join(intelephense_ls_dir, "node_modules", ".bin", "intelephense")
-        if not os.path.exists(intelephense_executable_path):
-            deps = RuntimeDependencyCollection(
-                [
-                    RuntimeDependency(
-                        id="intelephense",
-                        command="npm install --prefix ./ intelephense@1.14.4",
-                        platform_id="any",
-                    )
-                ]
-            )
-            deps.install(intelephense_ls_dir)
 
-        assert os.path.exists(
-            intelephense_executable_path
-        ), f"intelephense executable not found at {intelephense_executable_path}, something went wrong."
+        # Handle Windows executable extension
+        if os.name == "nt":
+            intelephense_executable_path_cmd = intelephense_executable_path + ".cmd"
+            if os.path.exists(intelephense_executable_path_cmd):
+                return [intelephense_executable_path_cmd, "--stdio"]
+        elif os.path.exists(intelephense_executable_path):
+            return [intelephense_executable_path, "--stdio"]
+
+        # 3. Not found - need to install via npm
+        # Check if download/install is allowed
+        if not solidlsp_settings.allow_download_fallback:
+            raise FileNotFoundError(
+                f"Intelephense not found and download is disabled. "
+                f"Expected at: {intelephense_executable_path} or bundled at: {solidlsp_settings.bundled_ls_dir}"
+            )
+
+        # Verify node and npm are available (bundled or system)
+        verify_node_npm_available(solidlsp_settings)
+
+        os.makedirs(intelephense_ls_dir, exist_ok=True)
+        deps = RuntimeDependencyCollection(
+            [
+                RuntimeDependency(
+                    id="intelephense",
+                    command="npm install --prefix ./ intelephense@1.14.4",
+                    platform_id="any",
+                )
+            ]
+        )
+        log.info(f"Intelephense not found at {intelephense_executable_path}. Installing...")
+        deps.install(intelephense_ls_dir)
+
+        # Handle Windows executable extension
+        if os.name == "nt":
+            intelephense_executable_path = intelephense_executable_path + ".cmd"
+
+        if not os.path.exists(intelephense_executable_path):
+            raise FileNotFoundError(
+                f"intelephense executable not found at {intelephense_executable_path}, something went wrong with the installation."
+            )
 
         return [intelephense_executable_path, "--stdio"]
 

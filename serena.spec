@@ -17,8 +17,27 @@ Output will be in dist/serena-mcp-server[.exe]
 
 Build Variants:
     - slim: Minimal build without tiktoken, anthropic SDK, jinja2 templates
+            Size: ~50MB, Languages: Python (via pyright)
     - standard: Default build with all current functionality (default)
-    - full: Complete offline build with bundled Node.js runtime (future)
+            Size: ~80MB, Languages: Python (via pyright), requires Node.js for TS/YAML/Bash/PHP
+    - full: Complete offline build with bundled Node.js runtime and npm-based language servers
+            Size: ~180MB, Languages: Python, TypeScript, JavaScript, YAML, Bash, PHP (offline)
+
+Full Variant - Bundled Language Servers:
+    The 'full' variant includes pre-installed npm-based language servers for offline use:
+    - TypeScript/JavaScript: typescript-language-server@4.3.3, typescript@5.5.4
+    - YAML: yaml-language-server@1.19.2
+    - Bash: bash-language-server@5.6.0
+    - PHP: intelephense@1.14.4
+    - VTS (TypeScript via VSCode): @vtsls/language-server@0.2.9
+
+    These are bundled in the ./language_servers/ directory alongside the executable.
+    The bundled Node.js runtime is in ./node/ directory.
+
+Environment Variables (for standalone mode):
+    - SERENA_STANDALONE=1: Enable standalone mode (auto-detected for frozen builds)
+    - SERENA_BUNDLED_LS_DIR: Override path to bundled language servers
+    - SERENA_BUNDLED_NODE: Override path to bundled Node.js executable
 """
 
 import os
@@ -222,16 +241,31 @@ if VARIANT == 'full':
     node_dir = PROJECT_ROOT / "node"
     if node_dir.exists():
         datas.append((str(node_dir), "node"))
-        print(f"    [OK] Including bundled Node.js runtime")
+        # Calculate size for info
+        node_size = sum(f.stat().st_size for f in node_dir.rglob('*') if f.is_file()) / (1024 * 1024)
+        print(f"    [OK] Including bundled Node.js runtime (~{node_size:.1f} MB)")
     else:
         print(f"    [WARN] Node.js directory not found at {node_dir}")
         print(f"    [WARN] Full variant without Node.js - npm-based language servers may not work offline")
 
-    # Future: Check for bundled language servers
+    # Check for bundled language servers (npm packages)
     ls_static_dir = PROJECT_ROOT / "language_servers"
     if ls_static_dir.exists():
         datas.append((str(ls_static_dir), "language_servers"))
-        print(f"    [OK] Including bundled language servers")
+        # Calculate size and list included servers
+        ls_size = sum(f.stat().st_size for f in ls_static_dir.rglob('*') if f.is_file()) / (1024 * 1024)
+        included_servers = [d.name for d in ls_static_dir.iterdir() if d.is_dir()]
+        print(f"    [OK] Including bundled language servers (~{ls_size:.1f} MB)")
+        print(f"         Servers: {', '.join(included_servers)}")
+    else:
+        print(f"    [WARN] Language servers directory not found at {ls_static_dir}")
+        print(f"    [WARN] Full variant without bundled language servers")
+        print(f"    [INFO] To bundle language servers, create ./language_servers/ with:")
+        print(f"           - ts-lsp/node_modules/... (TypeScript)")
+        print(f"           - yaml-lsp/node_modules/... (YAML)")
+        print(f"           - bash-lsp/node_modules/... (Bash)")
+        print(f"           - php-lsp/node_modules/... (PHP/Intelephense)")
+        print(f"           - vts-lsp/node_modules/... (VTS TypeScript)")
 
 # =============================================================================
 # ANALYSIS

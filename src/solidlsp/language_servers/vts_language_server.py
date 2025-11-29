@@ -7,7 +7,6 @@ which provides TypeScript language server functionality via VSCode's TypeScript 
 import logging
 import os
 import pathlib
-import shutil
 import threading
 from typing import cast
 
@@ -20,7 +19,12 @@ from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
-from .common import RuntimeDependency, RuntimeDependencyCollection
+from .common import (
+    RuntimeDependency,
+    RuntimeDependencyCollection,
+    get_bundled_npm_package_path,
+    verify_node_npm_available,
+)
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +63,11 @@ class VtsLanguageServer(SolidLanguageServer):
     def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> str:
         """
         Setup runtime dependencies for VTS Language Server and return the command to start the server.
+
+        This method supports both online (npm install) and offline (bundled) modes:
+        1. First checks for bundled language server in standalone builds
+        2. Falls back to checking locally installed version
+        3. If not found and download is allowed, installs via npm
         """
         platform_id = PlatformUtils.get_platform_id()
 
@@ -73,6 +82,39 @@ class VtsLanguageServer(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for vtsls at the moment"
 
+        # 1. Check for bundled language server (for standalone/offline builds)
+        bundled_path = get_bundled_npm_package_path(
+            solidlsp_settings,
+            package_dir_name="vts-lsp",
+            binary_name="vtsls",
+        )
+        if bundled_path:
+            log.info(f"Using bundled VTS Language Server at {bundled_path}")
+            return f"{bundled_path} --stdio"
+
+        # 2. Check for locally installed version
+        vts_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "vts-lsp")
+        vts_executable_path = os.path.join(vts_ls_dir, "node_modules", ".bin", "vtsls")
+
+        # Handle Windows executable extension
+        if os.name == "nt":
+            vts_executable_path_cmd = vts_executable_path + ".cmd"
+            if os.path.exists(vts_executable_path_cmd):
+                return f"{vts_executable_path_cmd} --stdio"
+        elif os.path.exists(vts_executable_path):
+            return f"{vts_executable_path} --stdio"
+
+        # 3. Not found - need to install via npm
+        # Check if download/install is allowed
+        if not solidlsp_settings.allow_download_fallback:
+            raise FileNotFoundError(
+                f"VTS Language Server not found and download is disabled. "
+                f"Expected at: {vts_executable_path} or bundled at: {solidlsp_settings.bundled_ls_dir}"
+            )
+
+        # Verify node and npm are available (bundled or system)
+        verify_node_npm_available(solidlsp_settings)
+
         deps = RuntimeDependencyCollection(
             [
                 RuntimeDependency(
@@ -83,23 +125,17 @@ class VtsLanguageServer(SolidLanguageServer):
                 ),
             ]
         )
-        vts_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "vts-lsp")
-        vts_executable_path = os.path.join(vts_ls_dir, "vtsls")
 
-        # Verify both node and npm are installed
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
+        log.info(f"VTS Language Server not found at {vts_executable_path}. Installing...")
+        os.makedirs(vts_ls_dir, exist_ok=True)
+        deps.install(vts_ls_dir)
 
-        # Install vtsls if not already installed
-        if not os.path.exists(vts_ls_dir):
-            os.makedirs(vts_ls_dir, exist_ok=True)
-            deps.install(vts_ls_dir)
+        # Handle Windows executable extension
+        if os.name == "nt":
+            vts_executable_path = vts_executable_path + ".cmd"
 
-        vts_executable_path = os.path.join(vts_ls_dir, "node_modules", ".bin", "vtsls")
-
-        assert os.path.exists(vts_executable_path), "vtsls executable not found. Please install @vtsls/language-server and try again."
+        if not os.path.exists(vts_executable_path):
+            raise FileNotFoundError(f"vtsls executable not found at {vts_executable_path}, something went wrong with the installation.")
         return f"{vts_executable_path} --stdio"
 
     @staticmethod
