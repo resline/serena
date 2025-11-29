@@ -9,7 +9,7 @@ from solidlsp.settings import SolidLSPSettings
 
 from ..ls_config import LanguageServerConfig
 from ..lsp_protocol_handler.lsp_types import InitializeParams
-from .common import RuntimeDependency, RuntimeDependencyCollection
+from .common import RuntimeDependency, RuntimeDependencyCollection, check_bundled_ls, copy_bundled_ls_to_cache, should_download_ls
 
 log = logging.getLogger(__name__)
 
@@ -76,10 +76,27 @@ class DartLanguageServer(SolidLanguageServer):
         )
 
         dart_ls_dir = cls.ls_resources_dir(solidlsp_settings)
-        dart_executable_path = deps.binary_path(dart_ls_dir)
 
-        if not os.path.exists(dart_executable_path):
-            deps.install(dart_ls_dir)
+        # Check for bundled language server first (for standalone/offline mode)
+        dependency = deps.get_single_dep_for_current_platform()
+        binary_name = dependency.binary_name or ""
+        bundled_path = check_bundled_ls(solidlsp_settings, "dart", binary_name)
+        if bundled_path:
+            # Copy bundled LS to cache directory for consistency
+            if copy_bundled_ls_to_cache(solidlsp_settings, "dart", dart_ls_dir):
+                dart_executable_path = deps.binary_path(dart_ls_dir)
+            else:
+                # Use bundled path directly if copy fails
+                dart_executable_path = bundled_path
+        else:
+            dart_executable_path = deps.binary_path(dart_ls_dir)
+            if not os.path.exists(dart_executable_path):
+                if not should_download_ls(solidlsp_settings):
+                    raise FileNotFoundError(
+                        "Dart SDK not found and downloads are disabled in standalone mode.\n"
+                        + "Ensure the bundled language servers are available."
+                    )
+                deps.install(dart_ls_dir)
 
         assert os.path.exists(dart_executable_path)
         os.chmod(dart_executable_path, 0o755)

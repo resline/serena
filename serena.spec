@@ -227,11 +227,31 @@ if VARIANT == 'full':
         print(f"    [WARN] Node.js directory not found at {node_dir}")
         print(f"    [WARN] Full variant without Node.js - npm-based language servers may not work offline")
 
-    # Future: Check for bundled language servers
+    # Check for bundled language servers (Level 2 offline support)
+    # Expected structure:
+    #   language_servers/
+    #     clangd/         - C/C++ language server (~100 MB)
+    #     terraform-ls/   - Terraform language server (~50 MB)
+    #     dart/           - Dart SDK for language server (~200 MB)
+    #     jdtls/          - Eclipse JDTLS for Java (optional, ~150 MB)
+    #     gradle/         - Gradle for Java builds (optional, ~50 MB)
     ls_static_dir = PROJECT_ROOT / "language_servers"
     if ls_static_dir.exists():
+        # List bundled language servers
+        bundled_ls = [d.name for d in ls_static_dir.iterdir() if d.is_dir()]
         datas.append((str(ls_static_dir), "language_servers"))
-        print(f"    [OK] Including bundled language servers")
+        print(f"    [OK] Including bundled language servers: {', '.join(bundled_ls) if bundled_ls else 'empty directory'}")
+
+        # Calculate approximate size
+        total_size_mb = 0
+        for ls_dir in ls_static_dir.iterdir():
+            if ls_dir.is_dir():
+                size_mb = sum(f.stat().st_size for f in ls_dir.rglob('*') if f.is_file()) / (1024 * 1024)
+                total_size_mb += size_mb
+        print(f"    [INFO] Total bundled LS size: ~{int(total_size_mb)} MB")
+    else:
+        print(f"    [INFO] No bundled language servers at {ls_static_dir}")
+        print(f"    [INFO] Run 'python scripts/bundle_language_servers.py' to download them")
 
 # =============================================================================
 # ANALYSIS

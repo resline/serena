@@ -13,7 +13,7 @@ from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
-from .common import RuntimeDependency, RuntimeDependencyCollection
+from .common import RuntimeDependency, RuntimeDependencyCollection, check_bundled_ls, copy_bundled_ls_to_cache, should_download_ls
 
 log = logging.getLogger(__name__)
 
@@ -139,11 +139,28 @@ class TerraformLS(SolidLanguageServer):
             ]
         )
         dependency = deps.get_single_dep_for_current_platform()
+        ls_cache_dir = cls.ls_resources_dir(solidlsp_settings)
 
-        terraform_ls_executable_path = deps.binary_path(cls.ls_resources_dir(solidlsp_settings))
-        if not os.path.exists(terraform_ls_executable_path):
-            log.info(f"Downloading terraform-ls from {dependency.url}")
-            deps.install(cls.ls_resources_dir(solidlsp_settings))
+        # Check for bundled language server first (for standalone/offline mode)
+        binary_name = dependency.binary_name or ""
+        bundled_path = check_bundled_ls(solidlsp_settings, "terraform-ls", binary_name)
+        if bundled_path:
+            # Copy bundled LS to cache directory for consistency
+            if copy_bundled_ls_to_cache(solidlsp_settings, "terraform-ls", ls_cache_dir):
+                terraform_ls_executable_path = deps.binary_path(ls_cache_dir)
+            else:
+                # Use bundled path directly if copy fails
+                terraform_ls_executable_path = bundled_path
+        else:
+            terraform_ls_executable_path = deps.binary_path(ls_cache_dir)
+            if not os.path.exists(terraform_ls_executable_path):
+                if not should_download_ls(solidlsp_settings):
+                    raise FileNotFoundError(
+                        "terraform-ls not found and downloads are disabled in standalone mode.\n"
+                        + "Ensure the bundled language servers are available."
+                    )
+                log.info(f"Downloading terraform-ls from {dependency.url}")
+                deps.install(ls_cache_dir)
 
         assert os.path.exists(terraform_ls_executable_path), f"terraform-ls executable not found at {terraform_ls_executable_path}"
 
