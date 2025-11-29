@@ -231,6 +231,21 @@ jobs:
           uv pip install -e ".[dev]"
           uv pip install pyinstaller
 
+      - name: Download Node.js for bundling (full variant only)
+        if: needs.setup.outputs.variant == 'full'
+        shell: bash
+        run: |
+          NODE_VERSION="18.20.5"
+          echo "Downloading Node.js ${NODE_VERSION} for Windows..."
+          curl -L -o node.zip "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-win-x64.zip"
+          unzip -q node.zip
+          mkdir -p node
+          cp node-v${NODE_VERSION}-win-x64/node.exe node/
+          cp node-v${NODE_VERSION}-win-x64/npm.cmd node/
+          cp -r node-v${NODE_VERSION}-win-x64/node_modules node/
+          echo "Node.js bundled at ./node/"
+          ls -la node/
+
       - name: Build standalone executable
         shell: bash
         env:
@@ -262,7 +277,18 @@ jobs:
         shell: bash
         run: |
           cd dist
-          cat > BUILD_INFO.txt <<EOF
+          if [[ "${{ needs.setup.outputs.variant }}" == "full" ]]; then
+            cat > BUILD_INFO.txt <<EOF
+          Platform: Windows x64
+          Variant: ${{ needs.setup.outputs.variant }}
+          Node.js Version: 18.20.5
+          Trigger: ${{ github.event_name }}
+          Commit: ${{ github.sha }}
+          Ref: ${{ github.ref }}
+          Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          EOF
+          else
+            cat > BUILD_INFO.txt <<EOF
           Platform: Windows x64
           Variant: ${{ needs.setup.outputs.variant }}
           Trigger: ${{ github.event_name }}
@@ -270,6 +296,7 @@ jobs:
           Ref: ${{ github.ref }}
           Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
           EOF
+          fi
 
       - name: Rename artifact
         shell: bash
@@ -345,6 +372,22 @@ jobs:
           uv pip install -e ".[dev]"
           uv pip install pyinstaller
 
+      - name: Download Node.js for bundling (full variant only)
+        if: needs.setup.outputs.variant == 'full'
+        shell: bash
+        run: |
+          NODE_VERSION="18.20.5"
+          echo "Downloading Node.js ${NODE_VERSION} for Linux..."
+          curl -L -o node.tar.xz "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz"
+          tar -xf node.tar.xz
+          mkdir -p node
+          cp node-v${NODE_VERSION}-linux-x64/bin/node node/
+          cp node-v${NODE_VERSION}-linux-x64/bin/npm node/
+          cp -r node-v${NODE_VERSION}-linux-x64/lib node/
+          chmod +x node/node node/npm
+          echo "Node.js bundled at ./node/"
+          ls -la node/
+
       - name: Build standalone executable
         shell: bash
         env:
@@ -377,7 +420,18 @@ jobs:
         shell: bash
         run: |
           cd dist
-          cat > BUILD_INFO.txt <<EOF
+          if [[ "${{ needs.setup.outputs.variant }}" == "full" ]]; then
+            cat > BUILD_INFO.txt <<EOF
+          Platform: Linux x64
+          Variant: ${{ needs.setup.outputs.variant }}
+          Node.js Version: 18.20.5
+          Trigger: ${{ github.event_name }}
+          Commit: ${{ github.sha }}
+          Ref: ${{ github.ref }}
+          Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          EOF
+          else
+            cat > BUILD_INFO.txt <<EOF
           Platform: Linux x64
           Variant: ${{ needs.setup.outputs.variant }}
           Trigger: ${{ github.event_name }}
@@ -385,6 +439,7 @@ jobs:
           Ref: ${{ github.ref }}
           Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
           EOF
+          fi
 
       - name: Rename artifact
         shell: bash
@@ -460,6 +515,22 @@ jobs:
           uv pip install -e ".[dev]"
           uv pip install pyinstaller
 
+      - name: Download Node.js for bundling (full variant only)
+        if: needs.setup.outputs.variant == 'full'
+        shell: bash
+        run: |
+          NODE_VERSION="18.20.5"
+          echo "Downloading Node.js ${NODE_VERSION} for macOS ARM64..."
+          curl -L -o node.tar.gz "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-darwin-arm64.tar.gz"
+          tar -xf node.tar.gz
+          mkdir -p node
+          cp node-v${NODE_VERSION}-darwin-arm64/bin/node node/
+          cp node-v${NODE_VERSION}-darwin-arm64/bin/npm node/
+          cp -r node-v${NODE_VERSION}-darwin-arm64/lib node/
+          chmod +x node/node node/npm
+          echo "Node.js bundled at ./node/"
+          ls -la node/
+
       - name: Build standalone executable
         shell: bash
         env:
@@ -492,7 +563,18 @@ jobs:
         shell: bash
         run: |
           cd dist
-          cat > BUILD_INFO.txt <<EOF
+          if [[ "${{ needs.setup.outputs.variant }}" == "full" ]]; then
+            cat > BUILD_INFO.txt <<EOF
+          Platform: macOS ARM64
+          Variant: ${{ needs.setup.outputs.variant }}
+          Node.js Version: 18.20.5
+          Trigger: ${{ github.event_name }}
+          Commit: ${{ github.sha }}
+          Ref: ${{ github.ref }}
+          Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          EOF
+          else
+            cat > BUILD_INFO.txt <<EOF
           Platform: macOS ARM64
           Variant: ${{ needs.setup.outputs.variant }}
           Trigger: ${{ github.event_name }}
@@ -500,6 +582,7 @@ jobs:
           Ref: ${{ github.ref }}
           Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
           EOF
+          fi
 
       - name: Rename artifact
         shell: bash

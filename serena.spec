@@ -193,10 +193,22 @@ else:
     print(f"  Excluding extended imports (slim build)")
 
 if VARIANT == 'full':
-    # Future: Add Node.js runtime bundling and pre-downloaded language servers
-    print(f"  Full build: Node.js bundling not yet implemented")
-    # TODO: Add Node.js binary data files
-    # TODO: Add pre-downloaded language server binaries
+    print(f"  Full build: Checking for bundled resources...")
+
+    # Check for bundled Node.js
+    node_dir = PROJECT_ROOT / "node"
+    if node_dir.exists():
+        datas.append((str(node_dir), "node"))
+        print(f"    ✓ Including bundled Node.js runtime")
+    else:
+        print(f"    ⚠ Node.js directory not found at {node_dir}")
+        print(f"    ⚠ Full variant without Node.js - npm-based language servers may not work offline")
+
+    # Future: Check for bundled language servers
+    ls_static_dir = PROJECT_ROOT / "language_servers"
+    if ls_static_dir.exists():
+        datas.append((str(ls_static_dir), "language_servers"))
+        print(f"    ✓ Including bundled language servers")
 
 # Platform-specific imports
 platform_imports = []
