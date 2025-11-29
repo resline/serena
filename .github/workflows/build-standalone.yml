@@ -444,8 +444,13 @@ jobs:
           tar -xf node.tar.xz
           mkdir -p node
           cp node-v${NODE_VERSION}-linux-x64/bin/node node/
-          cp node-v${NODE_VERSION}-linux-x64/bin/npm node/
           cp -r node-v${NODE_VERSION}-linux-x64/lib node/
+          # Create npm wrapper script (since npm is a symlink that breaks when copied)
+          cat > node/npm << 'NPMSCRIPT'
+          #!/bin/bash
+          SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          exec "$SCRIPT_DIR/node" "$SCRIPT_DIR/lib/node_modules/npm/bin/npm-cli.js" "$@"
+          NPMSCRIPT
           chmod +x node/node node/npm
           echo "Node.js bundled at ./node/"
           ls -la node/
@@ -649,8 +654,13 @@ jobs:
           tar -xf node.tar.gz
           mkdir -p node
           cp node-v${NODE_VERSION}-darwin-arm64/bin/node node/
-          cp node-v${NODE_VERSION}-darwin-arm64/bin/npm node/
           cp -r node-v${NODE_VERSION}-darwin-arm64/lib node/
+          # Create npm wrapper script (since npm is a symlink that breaks when copied)
+          cat > node/npm << 'NPMSCRIPT'
+          #!/bin/bash
+          SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          exec "$SCRIPT_DIR/node" "$SCRIPT_DIR/lib/node_modules/npm/bin/npm-cli.js" "$@"
+          NPMSCRIPT
           chmod +x node/node node/npm
           echo "Node.js bundled at ./node/"
           ls -la node/
