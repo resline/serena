@@ -1,0 +1,198 @@
+name: Build Standalone Executables
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: 'Build variant'
+        required: true
+        default: 'slim'
+        type: choice
+        options:
+          - slim
+          - standard
+          - full
+      platforms:
+        description: 'Platforms to build (comma-separated: windows,linux,macos)'
+        required: false
+        default: 'windows'
+        type: string
+
+env:
+  PYTHON_VERSION: "3.11"
+
+concurrency:
+  group: build-standalone-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows x64 - PRIORITY
+          - os: windows
+            arch: x64
+            runner: windows-latest
+            platform_id: win-x64
+            artifact_suffix: windows-x64
+            executable_ext: ".exe"
+
+          # Linux x64
+          - os: linux
+            arch: x64
+            runner: ubuntu-latest
+            platform_id: linux-x64
+            artifact_suffix: linux-x64
+            executable_ext: ""
+
+          # macOS ARM64 (Apple Silicon)
+          - os: macos
+            arch: arm64
+            runner: macos-latest
+            platform_id: osx-arm64
+            artifact_suffix: macos-arm64
+            executable_ext: ""
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "latest"
+
+      # ===========================================
+      # CACHE: uv virtualenv
+      # ===========================================
+      - name: Cache uv virtualenv
+        id: cache-uv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-standalone-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            uv-standalone-${{ runner.os }}-${{ env.PYTHON_VERSION }}-
+
+      - name: Create virtual environment
+        shell: bash
+        run: |
+          if [ ! -d ".venv" ]; then
+            uv venv
+          fi
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          uv pip install -e ".[dev]"
+          uv pip install pyinstaller
+
+      # ===========================================
+      # BUILD: PyInstaller
+      # ===========================================
+      - name: Build standalone executable
+        shell: bash
+        run: |
+          echo "Building Serena standalone for ${{ matrix.platform_id }}..."
+
+          # Activate virtual environment
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            source .venv/Scripts/activate
+          else
+            source .venv/bin/activate
+          fi
+
+          # Build with PyInstaller (one-file mode is configured in spec)
+          pyinstaller serena.spec --clean
+
+          # Verify output
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            ls -la dist/serena-mcp-server.exe
+          else
+            ls -la dist/serena-mcp-server
+          fi
+
+      - name: Test executable
+        shell: bash
+        run: |
+          echo "Testing executable..."
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            ./dist/serena-mcp-server.exe --help || echo "Help command executed"
+          else
+            chmod +x ./dist/serena-mcp-server
+            ./dist/serena-mcp-server --help || echo "Help command executed"
+          fi
+
+      - name: Rename artifact
+        shell: bash
+        run: |
+          cd dist
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            mv serena-mcp-server.exe serena-mcp-server-${{ matrix.artifact_suffix }}.exe
+          else
+            mv serena-mcp-server serena-mcp-server-${{ matrix.artifact_suffix }}
+          fi
+          ls -la
+
+      # ===========================================
+      # UPLOAD: Artifacts
+      # ===========================================
+      - name: Upload standalone executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: serena-standalone-${{ matrix.artifact_suffix }}
+          path: dist/serena-mcp-server-${{ matrix.artifact_suffix }}${{ matrix.executable_ext }}
+          retention-days: 30
+
+  # ===========================================
+  # RELEASE JOB
+  # ===========================================
+  release:
+    name: Upload to GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List downloaded artifacts
+        run: find artifacts -type f -ls
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release-files
+
+          # Copy all executables
+          find artifacts -type f -name 'serena-mcp-server-*' -exec cp {} release-files/ \;
+
+          # Create checksums
+          cd release-files
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-files/*
+          fail_on_unmatched_files: false

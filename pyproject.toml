@@ -75,6 +75,7 @@ dev = [
 ]
 agno = ["agno>=2.2.1", "sqlalchemy>=2.0.40"]
 google = ["google-genai>=1.8.0"]
+standalone = ["pyinstaller>=6.0"]
 
 [project.urls]
 Homepage = "https://github.com/oraios/serena"

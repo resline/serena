@@ -96,6 +96,8 @@ MANIFEST
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+# Exception: serena.spec is our manually-written PyInstaller spec for standalone builds
+!serena.spec
 
 # Installer logs
 pip-log.txt
