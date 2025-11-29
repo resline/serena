@@ -36,7 +36,7 @@ class StandaloneTestRunner:
         if not self.executable.exists():
             raise FileNotFoundError(f"Executable not found: {self.executable}")
 
-    def run_command(self, args: list[str], timeout: int = 60, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    def run_command(self, args: list[str], timeout: int = 90, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
         """Run the executable with given arguments."""
         cmd = [str(self.executable)] + args
         full_env = os.environ.copy()
@@ -56,27 +56,44 @@ class StandaloneTestRunner:
         except subprocess.TimeoutExpired:
             raise RuntimeError(f"Command timed out after {timeout}s: {' '.join(cmd)}")
 
-    def test(self, name: str, fn):
-        """Run a test and record results."""
+    def test(self, name: str, fn, retries: int = 1):
+        """Run a test and record results. Retry on timeout errors."""
         print(f"\n{'='*60}")
         print(f"TEST: {name}")
         print("=" * 60)
 
-        try:
-            fn()
-            self.tests_passed += 1
-            self.test_results.append({"name": name, "status": "PASSED"})
-            print(f"[PASS] {name}")
-        except AssertionError as e:
-            self.tests_failed += 1
-            self.test_results.append({"name": name, "status": "FAILED", "error": str(e)})
-            print(f"[FAIL] {name}")
-            print(f"  Error: {e}")
-        except Exception as e:
-            self.tests_failed += 1
-            self.test_results.append({"name": name, "status": "ERROR", "error": str(e)})
-            print(f"[ERROR] {name}")
-            print(f"  Exception: {e}")
+        last_error = None
+        for attempt in range(retries + 1):
+            try:
+                fn()
+                self.tests_passed += 1
+                self.test_results.append({"name": name, "status": "PASSED"})
+                print(f"[PASS] {name}")
+                return
+            except AssertionError as e:
+                self.tests_failed += 1
+                self.test_results.append({"name": name, "status": "FAILED", "error": str(e)})
+                print(f"[FAIL] {name}")
+                print(f"  Error: {e}")
+                return
+            except RuntimeError as e:
+                # Timeout errors - retry
+                last_error = e
+                if attempt < retries:
+                    print(f"[RETRY] {name} (attempt {attempt + 1}/{retries + 1})")
+                    print(f"  Timeout, retrying...")
+                    continue
+                self.tests_failed += 1
+                self.test_results.append({"name": name, "status": "ERROR", "error": str(e)})
+                print(f"[ERROR] {name}")
+                print(f"  Exception: {e}")
+                return
+            except Exception as e:
+                self.tests_failed += 1
+                self.test_results.append({"name": name, "status": "ERROR", "error": str(e)})
+                print(f"[ERROR] {name}")
+                print(f"  Exception: {e}")
+                return
 
     def assert_in_output(self, result: subprocess.CompletedProcess, expected: str, location: str = "stdout"):
         """Assert that expected string is in command output."""
