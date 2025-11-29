@@ -5,12 +5,19 @@ Script to download and bundle binary language servers for offline/standalone bui
 This script downloads the language server binaries for the specified platforms
 and prepares them for bundling with PyInstaller builds.
 
-Supported language servers:
+Supported language servers (default):
 - Clangd (C/C++) - ~100 MB
-- Gopls (Go) - requires system installation, not bundled
 - Terraform-LS (Terraform) - ~50 MB
 - Dart SDK (Dart) - ~200 MB
-- Eclipse JDTLS (Java) - ~150 MB (optional, large)
+- Rust Analyzer (Rust) - ~20 MB
+- Lua Language Server (Lua) - ~5 MB
+
+Optional language servers (with --include-java):
+- Eclipse JDTLS (Java) - ~150 MB
+- Gradle (Java build tool) - ~50 MB
+- Kotlin Language Server (Kotlin) - ~85 MB
+
+Note: Gopls (Go) requires system installation and is not bundled.
 
 Usage:
     python scripts/bundle_language_servers.py [OPTIONS]
@@ -19,9 +26,10 @@ Options:
     --platform PLATFORM   Target platform (linux-x64, win-x64, osx-x64, osx-arm64)
                          Default: auto-detect current platform
     --output-dir DIR      Output directory for bundled LS (default: ./language_servers)
-    --include-java        Include Eclipse JDTLS (adds ~150MB)
+    --include-java        Include Eclipse JDTLS, Gradle, and Kotlin LS (adds ~285MB)
     --dry-run            Show what would be downloaded without downloading
     --verbose            Enable verbose output
+    --ls ID [ID ...]      Only bundle specific language servers by ID
 """
 
 from __future__ import annotations
@@ -264,6 +272,107 @@ LANGUAGE_SERVERS: list[LanguageServerBundle] = [
             },
         },
     ),
+    # Rust Analyzer - Rust language server
+    LanguageServerBundle(
+        id="rust-analyzer",
+        name="Rust Analyzer",
+        description="Rust language server",
+        estimated_size_mb=20,
+        platforms={
+            "linux-x64": {
+                "url": "https://github.com/rust-lang/rust-analyzer/releases/download/2025-11-24/rust-analyzer-x86_64-unknown-linux-gnu.gz",
+                "archive_type": "gz",
+                "binary_path": "rust-analyzer",
+                "target_dir": "rust-analyzer",
+            },
+            "win-x64": {
+                "url": "https://github.com/rust-lang/rust-analyzer/releases/download/2025-11-24/rust-analyzer-x86_64-pc-windows-msvc.zip",
+                "archive_type": "zip",
+                "binary_path": "rust-analyzer.exe",
+                "target_dir": "rust-analyzer",
+            },
+            "osx-x64": {
+                "url": "https://github.com/rust-lang/rust-analyzer/releases/download/2025-11-24/rust-analyzer-x86_64-apple-darwin.gz",
+                "archive_type": "gz",
+                "binary_path": "rust-analyzer",
+                "target_dir": "rust-analyzer",
+            },
+            "osx-arm64": {
+                "url": "https://github.com/rust-lang/rust-analyzer/releases/download/2025-11-24/rust-analyzer-aarch64-apple-darwin.gz",
+                "archive_type": "gz",
+                "binary_path": "rust-analyzer",
+                "target_dir": "rust-analyzer",
+            },
+        },
+    ),
+    # Lua Language Server
+    LanguageServerBundle(
+        id="lua-ls",
+        name="Lua Language Server",
+        description="Lua language server",
+        estimated_size_mb=5,
+        platforms={
+            "linux-x64": {
+                "url": "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-linux-x64.tar.gz",
+                "archive_type": "tar.gz",
+                "binary_path": "bin/lua-language-server",
+                "target_dir": "lua-ls",
+            },
+            "win-x64": {
+                "url": "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-win32-x64.zip",
+                "archive_type": "zip",
+                "binary_path": "bin/lua-language-server.exe",
+                "target_dir": "lua-ls",
+            },
+            "osx-x64": {
+                "url": "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-darwin-x64.tar.gz",
+                "archive_type": "tar.gz",
+                "binary_path": "bin/lua-language-server",
+                "target_dir": "lua-ls",
+            },
+            "osx-arm64": {
+                "url": "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-darwin-arm64.tar.gz",
+                "archive_type": "tar.gz",
+                "binary_path": "bin/lua-language-server",
+                "target_dir": "lua-ls",
+            },
+        },
+    ),
+    # Kotlin Language Server (JVM-based, requires Java)
+    LanguageServerBundle(
+        id="kotlin-ls",
+        name="Kotlin Language Server",
+        description="Kotlin language server (requires Java runtime)",
+        estimated_size_mb=85,
+        optional=True,  # Requires Java, bundled with --include-java
+        platforms={
+            # Kotlin LS is platform-agnostic (JVM-based), same ZIP for all platforms
+            "linux-x64": {
+                "url": "https://github.com/fwcd/kotlin-language-server/releases/download/1.3.13/server.zip",
+                "archive_type": "zip",
+                "binary_path": "server/bin/kotlin-language-server",
+                "target_dir": "kotlin-ls",
+            },
+            "win-x64": {
+                "url": "https://github.com/fwcd/kotlin-language-server/releases/download/1.3.13/server.zip",
+                "archive_type": "zip",
+                "binary_path": "server/bin/kotlin-language-server.bat",
+                "target_dir": "kotlin-ls",
+            },
+            "osx-x64": {
+                "url": "https://github.com/fwcd/kotlin-language-server/releases/download/1.3.13/server.zip",
+                "archive_type": "zip",
+                "binary_path": "server/bin/kotlin-language-server",
+                "target_dir": "kotlin-ls",
+            },
+            "osx-arm64": {
+                "url": "https://github.com/fwcd/kotlin-language-server/releases/download/1.3.13/server.zip",
+                "archive_type": "zip",
+                "binary_path": "server/bin/kotlin-language-server",
+                "target_dir": "kotlin-ls",
+            },
+        },
+    ),
 ]
 
 
@@ -335,7 +444,13 @@ def download_language_server(
 
         # Download and extract
         log.info("    Downloading...")
-        FileUtils.download_and_extract_archive(url, str(target_dir), archive_type)
+
+        # For .gz files (single binary compressed), extract directly to binary path
+        # For other archives, extract to target directory
+        if archive_type == "gz":
+            FileUtils.download_and_extract_archive(url, str(binary_path), archive_type)
+        else:
+            FileUtils.download_and_extract_archive(url, str(target_dir), archive_type)
 
         # Verify binary exists
         if not binary_path.exists():

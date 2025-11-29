@@ -293,6 +293,13 @@ jobs:
           npm install --prefix ./ @vtsls/language-server@0.2.9
           cd ../..
 
+          # Pyright (Python)
+          echo "Installing Pyright (Python)..."
+          mkdir -p language_servers/pyright-lsp
+          cd language_servers/pyright-lsp
+          npm install --prefix ./ pyright@1.1.390
+          cd ../..
+
           echo "Language servers installed:"
           du -sh language_servers/*
           echo "Total size:"
@@ -500,6 +507,13 @@ jobs:
           mkdir -p language_servers/vts-lsp
           cd language_servers/vts-lsp
           npm install --prefix ./ @vtsls/language-server@0.2.9
+          cd ../..
+
+          # Pyright (Python)
+          echo "Installing Pyright (Python)..."
+          mkdir -p language_servers/pyright-lsp
+          cd language_servers/pyright-lsp
+          npm install --prefix ./ pyright@1.1.390
           cd ../..
 
           echo "Language servers installed:"
@@ -710,6 +724,13 @@ jobs:
           mkdir -p language_servers/vts-lsp
           cd language_servers/vts-lsp
           npm install --prefix ./ @vtsls/language-server@0.2.9
+          cd ../..
+
+          # Pyright (Python)
+          echo "Installing Pyright (Python)..."
+          mkdir -p language_servers/pyright-lsp
+          cd language_servers/pyright-lsp
+          npm install --prefix ./ pyright@1.1.390
           cd ../..
 
           echo "Language servers installed:"
