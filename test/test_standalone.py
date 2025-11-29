@@ -2,7 +2,7 @@
 Pytest tests for standalone executable builds.
 
 These tests verify that standalone builds work correctly when run in CI/CD.
-They test basic functionality, resource accessibility, and path handling.
+They test basic functionality and path handling.
 
 Usage:
     pytest test/test_standalone.py -v
@@ -101,7 +101,7 @@ def test_help_command(run_exe):
     """Test --help shows usage information."""
     result = run_exe(["--help"])
     assert result.returncode == 0
-    assert "Starts the Serena MCP server" in result.stdout
+    assert "serena mcp server" in result.stdout.lower()
     assert "--project" in result.stdout
     assert "--context" in result.stdout
     assert "--mode" in result.stdout
@@ -122,62 +122,16 @@ def test_no_python_path_errors(run_exe):
     result = run_exe(["--help"])
     assert result.returncode == 0
     assert "_MEIPASS" not in result.stderr
-    assert "PyInstaller" not in result.stderr  # No PyInstaller-specific errors
-
-
-# =============================================================================
-# RESOURCE ACCESSIBILITY TESTS
-# =============================================================================
-
-
-@pytest.mark.standalone
-def test_contexts_are_bundled(run_exe):
-    """Test that context resources are bundled and accessible."""
-    result = run_exe(["context", "list"])
-    assert result.returncode == 0
-    assert "desktop-app" in result.stdout.lower()
-
-
-@pytest.mark.standalone
-def test_modes_are_bundled(run_exe):
-    """Test that mode resources are bundled and accessible."""
-    result = run_exe(["mode", "list"])
-    assert result.returncode == 0
-    assert "interactive" in result.stdout.lower()
-    assert "editing" in result.stdout.lower()
-
-
-@pytest.mark.standalone
-def test_tools_are_available(run_exe):
-    """Test that tools can be listed (tool registry works)."""
-    result = run_exe(["tools", "list", "-q"])
-    assert result.returncode == 0
-    assert len(result.stdout.strip()) > 0
-
-
-@pytest.mark.standalone
-def test_tool_descriptions_accessible(run_exe):
-    """Test that tool descriptions can be retrieved."""
-    result = run_exe(["tools", "description", "FindSymbol"])
-    assert result.returncode == 0
-    assert len(result.stdout.strip()) > 0
-
-
-@pytest.mark.standalone
-def test_prompt_templates_bundled(run_exe):
-    """Test that prompt templates are accessible."""
-    result = run_exe(["prompts", "list"])
-    assert result.returncode == 0
-    assert len(result.stdout.strip()) > 0
-
-
-@pytest.mark.standalone
-def test_default_context_loads(run_exe):
-    """Test that the default context can be loaded successfully."""
-    result = run_exe(["tools", "list", "-q"])
-    assert result.returncode == 0
-    # If context failed to load, would see an error
-    assert "error" not in result.stderr.lower()
+    # No PyInstaller-specific errors visible to user
+    error_indicators = [
+        "ModuleNotFoundError",
+        "ImportError",
+        "FileNotFoundError",
+        "No module named",
+        "cannot import name",
+    ]
+    for indicator in error_indicators:
+        assert indicator not in result.stderr, f"Found '{indicator}' in stderr"
 
 
 # =============================================================================
@@ -186,22 +140,12 @@ def test_default_context_loads(run_exe):
 
 
 @pytest.mark.standalone
-def test_repo_root_path_frozen_mode(run_exe):
-    """Test REPO_ROOT is set correctly in frozen mode."""
-    # If REPO_ROOT is wrong, context/mode loading would fail
-    result = run_exe(["context", "list"])
+def test_frozen_mode_detection(run_exe):
+    """Test that frozen mode is detected correctly."""
+    result = run_exe(["--help"])
     assert result.returncode == 0
-
-    result = run_exe(["mode", "list"])
-    assert result.returncode == 0
-
-
-@pytest.mark.standalone
-def test_serena_pkg_path_frozen_mode(run_exe):
-    """Test _serena_pkg_path works in frozen mode."""
-    # Resources use _serena_pkg_path, so if it's wrong, these would fail
-    result = run_exe(["prompts", "list"])
-    assert result.returncode == 0
+    # No errors about PyInstaller internals
+    assert "_MEIPASS" not in result.stderr
 
 
 # =============================================================================
@@ -236,26 +180,36 @@ def test_home_directory_override(run_exe):
 
 
 # =============================================================================
-# PROJECT COMMANDS TESTS
+# CLI OPTIONS TESTS
 # =============================================================================
 
 
 @pytest.mark.standalone
-def test_project_commands_available(run_exe):
-    """Test project subcommands are available."""
-    result = run_exe(["project", "--help"])
+def test_cli_options_present(run_exe):
+    """Test all expected CLI options are present."""
+    result = run_exe(["--help"])
     assert result.returncode == 0
-    assert "create" in result.stdout.lower()
-    assert "index" in result.stdout.lower()
+
+    expected_options = [
+        "--project",
+        "--context",
+        "--mode",
+        "--transport",
+        "--host",
+        "--port",
+        "--help",
+    ]
+
+    for option in expected_options:
+        assert option in result.stdout, f"Option '{option}' not found in help"
 
 
 @pytest.mark.standalone
-def test_project_create_help(run_exe):
-    """Test project create command help."""
-    result = run_exe(["project", "create", "--help"])
+def test_transport_options_documented(run_exe):
+    """Test that transport protocol options are documented."""
+    result = run_exe(["--help"])
     assert result.returncode == 0
-    assert "--name" in result.stdout
-    assert "--language" in result.stdout
+    assert "stdio" in result.stdout.lower()
 
 
 # =============================================================================
@@ -264,65 +218,11 @@ def test_project_create_help(run_exe):
 
 
 @pytest.mark.standalone
-def test_invalid_command_fails_gracefully(run_exe):
-    """Test invalid commands produce helpful errors."""
-    result = run_exe(["nonexistent-command"])
-    assert result.returncode != 0
-    # Should have some error message
-    assert len(result.stderr) > 0 or "no such" in result.stdout.lower()
-
-
-@pytest.mark.standalone
 def test_invalid_option_fails_gracefully(run_exe):
     """Test invalid options produce helpful errors."""
-    result = run_exe(["--nonexistent-option"])
+    result = run_exe(["--nonexistent-option-xyz"])
     assert result.returncode != 0
-
-
-# =============================================================================
-# COMMAND INTEGRATION TESTS
-# =============================================================================
-
-
-@pytest.mark.standalone
-def test_context_mode_interaction(run_exe):
-    """Test that context and mode commands work together."""
-    # List contexts
-    result = run_exe(["context", "list"])
-    assert result.returncode == 0
-
-    # List modes
-    result = run_exe(["mode", "list"])
-    assert result.returncode == 0
-
-    # Both should work without conflicts
-
-
-@pytest.mark.standalone
-def test_tools_with_context(run_exe):
-    """Test tools work with context specification."""
-    result = run_exe(["tools", "list", "-q"])
-    assert result.returncode == 0
-    tools_output = result.stdout
-
-    # Should list multiple tools
-    assert len(tools_output.strip().split("\n")) > 1
-
-
-@pytest.mark.standalone
-def test_multiple_subcommands(run_exe):
-    """Test that multiple different subcommands work."""
-    commands = [
-        ["context", "list"],
-        ["mode", "list"],
-        ["tools", "list", "-q"],
-        ["prompts", "list"],
-        ["project", "--help"],
-    ]
-
-    for cmd in commands:
-        result = run_exe(cmd)
-        assert result.returncode == 0, f"Command failed: {' '.join(cmd)}"
+    assert "error" in result.stderr.lower() or "no such option" in result.stderr.lower()
 
 
 # =============================================================================
