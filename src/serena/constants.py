@@ -1,7 +1,28 @@
+import sys
 from pathlib import Path
 
-_repo_root_path = Path(__file__).parent.parent.parent.resolve()
-_serena_pkg_path = Path(__file__).parent.resolve()
+
+def _get_serena_pkg_path() -> Path:
+    """
+    Return the path to the serena package directory.
+    Handles both normal Python execution and PyInstaller frozen builds.
+    """
+    if getattr(sys, "frozen", False):
+        # Running as PyInstaller bundle - resources are in _MEIPASS
+        return Path(sys._MEIPASS) / "serena"  # type: ignore[attr-defined]
+    return Path(__file__).parent.resolve()
+
+
+def _get_repo_root_path() -> Path:
+    """Return the repository root path (only meaningful in development mode)."""
+    if getattr(sys, "frozen", False):
+        # In frozen mode, return the directory containing the executable
+        return Path(sys.executable).parent.resolve()
+    return Path(__file__).parent.parent.parent.resolve()
+
+
+_repo_root_path = _get_repo_root_path()
+_serena_pkg_path = _get_serena_pkg_path()
 
 SERENA_MANAGED_DIR_NAME = ".serena"
 _serena_in_home_managed_dir = Path.home() / ".serena"

@@ -1,0 +1,258 @@
+# -*- mode: python ; coding: utf-8 -*-
+"""
+PyInstaller spec file for Serena Standalone.
+
+Build commands:
+    # One-file executable (slower startup, easier distribution)
+    pyinstaller serena.spec --onefile
+
+    # One-folder executable (faster startup)
+    pyinstaller serena.spec --onedir
+
+Output will be in dist/serena-mcp-server[.exe]
+"""
+
+import sys
+from pathlib import Path
+
+block_cipher = None
+
+# Project paths
+PROJECT_ROOT = Path(SPECPATH)
+SRC_DIR = PROJECT_ROOT / "src"
+
+# =============================================================================
+# HIDDEN IMPORTS
+# =============================================================================
+# PyInstaller doesn't automatically detect dynamic imports.
+# These must be explicitly listed.
+
+# Language Server implementations (dynamically imported in ls_config.py)
+ls_hidden_imports = [
+    "solidlsp.language_servers.pyright_server",
+    "solidlsp.language_servers.jedi_server",
+    "solidlsp.language_servers.eclipse_jdtls",
+    "solidlsp.language_servers.kotlin_language_server",
+    "solidlsp.language_servers.rust_analyzer",
+    "solidlsp.language_servers.csharp_language_server",
+    "solidlsp.language_servers.omnisharp",
+    "solidlsp.language_servers.typescript_language_server",
+    "solidlsp.language_servers.vts_language_server",
+    "solidlsp.language_servers.gopls",
+    "solidlsp.language_servers.ruby_lsp",
+    "solidlsp.language_servers.solargraph",
+    "solidlsp.language_servers.dart_language_server",
+    "solidlsp.language_servers.clangd_language_server",
+    "solidlsp.language_servers.intelephense",
+    "solidlsp.language_servers.perl_language_server",
+    "solidlsp.language_servers.clojure_lsp",
+    "solidlsp.language_servers.elixir_tools.elixir_tools",
+    "solidlsp.language_servers.elm_language_server",
+    "solidlsp.language_servers.terraform_ls",
+    "solidlsp.language_servers.sourcekit_lsp",
+    "solidlsp.language_servers.bash_language_server",
+    "solidlsp.language_servers.yaml_language_server",
+    "solidlsp.language_servers.zls",
+    "solidlsp.language_servers.nixd_ls",
+    "solidlsp.language_servers.lua_ls",
+    "solidlsp.language_servers.erlang_language_server",
+    "solidlsp.language_servers.al_language_server",
+    "solidlsp.language_servers.regal_server",
+    "solidlsp.language_servers.marksman",
+    "solidlsp.language_servers.r_language_server",
+    "solidlsp.language_servers.scala_language_server",
+    "solidlsp.language_servers.julia_server",
+    "solidlsp.language_servers.fortran_language_server",
+    "solidlsp.language_servers.haskell_language_server",
+    "solidlsp.language_servers.common",
+]
+
+# Serena tools (wildcard imports in tools/__init__.py)
+tool_hidden_imports = [
+    "serena.tools",
+    "serena.tools.tools_base",
+    "serena.tools.file_tools",
+    "serena.tools.symbol_tools",
+    "serena.tools.memory_tools",
+    "serena.tools.cmd_tools",
+    "serena.tools.config_tools",
+    "serena.tools.workflow_tools",
+    "serena.tools.jetbrains_tools",
+    "serena.tools.jetbrains_plugin_client",
+]
+
+# Third-party libraries with dynamic imports
+third_party_imports = [
+    # MCP Framework
+    "mcp",
+    "mcp.server",
+    "mcp.server.fastmcp",
+    "mcp.server.fastmcp.server",
+    "mcp.server.fastmcp.tools",
+    "mcp.server.fastmcp.tools.base",
+    "mcp.server.fastmcp.utilities",
+    "mcp.server.fastmcp.utilities.func_metadata",
+    # Pydantic
+    "pydantic",
+    "pydantic.fields",
+    "pydantic.main",
+    "pydantic._internal",
+    "pydantic._internal._core_utils",
+    "pydantic._internal._decorators",
+    "pydantic._internal._fields",
+    "pydantic._internal._generics",
+    "pydantic._internal._model_construction",
+    "pydantic._internal._validators",
+    "pydantic.deprecated.decorator",
+    "pydantic_settings",
+    "pydantic_core",
+    # SensAI utilities
+    "sensai",
+    "sensai.util",
+    "sensai.util.logging",
+    "sensai.util.pickle",
+    "sensai.util.string",
+    # YAML processing
+    "yaml",
+    "ruamel",
+    "ruamel.yaml",
+    # Jinja2 templates
+    "jinja2",
+    "jinja2.ext",
+    # Flask dashboard
+    "flask",
+    "werkzeug",
+    # HTTP/Network
+    "requests",
+    "urllib3",
+    "charset_normalizer",
+    # CLI
+    "click",
+    # Other utilities
+    "docstring_parser",
+    "pathspec",
+    "pathspec.patterns",
+    "pathspec.patterns.gitwildmatch",
+    "psutil",
+    "tqdm",
+    "joblib",
+    "overrides",
+    "anthropic",
+    # Token counting
+    "tiktoken",
+    "tiktoken_ext",
+    "tiktoken_ext.openai_public",
+    # Interprompt module
+    "interprompt",
+    "interprompt.jinja_template",
+    "interprompt.multilang_prompt",
+    "interprompt.prompt_factory",
+    "interprompt.util",
+    "interprompt.util.class_decorators",
+    # dotenv
+    "dotenv",
+]
+
+# Platform-specific imports
+platform_imports = []
+if sys.platform != "win32":
+    platform_imports.append("pwd")
+
+# Combine all hidden imports
+all_hidden_imports = (
+    ls_hidden_imports + tool_hidden_imports + third_party_imports + platform_imports
+)
+
+# =============================================================================
+# DATA FILES
+# =============================================================================
+# Resources that need to be bundled with the executable
+
+datas = [
+    # Serena resources (contexts, modes, templates, dashboard)
+    (str(SRC_DIR / "serena" / "resources"), "serena/resources"),
+]
+
+# =============================================================================
+# ANALYSIS
+# =============================================================================
+a = Analysis(
+    [str(SRC_DIR / "serena" / "cli.py")],
+    pathex=[str(SRC_DIR)],
+    binaries=[],
+    datas=datas,
+    hiddenimports=all_hidden_imports,
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[
+        # Exclude unnecessary large packages
+        "tkinter",
+        "matplotlib",
+        "numpy",
+        "pandas",
+        "PIL",
+        "scipy",
+        "notebook",
+        "IPython",
+        "pytest",
+        "sphinx",
+    ],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+
+# =============================================================================
+# PYZ (Python Zip archive)
+# =============================================================================
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+# =============================================================================
+# EXE - Single executable
+# =============================================================================
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    [],
+    name="serena-mcp-server",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,  # Enable UPX compression if available
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=True,  # MCP server needs console for stdio
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    # Uncomment to add icon on Windows:
+    # icon='resources/serena.ico',
+)
+
+# =============================================================================
+# COLLECT - For one-folder builds (--onedir)
+# =============================================================================
+# Note: COLLECT is only used when running: pyinstaller serena.spec --onedir
+# For --onefile builds (the default), only EXE is needed.
+# The EXE above already bundles all binaries/data for single-file distribution.
+#
+# To enable one-folder builds, uncomment below AND modify EXE above to
+# remove a.binaries, a.zipfiles, a.datas from the EXE arguments.
+#
+# coll = COLLECT(
+#     exe,
+#     a.binaries,
+#     a.zipfiles,
+#     a.datas,
+#     strip=False,
+#     upx=True,
+#     upx_exclude=[],
+#     name="serena-mcp-server",
+# )
