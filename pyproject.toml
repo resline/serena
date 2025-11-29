@@ -307,4 +307,5 @@ markers = [
 skip = '.git*,*.svg,*.lock,*.min.*'
 check-hidden = true
 # ignore-regex = ''
-# ignore-words-list = ''
+# "datas" is valid PyInstaller terminology (Analysis.datas, a.datas)
+ignore-words-list = 'datas'
