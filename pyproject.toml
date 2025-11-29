@@ -297,6 +297,7 @@ markers = [
   "rego: language server running for Rego",
   "markdown: language server running for Markdown",
   "julia: Julia language server tests",
+  "standalone: tests for standalone executable builds (requires built executable)",
   "fortran: language server running for Fortran",
   "haskell: Haskell language server tests",
   "yaml: language server running for YAML",

@@ -90,10 +90,103 @@ Follow the link for specific instructions on how to set up Serena for Claude Cod
 > [!TIP]
 > While getting started quickly is easy, Serena is a powerful toolkit with many configuration options.
 > We highly recommend reading through the [user guide](https://oraios.github.io/serena/02-usage/000_intro.html) to get the most out of Serena.
-> 
+>
 > Specifically, we recommend to read about ...
 >   * [Serena's project-based workflow](https://oraios.github.io/serena/02-usage/040_workflow.html) and
 >   * [configuring Serena](https://oraios.github.io/serena/02-usage/050_configuration.html).
+
+## Standalone Builds
+
+For users who prefer a self-contained executable without requiring Python or uv installation, Serena provides standalone builds for Windows, Linux, and macOS.
+
+### Overview
+
+Standalone builds offer several advantages:
+
+* **No Python Required**: Run Serena without installing Python, uv, or any dependencies
+* **Portable**: Single executable file that can be copied and run anywhere
+* **Offline-Capable**: Download language servers on first use, or bundle them for completely offline operation
+* **Simplified Deployment**: Ideal for CI/CD environments, air-gapped systems, or quick setup
+
+### Download Pre-built Binaries
+
+Pre-built standalone executables are available from [GitHub Releases](https://github.com/oraios/serena/releases) for the following platforms:
+
+* **Windows x64**: `serena-mcp-server-windows-x64.exe` (or `serena-mcp-server-windows-x64-{version}.exe` for versioned releases)
+* **Linux x64**: `serena-mcp-server-linux-x64` (or `serena-mcp-server-linux-x64-{version}` for versioned releases)
+* **macOS ARM64**: `serena-mcp-server-macos-arm64` (or `serena-mcp-server-macos-arm64-{version}` for versioned releases)
+
+Download the appropriate executable for your platform, make it executable (Linux/macOS: `chmod +x serena-mcp-server-{platform}-{arch}`), and run it directly.
+
+### Building from Source
+
+If you prefer to build the standalone executable yourself:
+
+**Prerequisites:**
+* Python 3.11 or later
+* [uv package manager](https://docs.astral.sh/uv/getting-started/installation/)
+
+**Build Steps:**
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/oraios/serena.git
+   cd serena
+   ```
+
+2. Install dependencies with standalone support:
+   ```bash
+   uv sync --extra standalone
+   ```
+
+3. Build the standalone executable:
+   ```bash
+   uv run pyinstaller serena.spec
+   ```
+
+4. Find the executable in `dist/`:
+   * Windows: `dist/serena-mcp-server.exe`
+   * Linux/macOS: `dist/serena-mcp-server`
+
+### Configuration for Standalone Mode
+
+Standalone executables support several environment variables for advanced configuration:
+
+* **`SERENA_STANDALONE=1`**: Enable standalone mode (automatically set when running from the built executable)
+* **`SERENA_BUNDLED_LS_DIR`**: Path to a directory containing pre-installed language servers for offline use
+* **`SERENA_BUNDLED_NODE`**: Path to a bundled Node.js executable for npm-based language servers
+
+By default, language servers are downloaded on first use and cached in `~/.solidlsp/language_servers/`. To run completely offline, pre-download language servers and configure `SERENA_BUNDLED_LS_DIR` to point to them.
+
+### Usage
+
+Run the standalone executable just like the Python version:
+
+```bash
+# View available commands and options
+./serena-mcp-server --help
+
+# Start the MCP server (typical usage with MCP clients)
+./serena-mcp-server start-mcp-server
+
+# Use with specific configuration
+./serena-mcp-server start-mcp-server --config /path/to/serena_config.yml
+```
+
+Configure your MCP client to launch the standalone executable instead of the `uvx` command. For example, in Claude Desktop's config:
+
+```json
+{
+  "mcpServers": {
+    "serena": {
+      "command": "/path/to/serena-mcp-server",
+      "args": ["start-mcp-server"]
+    }
+  }
+}
+```
+
+See the [client configuration guide](https://oraios.github.io/serena/02-usage/030_clients.html) for specific setup instructions for your preferred MCP client.
 
 ## User Guide
 

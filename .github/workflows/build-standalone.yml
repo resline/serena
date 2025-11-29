@@ -90,6 +90,7 @@ jobs:
       build-macos: ${{ steps.filter.outputs.build-macos }}
       is-release: ${{ steps.filter.outputs.is-release }}
       retention-days: ${{ steps.filter.outputs.retention-days }}
+      variant: ${{ steps.filter.outputs.variant }}
 
     steps:
       - name: Determine platforms and settings
@@ -123,6 +124,14 @@ jobs:
           fi
           echo "retention-days=$RETENTION" >> $GITHUB_OUTPUT
           echo "Retention: $RETENTION days"
+
+          # Determine build variant
+          VARIANT="${{ github.event.inputs.variant }}"
+          if [[ -z "$VARIANT" ]]; then
+            VARIANT="standard"
+          fi
+          echo "variant=$VARIANT" >> $GITHUB_OUTPUT
+          echo "Variant: $VARIANT"
 
           # Normalize platforms input
           PLATFORMS=$(echo "$PLATFORMS" | tr -d ' ' | tr '[:upper:]' '[:lower:]')
@@ -224,18 +233,30 @@ jobs:
 
       - name: Build standalone executable
         shell: bash
+        env:
+          SERENA_BUILD_VARIANT: ${{ needs.setup.outputs.variant }}
         run: |
           echo "Building Serena standalone for Windows x64..."
+          echo "Variant: ${{ needs.setup.outputs.variant }}"
           echo "Trigger: ${{ github.event_name }}"
           echo "Ref: ${{ github.ref }}"
           source .venv/Scripts/activate
           pyinstaller serena.spec --clean
           ls -la dist/serena-mcp-server.exe
 
-      - name: Test executable
+      - name: Test executable (comprehensive)
         shell: bash
         run: |
-          ./dist/serena-mcp-server.exe --help || echo "Help command executed"
+          echo "Running comprehensive standalone tests..."
+          python scripts/test_standalone.py ./dist/serena-mcp-server.exe --json-output test-results.json
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-windows-x64
+          path: test-results.json
+          retention-days: ${{ needs.setup.outputs.retention-days }}
 
       - name: Generate build metadata
         shell: bash
@@ -243,6 +264,7 @@ jobs:
           cd dist
           cat > BUILD_INFO.txt <<EOF
           Platform: Windows x64
+          Variant: ${{ needs.setup.outputs.variant }}
           Trigger: ${{ github.event_name }}
           Commit: ${{ github.sha }}
           Ref: ${{ github.ref }}
@@ -253,11 +275,21 @@ jobs:
         shell: bash
         run: |
           cd dist
+          VARIANT="${{ needs.setup.outputs.variant }}"
+
+          # Build base name with variant (skip variant suffix for 'standard')
+          if [[ "$VARIANT" == "standard" ]]; then
+            BASE_NAME="serena-mcp-server-windows-x64"
+          else
+            BASE_NAME="serena-mcp-server-${VARIANT}-windows-x64"
+          fi
+
+          # Add version if tagged release
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             VERSION="${{ github.ref_name }}"
-            mv serena-mcp-server.exe "serena-mcp-server-windows-x64-${VERSION}.exe"
+            mv serena-mcp-server.exe "${BASE_NAME}-${VERSION}.exe"
           else
-            mv serena-mcp-server.exe serena-mcp-server-windows-x64.exe
+            mv serena-mcp-server.exe "${BASE_NAME}.exe"
           fi
           ls -la
 
@@ -315,19 +347,31 @@ jobs:
 
       - name: Build standalone executable
         shell: bash
+        env:
+          SERENA_BUILD_VARIANT: ${{ needs.setup.outputs.variant }}
         run: |
           echo "Building Serena standalone for Linux x64..."
+          echo "Variant: ${{ needs.setup.outputs.variant }}"
           echo "Trigger: ${{ github.event_name }}"
           echo "Ref: ${{ github.ref }}"
           source .venv/bin/activate
           pyinstaller serena.spec --clean
           ls -la dist/serena-mcp-server
 
-      - name: Test executable
+      - name: Test executable (comprehensive)
         shell: bash
         run: |
           chmod +x ./dist/serena-mcp-server
-          ./dist/serena-mcp-server --help || echo "Help command executed"
+          echo "Running comprehensive standalone tests..."
+          python scripts/test_standalone.py ./dist/serena-mcp-server --json-output test-results.json
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-linux-x64
+          path: test-results.json
+          retention-days: ${{ needs.setup.outputs.retention-days }}
 
       - name: Generate build metadata
         shell: bash
@@ -335,6 +379,7 @@ jobs:
           cd dist
           cat > BUILD_INFO.txt <<EOF
           Platform: Linux x64
+          Variant: ${{ needs.setup.outputs.variant }}
           Trigger: ${{ github.event_name }}
           Commit: ${{ github.sha }}
           Ref: ${{ github.ref }}
@@ -345,11 +390,21 @@ jobs:
         shell: bash
         run: |
           cd dist
+          VARIANT="${{ needs.setup.outputs.variant }}"
+
+          # Build base name with variant (skip variant suffix for 'standard')
+          if [[ "$VARIANT" == "standard" ]]; then
+            BASE_NAME="serena-mcp-server-linux-x64"
+          else
+            BASE_NAME="serena-mcp-server-${VARIANT}-linux-x64"
+          fi
+
+          # Add version if tagged release
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             VERSION="${{ github.ref_name }}"
-            mv serena-mcp-server "serena-mcp-server-linux-x64-${VERSION}"
+            mv serena-mcp-server "${BASE_NAME}-${VERSION}"
           else
-            mv serena-mcp-server serena-mcp-server-linux-x64
+            mv serena-mcp-server "${BASE_NAME}"
           fi
           ls -la
 
@@ -407,19 +462,31 @@ jobs:
 
       - name: Build standalone executable
         shell: bash
+        env:
+          SERENA_BUILD_VARIANT: ${{ needs.setup.outputs.variant }}
         run: |
           echo "Building Serena standalone for macOS ARM64..."
+          echo "Variant: ${{ needs.setup.outputs.variant }}"
           echo "Trigger: ${{ github.event_name }}"
           echo "Ref: ${{ github.ref }}"
           source .venv/bin/activate
           pyinstaller serena.spec --clean
           ls -la dist/serena-mcp-server
 
-      - name: Test executable
+      - name: Test executable (comprehensive)
         shell: bash
         run: |
           chmod +x ./dist/serena-mcp-server
-          ./dist/serena-mcp-server --help || echo "Help command executed"
+          echo "Running comprehensive standalone tests..."
+          python scripts/test_standalone.py ./dist/serena-mcp-server --json-output test-results.json
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-macos-arm64
+          path: test-results.json
+          retention-days: ${{ needs.setup.outputs.retention-days }}
 
       - name: Generate build metadata
         shell: bash
@@ -427,6 +494,7 @@ jobs:
           cd dist
           cat > BUILD_INFO.txt <<EOF
           Platform: macOS ARM64
+          Variant: ${{ needs.setup.outputs.variant }}
           Trigger: ${{ github.event_name }}
           Commit: ${{ github.sha }}
           Ref: ${{ github.ref }}
@@ -437,11 +505,21 @@ jobs:
         shell: bash
         run: |
           cd dist
+          VARIANT="${{ needs.setup.outputs.variant }}"
+
+          # Build base name with variant (skip variant suffix for 'standard')
+          if [[ "$VARIANT" == "standard" ]]; then
+            BASE_NAME="serena-mcp-server-macos-arm64"
+          else
+            BASE_NAME="serena-mcp-server-${VARIANT}-macos-arm64"
+          fi
+
+          # Add version if tagged release
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             VERSION="${{ github.ref_name }}"
-            mv serena-mcp-server "serena-mcp-server-macos-arm64-${VERSION}"
+            mv serena-mcp-server "${BASE_NAME}-${VERSION}"
           else
-            mv serena-mcp-server serena-mcp-server-macos-arm64
+            mv serena-mcp-server "${BASE_NAME}"
           fi
           ls -la
 

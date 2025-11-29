@@ -9,9 +9,19 @@ Build commands:
     # One-folder executable (faster startup)
     pyinstaller serena.spec --onedir
 
+    # Build with specific variant (slim, standard, full)
+    SERENA_BUILD_VARIANT=slim pyinstaller serena.spec --onefile
+    SERENA_BUILD_VARIANT=full pyinstaller serena.spec --onefile
+
 Output will be in dist/serena-mcp-server[.exe]
+
+Build Variants:
+    - slim: Minimal build without tiktoken, anthropic SDK, jinja2 templates
+    - standard: Default build with all current functionality (default)
+    - full: Complete offline build with bundled Node.js runtime (future)
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -20,6 +30,20 @@ block_cipher = None
 # Project paths
 PROJECT_ROOT = Path(SPECPATH)
 SRC_DIR = PROJECT_ROOT / "src"
+
+# =============================================================================
+# BUILD VARIANT CONFIGURATION
+# =============================================================================
+# Determine build variant from environment variable
+VARIANT = os.environ.get('SERENA_BUILD_VARIANT', 'standard').lower()
+
+# Validate variant
+VALID_VARIANTS = ['slim', 'standard', 'full']
+if VARIANT not in VALID_VARIANTS:
+    print(f"WARNING: Invalid variant '{VARIANT}'. Using 'standard'.")
+    VARIANT = 'standard'
+
+print(f"Building Serena variant: {VARIANT.upper()}")
 
 # =============================================================================
 # HIDDEN IMPORTS
@@ -81,8 +105,8 @@ tool_hidden_imports = [
     "serena.tools.jetbrains_plugin_client",
 ]
 
-# Third-party libraries with dynamic imports
-third_party_imports = [
+# Core third-party libraries (required for all variants)
+core_third_party_imports = [
     # MCP Framework
     "mcp",
     "mcp.server",
@@ -116,9 +140,6 @@ third_party_imports = [
     "yaml",
     "ruamel",
     "ruamel.yaml",
-    # Jinja2 templates
-    "jinja2",
-    "jinja2.ext",
     # Flask dashboard
     "flask",
     "werkzeug",
@@ -137,21 +158,45 @@ third_party_imports = [
     "tqdm",
     "joblib",
     "overrides",
+    # dotenv
+    "dotenv",
+]
+
+# Extended imports for standard and full builds (excluded in slim)
+extended_third_party_imports = [
+    # Anthropic SDK (for AI features)
     "anthropic",
     # Token counting
     "tiktoken",
     "tiktoken_ext",
     "tiktoken_ext.openai_public",
-    # Interprompt module
+    # Jinja2 templates (for prompt templating)
+    "jinja2",
+    "jinja2.ext",
+    # Interprompt module (depends on jinja2)
     "interprompt",
     "interprompt.jinja_template",
     "interprompt.multilang_prompt",
     "interprompt.prompt_factory",
     "interprompt.util",
     "interprompt.util.class_decorators",
-    # dotenv
-    "dotenv",
 ]
+
+# Build variant-specific imports
+third_party_imports = core_third_party_imports.copy()
+
+if VARIANT in ['standard', 'full']:
+    # Standard and full builds include all extended functionality
+    third_party_imports += extended_third_party_imports
+    print(f"  Including extended imports (anthropic, tiktoken, jinja2, interprompt)")
+else:
+    print(f"  Excluding extended imports (slim build)")
+
+if VARIANT == 'full':
+    # Future: Add Node.js runtime bundling and pre-downloaded language servers
+    print(f"  Full build: Node.js bundling not yet implemented")
+    # TODO: Add Node.js binary data files
+    # TODO: Add pre-downloaded language server binaries
 
 # Platform-specific imports
 platform_imports = []
