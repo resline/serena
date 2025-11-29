@@ -1,65 +1,190 @@
 name: Build Standalone Executables
 
+# =============================================================================
+# TRIGGERS - Comprehensive strategy for different use cases
+# =============================================================================
 on:
+  # 1. RELEASE BUILDS - Production releases with auto-upload to GitHub Releases
+  #    Triggered when: Creating a new GitHub release via UI or API
+  #    Use case: Official versioned releases (v0.1.4, v0.2.0, etc.)
+  #    Jobs run: build (all platforms) → release (upload artifacts)
   release:
     types: [created]
+
+  # 2. TAG BUILDS - Version tag pushes
+  #    Triggered when: Pushing tags matching v* pattern (e.g., v0.1.5)
+  #    Use case: Tag-based releases without formal GitHub release
+  #    Jobs run: build (all platforms) → release (create/update release)
+  push:
+    tags:
+      - 'v*'
+
+  # 3. NIGHTLY/SCHEDULED BUILDS - Regular testing builds
+  #    Triggered when: Daily at 03:00 UTC (off-peak hours)
+  #    Use case: Continuous validation of build process, catch breakages early
+  #    Jobs run: build (all platforms), artifacts retained for 7 days
+  schedule:
+    - cron: '0 3 * * *'
+
+  # 4. PR VALIDATION - Test builds on spec/workflow changes
+  #    Triggered when: PRs modify PyInstaller spec or build workflow
+  #    Use case: Validate build configuration changes before merge
+  #    Jobs run: build (Windows only for speed), no release
+  pull_request:
+    paths:
+      - 'serena.spec'
+      - '.github/workflows/build-standalone.yml'
+      - 'src/serena/cli.py'
+      - 'src/serena/constants.py'
+      - 'src/solidlsp/settings.py'
+
+  # 5. MANUAL DISPATCH - Developer-triggered builds with configuration
+  #    Triggered when: Developer manually triggers via GitHub UI/API/CLI
+  #    Use case: Testing specific platforms/variants, on-demand builds
+  #    Jobs run: Configurable via inputs
   workflow_dispatch:
     inputs:
+      platforms:
+        description: 'Platforms to build (comma-separated: windows,linux,macos or "all")'
+        required: false
+        default: 'all'
+        type: string
       variant:
-        description: 'Build variant'
-        required: true
-        default: 'slim'
+        description: 'Build variant (for future use)'
+        required: false
+        default: 'standard'
         type: choice
         options:
           - slim
           - standard
           - full
-      platforms:
-        description: 'Platforms to build (comma-separated: windows,linux,macos)'
+      upload_to_release:
+        description: 'Upload artifacts to latest release'
         required: false
-        default: 'windows'
+        default: false
+        type: boolean
+      retention_days:
+        description: 'Artifact retention days (1-90)'
+        required: false
+        default: '30'
         type: string
 
 env:
   PYTHON_VERSION: "3.11"
 
+# Prevent duplicate builds on same ref
 concurrency:
   group: build-standalone-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build ${{ matrix.os }}-${{ matrix.arch }}
-    runs-on: ${{ matrix.runner }}
+  # ===========================================================================
+  # SETUP JOB - Parse platform selection and determine build matrix
+  # ===========================================================================
+  setup:
+    name: Setup Build Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      build-windows: ${{ steps.filter.outputs.build-windows }}
+      build-linux: ${{ steps.filter.outputs.build-linux }}
+      build-macos: ${{ steps.filter.outputs.build-macos }}
+      is-release: ${{ steps.filter.outputs.is-release }}
+      retention-days: ${{ steps.filter.outputs.retention-days }}
+
+    steps:
+      - name: Determine platforms and settings
+        id: filter
+        shell: bash
+        run: |
+          EVENT="${{ github.event_name }}"
+          PLATFORMS="${{ github.event.inputs.platforms }}"
+
+          echo "Event: $EVENT"
+          echo "Input platforms: $PLATFORMS"
+
+          # Determine if this is a release-type build
+          IS_RELEASE="false"
+          if [[ "$EVENT" == "release" ]] || [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            IS_RELEASE="true"
+          fi
+          echo "is-release=$IS_RELEASE" >> $GITHUB_OUTPUT
+
+          # Determine retention days
+          if [[ "$EVENT" == "release" ]] || [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            RETENTION="90"
+          elif [[ "$EVENT" == "schedule" ]]; then
+            RETENTION="7"
+          elif [[ "$EVENT" == "pull_request" ]]; then
+            RETENTION="3"
+          elif [[ -n "${{ github.event.inputs.retention_days }}" ]]; then
+            RETENTION="${{ github.event.inputs.retention_days }}"
+          else
+            RETENTION="30"
+          fi
+          echo "retention-days=$RETENTION" >> $GITHUB_OUTPUT
+          echo "Retention: $RETENTION days"
+
+          # Normalize platforms input
+          PLATFORMS=$(echo "$PLATFORMS" | tr -d ' ' | tr '[:upper:]' '[:lower:]')
+
+          # For releases, tags, and scheduled builds - always build all platforms
+          if [[ "$EVENT" == "release" ]] || [[ "${{ github.ref }}" == refs/tags/v* ]] || [[ "$EVENT" == "schedule" ]]; then
+            echo "build-windows=true" >> $GITHUB_OUTPUT
+            echo "build-linux=true" >> $GITHUB_OUTPUT
+            echo "build-macos=true" >> $GITHUB_OUTPUT
+            echo "Building ALL platforms (release/tag/schedule trigger)"
+          # For PRs - build only Windows for speed
+          elif [[ "$EVENT" == "pull_request" ]]; then
+            echo "build-windows=true" >> $GITHUB_OUTPUT
+            echo "build-linux=false" >> $GITHUB_OUTPUT
+            echo "build-macos=false" >> $GITHUB_OUTPUT
+            echo "Building WINDOWS only (PR validation)"
+          # For workflow_dispatch - respect platform selection
+          elif [[ "$EVENT" == "workflow_dispatch" ]]; then
+            if [[ -z "$PLATFORMS" ]] || [[ "$PLATFORMS" == "all" ]]; then
+              echo "build-windows=true" >> $GITHUB_OUTPUT
+              echo "build-linux=true" >> $GITHUB_OUTPUT
+              echo "build-macos=true" >> $GITHUB_OUTPUT
+              echo "Building ALL platforms (manual trigger, all selected)"
+            else
+              # Check for each platform
+              if echo "$PLATFORMS" | grep -qE '(^|,)windows(,|$)'; then
+                echo "build-windows=true" >> $GITHUB_OUTPUT
+                echo "Building Windows"
+              else
+                echo "build-windows=false" >> $GITHUB_OUTPUT
+              fi
+
+              if echo "$PLATFORMS" | grep -qE '(^|,)linux(,|$)'; then
+                echo "build-linux=true" >> $GITHUB_OUTPUT
+                echo "Building Linux"
+              else
+                echo "build-linux=false" >> $GITHUB_OUTPUT
+              fi
+
+              if echo "$PLATFORMS" | grep -qE '(^|,)macos?(,|$)'; then
+                echo "build-macos=true" >> $GITHUB_OUTPUT
+                echo "Building macOS"
+              else
+                echo "build-macos=false" >> $GITHUB_OUTPUT
+              fi
+            fi
+          else
+            # Default: build all
+            echo "build-windows=true" >> $GITHUB_OUTPUT
+            echo "build-linux=true" >> $GITHUB_OUTPUT
+            echo "build-macos=true" >> $GITHUB_OUTPUT
+          fi
+
+  # ===========================================================================
+  # BUILD JOBS - Platform-specific builds with conditional execution
+  # ===========================================================================
+  build-windows:
+    name: Build Windows x64
+    needs: setup
+    if: needs.setup.outputs.build-windows == 'true'
+    runs-on: windows-latest
     timeout-minutes: 60
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Windows x64 - PRIORITY
-          - os: windows
-            arch: x64
-            runner: windows-latest
-            platform_id: win-x64
-            artifact_suffix: windows-x64
-            executable_ext: ".exe"
-
-          # Linux x64
-          - os: linux
-            arch: x64
-            runner: ubuntu-latest
-            platform_id: linux-x64
-            artifact_suffix: linux-x64
-            executable_ext: ""
-
-          # macOS ARM64 (Apple Silicon)
-          - os: macos
-            arch: arm64
-            runner: macos-latest
-            platform_id: osx-arm64
-            artifact_suffix: macos-arm64
-            executable_ext: ""
 
     steps:
       - name: Checkout code
@@ -75,17 +200,14 @@ jobs:
         with:
           version: "latest"
 
-      # ===========================================
-      # CACHE: uv virtualenv
-      # ===========================================
       - name: Cache uv virtualenv
         id: cache-uv
         uses: actions/cache@v4
         with:
           path: .venv
-          key: uv-standalone-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('uv.lock') }}
+          key: uv-standalone-windows-${{ env.PYTHON_VERSION }}-${{ hashFiles('uv.lock') }}
           restore-keys: |
-            uv-standalone-${{ runner.os }}-${{ env.PYTHON_VERSION }}-
+            uv-standalone-windows-${{ env.PYTHON_VERSION }}-
 
       - name: Create virtual environment
         shell: bash
@@ -100,76 +222,270 @@ jobs:
           uv pip install -e ".[dev]"
           uv pip install pyinstaller
 
-      # ===========================================
-      # BUILD: PyInstaller
-      # ===========================================
       - name: Build standalone executable
         shell: bash
         run: |
-          echo "Building Serena standalone for ${{ matrix.platform_id }}..."
-
-          # Activate virtual environment
-          if [ "${{ matrix.os }}" = "windows" ]; then
-            source .venv/Scripts/activate
-          else
-            source .venv/bin/activate
-          fi
-
-          # Build with PyInstaller (one-file mode is configured in spec)
+          echo "Building Serena standalone for Windows x64..."
+          echo "Trigger: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          source .venv/Scripts/activate
           pyinstaller serena.spec --clean
-
-          # Verify output
-          if [ "${{ matrix.os }}" = "windows" ]; then
-            ls -la dist/serena-mcp-server.exe
-          else
-            ls -la dist/serena-mcp-server
-          fi
+          ls -la dist/serena-mcp-server.exe
 
       - name: Test executable
         shell: bash
         run: |
-          echo "Testing executable..."
-          if [ "${{ matrix.os }}" = "windows" ]; then
-            ./dist/serena-mcp-server.exe --help || echo "Help command executed"
-          else
-            chmod +x ./dist/serena-mcp-server
-            ./dist/serena-mcp-server --help || echo "Help command executed"
-          fi
+          ./dist/serena-mcp-server.exe --help || echo "Help command executed"
+
+      - name: Generate build metadata
+        shell: bash
+        run: |
+          cd dist
+          cat > BUILD_INFO.txt <<EOF
+          Platform: Windows x64
+          Trigger: ${{ github.event_name }}
+          Commit: ${{ github.sha }}
+          Ref: ${{ github.ref }}
+          Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          EOF
 
       - name: Rename artifact
         shell: bash
         run: |
           cd dist
-          if [ "${{ matrix.os }}" = "windows" ]; then
-            mv serena-mcp-server.exe serena-mcp-server-${{ matrix.artifact_suffix }}.exe
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${{ github.ref_name }}"
+            mv serena-mcp-server.exe "serena-mcp-server-windows-x64-${VERSION}.exe"
           else
-            mv serena-mcp-server serena-mcp-server-${{ matrix.artifact_suffix }}
+            mv serena-mcp-server.exe serena-mcp-server-windows-x64.exe
           fi
           ls -la
 
-      # ===========================================
-      # UPLOAD: Artifacts
-      # ===========================================
       - name: Upload standalone executable
         uses: actions/upload-artifact@v4
         with:
-          name: serena-standalone-${{ matrix.artifact_suffix }}
-          path: dist/serena-mcp-server-${{ matrix.artifact_suffix }}${{ matrix.executable_ext }}
-          retention-days: 30
+          name: serena-standalone-windows-x64
+          path: |
+            dist/serena-mcp-server-*.exe
+            dist/BUILD_INFO.txt
+          retention-days: ${{ needs.setup.outputs.retention-days }}
 
-  # ===========================================
-  # RELEASE JOB
-  # ===========================================
+  build-linux:
+    name: Build Linux x64
+    needs: setup
+    if: needs.setup.outputs.build-linux == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "latest"
+
+      - name: Cache uv virtualenv
+        id: cache-uv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-standalone-linux-${{ env.PYTHON_VERSION }}-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            uv-standalone-linux-${{ env.PYTHON_VERSION }}-
+
+      - name: Create virtual environment
+        shell: bash
+        run: |
+          if [ ! -d ".venv" ]; then
+            uv venv
+          fi
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          uv pip install -e ".[dev]"
+          uv pip install pyinstaller
+
+      - name: Build standalone executable
+        shell: bash
+        run: |
+          echo "Building Serena standalone for Linux x64..."
+          echo "Trigger: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          source .venv/bin/activate
+          pyinstaller serena.spec --clean
+          ls -la dist/serena-mcp-server
+
+      - name: Test executable
+        shell: bash
+        run: |
+          chmod +x ./dist/serena-mcp-server
+          ./dist/serena-mcp-server --help || echo "Help command executed"
+
+      - name: Generate build metadata
+        shell: bash
+        run: |
+          cd dist
+          cat > BUILD_INFO.txt <<EOF
+          Platform: Linux x64
+          Trigger: ${{ github.event_name }}
+          Commit: ${{ github.sha }}
+          Ref: ${{ github.ref }}
+          Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          EOF
+
+      - name: Rename artifact
+        shell: bash
+        run: |
+          cd dist
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${{ github.ref_name }}"
+            mv serena-mcp-server "serena-mcp-server-linux-x64-${VERSION}"
+          else
+            mv serena-mcp-server serena-mcp-server-linux-x64
+          fi
+          ls -la
+
+      - name: Upload standalone executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: serena-standalone-linux-x64
+          path: |
+            dist/serena-mcp-server-*
+            dist/BUILD_INFO.txt
+          retention-days: ${{ needs.setup.outputs.retention-days }}
+
+  build-macos:
+    name: Build macOS ARM64
+    needs: setup
+    if: needs.setup.outputs.build-macos == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "latest"
+
+      - name: Cache uv virtualenv
+        id: cache-uv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-standalone-macos-${{ env.PYTHON_VERSION }}-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            uv-standalone-macos-${{ env.PYTHON_VERSION }}-
+
+      - name: Create virtual environment
+        shell: bash
+        run: |
+          if [ ! -d ".venv" ]; then
+            uv venv
+          fi
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          uv pip install -e ".[dev]"
+          uv pip install pyinstaller
+
+      - name: Build standalone executable
+        shell: bash
+        run: |
+          echo "Building Serena standalone for macOS ARM64..."
+          echo "Trigger: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          source .venv/bin/activate
+          pyinstaller serena.spec --clean
+          ls -la dist/serena-mcp-server
+
+      - name: Test executable
+        shell: bash
+        run: |
+          chmod +x ./dist/serena-mcp-server
+          ./dist/serena-mcp-server --help || echo "Help command executed"
+
+      - name: Generate build metadata
+        shell: bash
+        run: |
+          cd dist
+          cat > BUILD_INFO.txt <<EOF
+          Platform: macOS ARM64
+          Trigger: ${{ github.event_name }}
+          Commit: ${{ github.sha }}
+          Ref: ${{ github.ref }}
+          Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          EOF
+
+      - name: Rename artifact
+        shell: bash
+        run: |
+          cd dist
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${{ github.ref_name }}"
+            mv serena-mcp-server "serena-mcp-server-macos-arm64-${VERSION}"
+          else
+            mv serena-mcp-server serena-mcp-server-macos-arm64
+          fi
+          ls -la
+
+      - name: Upload standalone executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: serena-standalone-macos-arm64
+          path: |
+            dist/serena-mcp-server-*
+            dist/BUILD_INFO.txt
+          retention-days: ${{ needs.setup.outputs.retention-days }}
+
+  # ===========================================================================
+  # RELEASE JOB - Upload to GitHub Release
+  # ===========================================================================
   release:
     name: Upload to GitHub Release
-    needs: build
+    needs: [setup, build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
+
+    # Run for releases, tags, or manual dispatch with upload_to_release=true
+    if: |
+      always() &&
+      needs.setup.outputs.is-release == 'true' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.upload_to_release == 'true')
 
     permissions:
       contents: write
 
     steps:
+      - name: Check build results
+        run: |
+          echo "Windows build: ${{ needs.build-windows.result }}"
+          echo "Linux build: ${{ needs.build-linux.result }}"
+          echo "macOS build: ${{ needs.build-macos.result }}"
+
+          # Fail if all builds failed
+          if [[ "${{ needs.build-windows.result }}" != "success" ]] && \
+             [[ "${{ needs.build-linux.result }}" != "success" ]] && \
+             [[ "${{ needs.build-macos.result }}" != "success" ]]; then
+            echo "All builds failed or were skipped!"
+            exit 1
+          fi
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -183,16 +499,78 @@ jobs:
           mkdir -p release-files
 
           # Copy all executables
-          find artifacts -type f -name 'serena-mcp-server-*' -exec cp {} release-files/ \;
+          find artifacts -type f -name 'serena-mcp-server-*' ! -name '*.txt' -exec cp {} release-files/ \;
 
           # Create checksums
           cd release-files
-          sha256sum * > SHA256SUMS.txt
-          cat SHA256SUMS.txt
+          if ls serena-mcp-server-* 1> /dev/null 2>&1; then
+            sha256sum serena-mcp-server-* > SHA256SUMS.txt
+            echo "=== SHA256 Checksums ==="
+            cat SHA256SUMS.txt
+          else
+            echo "No executables found to checksum"
+          fi
+
+          # Create combined build info
+          echo "=== Build Information ===" > BUILD_INFO_ALL.txt
+          find ../artifacts -name 'BUILD_INFO.txt' -exec cat {} \; -exec echo "---" \; >> BUILD_INFO_ALL.txt
+          cat BUILD_INFO_ALL.txt
+
+      - name: Determine release tag
+        id: release-tag
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          fi
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.release-tag.outputs.tag }}
           files: |
-            release-files/*
+            release-files/serena-mcp-server-*
+            release-files/SHA256SUMS.txt
+            release-files/BUILD_INFO_ALL.txt
           fail_on_unmatched_files: false
+          generate_release_notes: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+          draft: ${{ github.event_name == 'workflow_dispatch' }}
+
+  # ===========================================================================
+  # NOTIFICATION JOB - Nightly build summary
+  # ===========================================================================
+  notify:
+    name: Build Summary
+    needs: [setup, build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    if: always() && github.event_name == 'schedule'
+
+    steps:
+      - name: Generate nightly summary
+        run: |
+          echo "### Nightly Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Windows x64 | ${{ needs.build-windows.result == 'success' && '✅ Success' || needs.build-windows.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Linux x64 | ${{ needs.build-linux.result == 'success' && '✅ Success' || needs.build-linux.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| macOS ARM64 | ${{ needs.build-macos.result == 'success' && '✅ Success' || needs.build-macos.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Overall status
+          if [[ "${{ needs.build-windows.result }}" == "success" ]] && \
+             [[ "${{ needs.build-linux.result }}" == "success" ]] && \
+             [[ "${{ needs.build-macos.result }}" == "success" ]]; then
+            echo "**Overall**: ✅ All builds successful" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Overall**: ⚠️ Some builds failed - check logs" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Artifacts retained for 7 days_" >> $GITHUB_STEP_SUMMARY
