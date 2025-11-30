@@ -311,7 +311,7 @@ jobs:
         run: |
           echo "Downloading binary language servers for Windows..."
           source .venv/Scripts/activate
-          python scripts/bundle_language_servers.py --platform win-x64 --output-dir ./language_servers --verbose
+          python scripts/bundle_language_servers.py --platform win-x64 --output-dir ./language_servers --include-java --verbose
           echo "Language servers bundled at ./language_servers/"
           ls -la language_servers/
 
@@ -527,7 +527,7 @@ jobs:
         run: |
           echo "Downloading binary language servers for Linux..."
           source .venv/bin/activate
-          python scripts/bundle_language_servers.py --platform linux-x64 --output-dir ./language_servers --verbose
+          python scripts/bundle_language_servers.py --platform linux-x64 --output-dir ./language_servers --include-java --verbose
           echo "Language servers bundled at ./language_servers/"
           ls -la language_servers/
 
@@ -744,7 +744,7 @@ jobs:
         run: |
           echo "Downloading binary language servers for macOS ARM64..."
           source .venv/bin/activate
-          python scripts/bundle_language_servers.py --platform osx-arm64 --output-dir ./language_servers --verbose
+          python scripts/bundle_language_servers.py --platform osx-arm64 --output-dir ./language_servers --include-java --verbose
           echo "Language servers bundled at ./language_servers/"
           ls -la language_servers/
 

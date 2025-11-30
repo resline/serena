@@ -17,7 +17,8 @@ Optional language servers (with --include-java):
 - Gradle (Java build tool) - ~50 MB
 - Kotlin Language Server (Kotlin) - ~85 MB
 
-Note: Gopls (Go) requires system installation and is not bundled.
+Optional language servers (with --include-go):
+- Gopls (Go) - ~30 MB (requires Go toolchain to build)
 
 Usage:
     python scripts/bundle_language_servers.py [OPTIONS]
@@ -27,6 +28,7 @@ Options:
                          Default: auto-detect current platform
     --output-dir DIR      Output directory for bundled LS (default: ./language_servers)
     --include-java        Include Eclipse JDTLS, Gradle, and Kotlin LS (adds ~285MB)
+    --include-go          Include Gopls (requires Go toolchain, adds ~30MB)
     --dry-run            Show what would be downloaded without downloading
     --verbose            Enable verbose output
     --ls ID [ID ...]      Only bundle specific language servers by ID
@@ -38,6 +40,7 @@ import argparse
 import logging
 import os
 import platform
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -373,6 +376,41 @@ LANGUAGE_SERVERS: list[LanguageServerBundle] = [
             },
         },
     ),
+    # Gopls - Go language server (build from source)
+    # Note: gopls does not provide pre-built binaries, so we use the source-based approach
+    LanguageServerBundle(
+        id="gopls",
+        name="Gopls",
+        description="Go language server (built from source, requires Go toolchain)",
+        estimated_size_mb=30,
+        optional=True,  # Requires Go toolchain, bundled with --include-go
+        platforms={
+            "linux-x64": {
+                "url": "build-from-source:golang.org/x/tools/gopls@v0.20.0",
+                "archive_type": "go-install",  # Special marker for go install
+                "binary_path": "gopls",
+                "target_dir": "gopls",
+            },
+            "win-x64": {
+                "url": "build-from-source:golang.org/x/tools/gopls@v0.20.0",
+                "archive_type": "go-install",
+                "binary_path": "gopls.exe",
+                "target_dir": "gopls",
+            },
+            "osx-x64": {
+                "url": "build-from-source:golang.org/x/tools/gopls@v0.20.0",
+                "archive_type": "go-install",
+                "binary_path": "gopls",
+                "target_dir": "gopls",
+            },
+            "osx-arm64": {
+                "url": "build-from-source:golang.org/x/tools/gopls@v0.20.0",
+                "archive_type": "go-install",
+                "binary_path": "gopls",
+                "target_dir": "gopls",
+            },
+        },
+    ),
 ]
 
 
@@ -442,15 +480,81 @@ def download_language_server(
         # Create target directory
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        # Download and extract
-        log.info("    Downloading...")
+        # Special handling for go-install (build from source)
+        if archive_type == "go-install":
+            if not url.startswith("build-from-source:"):
+                log.error("    Invalid URL format for go-install. Expected 'build-from-source:' prefix")
+                return False
 
-        # For .gz files (single binary compressed), extract directly to binary path
-        # For other archives, extract to target directory
-        if archive_type == "gz":
-            FileUtils.download_and_extract_archive(url, str(binary_path), archive_type)
+            # Extract package path from URL (e.g., "golang.org/x/tools/gopls@v0.20.0")
+            package = url.split("build-from-source:", 1)[1]
+            log.info(f"    Building from source: {package}")
+
+            # Check if Go is installed
+            try:
+                go_version_result = subprocess.run(
+                    ["go", "version"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if go_version_result.returncode != 0:
+                    raise FileNotFoundError("Go not found")
+                log.info(f"    Using {go_version_result.stdout.strip()}")
+            except FileNotFoundError:
+                log.error("    Go toolchain not found. Please install Go from https://golang.org/")
+                log.error("    Gopls must be built from source as no pre-built binaries are available.")
+                return False
+
+            # Build the binary for the target platform
+            log.info(f"    Building gopls for {platform_id}...")
+
+            # Determine GOOS and GOARCH from platform_id
+            platform_map = {
+                "linux-x64": ("linux", "amd64"),
+                "linux-arm64": ("linux", "arm64"),
+                "win-x64": ("windows", "amd64"),
+                "win-arm64": ("windows", "arm64"),
+                "osx-x64": ("darwin", "amd64"),
+                "osx-arm64": ("darwin", "arm64"),
+            }
+
+            if platform_id not in platform_map:
+                log.error(f"    Unsupported platform for go-install: {platform_id}")
+                return False
+
+            goos, goarch = platform_map[platform_id]
+
+            # Build with cross-compilation
+            env = os.environ.copy()
+            env["GOOS"] = goos
+            env["GOARCH"] = goarch
+            env["CGO_ENABLED"] = "0"  # Disable CGO for static binary
+
+            build_result = subprocess.run(
+                ["go", "build", "-o", str(binary_path), package],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            if build_result.returncode != 0:
+                log.error(f"    Build failed: {build_result.stderr}")
+                return False
+
+            log.info("    Build completed successfully")
+
         else:
-            FileUtils.download_and_extract_archive(url, str(target_dir), archive_type)
+            # Download and extract (existing logic)
+            log.info("    Downloading...")
+
+            # For .gz files (single binary compressed), extract directly to binary path
+            # For other archives, extract to target directory
+            if archive_type == "gz":
+                FileUtils.download_and_extract_archive(url, str(binary_path), archive_type)
+            else:
+                FileUtils.download_and_extract_archive(url, str(target_dir), archive_type)
 
         # Verify binary exists
         if not binary_path.exists():
@@ -506,7 +610,12 @@ def main() -> int:
     parser.add_argument(
         "--include-java",
         action="store_true",
-        help="Include Eclipse JDTLS and Gradle (adds ~200MB)",
+        help="Include Eclipse JDTLS, Gradle, and Kotlin LS (adds ~285MB)",
+    )
+    parser.add_argument(
+        "--include-go",
+        action="store_true",
+        help="Include Gopls - requires Go toolchain (adds ~30MB)",
     )
     parser.add_argument(
         "--dry-run",
@@ -561,9 +670,15 @@ def main() -> int:
             log.info(f"Available: {', '.join(ls.id for ls in LANGUAGE_SERVERS)}")
             return 1
     else:
-        # Default: bundle all non-optional, plus optional if --include-java
+        # Default: bundle all non-optional, plus optional based on flags
+        java_servers = {"jdtls", "gradle", "kotlin-ls"}
+        go_servers = {"gopls"}
         for ls_bundle in LANGUAGE_SERVERS:
-            if not ls_bundle.optional or (args.include_java and ls_bundle.id in ("jdtls", "gradle")):
+            if (
+                not ls_bundle.optional
+                or (args.include_java and ls_bundle.id in java_servers)
+                or (args.include_go and ls_bundle.id in go_servers)
+            ):
                 servers_to_bundle.append(ls_bundle)
 
     # Calculate estimated total size
