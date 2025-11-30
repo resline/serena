@@ -1,0 +1,611 @@
+# Language Server Registry for Serena Build Generator
+# This file defines all available language servers and their properties
+#
+# Structure:
+# - categories: Organized groupings of languages by domain
+# - presets: Pre-configured combinations for different use cases
+# - dependencies: Language servers that require other servers
+
+categories:
+  web_development:
+    name: "Web Development"
+    description: "Languages commonly used in web development"
+    languages:
+      - id: typescript
+        name: "TypeScript/JavaScript"
+        display_name: "TypeScript/JavaScript (typescript-language-server)"
+        type: npm
+        package: "typescript-language-server"
+        version: "4.3.3"
+        requires_node: true
+        size_mb: 25
+        file_extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]
+        experimental: false
+
+      - id: typescript-vts
+        name: "TypeScript/JavaScript (VTS)"
+        display_name: "TypeScript/JavaScript (vtsls)"
+        type: npm
+        package: "@vtsls/language-server"
+        version: "0.2.9"
+        requires_node: true
+        size_mb: 25
+        file_extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]
+        experimental: true
+        notes: "Alternative TypeScript LS using native VSCode extension"
+
+      - id: php
+        name: "PHP"
+        display_name: "PHP (Intelephense)"
+        type: npm
+        package: "intelephense"
+        version: "1.14.4"
+        requires_node: true
+        size_mb: 15
+        file_extensions: [".php"]
+        experimental: false
+
+      - id: yaml
+        name: "YAML"
+        display_name: "YAML (yaml-language-server)"
+        type: npm
+        package: "yaml-language-server"
+        version: "1.19.2"
+        requires_node: true
+        size_mb: 10
+        file_extensions: [".yaml", ".yml"]
+        experimental: true
+        notes: "Must be explicitly specified as main language"
+
+  scripting:
+    name: "Scripting Languages"
+    description: "Shell and scripting languages"
+    languages:
+      - id: bash
+        name: "Bash/Shell"
+        display_name: "Bash/Shell (bash-language-server)"
+        type: npm
+        package: "bash-language-server"
+        version: "5.6.0"
+        requires_node: true
+        size_mb: 10
+        file_extensions: [".sh", ".bash"]
+        experimental: false
+
+      - id: python
+        name: "Python"
+        display_name: "Python (Pyright)"
+        type: runtime
+        requires_uv: true
+        size_mb: 50
+        file_extensions: [".py", ".pyi"]
+        experimental: false
+        notes: "Installed via uv/pip, not bundled"
+
+      - id: python-jedi
+        name: "Python (Jedi)"
+        display_name: "Python (Jedi Language Server)"
+        type: runtime
+        requires_pip: true
+        size_mb: 10
+        file_extensions: [".py", ".pyi"]
+        experimental: true
+        notes: "Legacy Python LS, use Pyright instead"
+
+      - id: perl
+        name: "Perl"
+        display_name: "Perl (Perl Language Server)"
+        type: runtime
+        requires_cpan: true
+        size_mb: 20
+        file_extensions: [".pl", ".pm", ".t"]
+        experimental: false
+        notes: "Installed via CPAN"
+
+      - id: ruby
+        name: "Ruby"
+        display_name: "Ruby (ruby-lsp)"
+        type: runtime
+        requires_gem: true
+        size_mb: 15
+        file_extensions: [".rb", ".erb"]
+        experimental: false
+        notes: "Installed via gem"
+
+      - id: ruby-solargraph
+        name: "Ruby (Solargraph)"
+        display_name: "Ruby (Solargraph)"
+        type: runtime
+        requires_gem: true
+        size_mb: 20
+        file_extensions: [".rb"]
+        experimental: true
+        notes: "Legacy Ruby LS, use ruby-lsp instead"
+
+  systems_programming:
+    name: "Systems Programming"
+    description: "Low-level and compiled languages"
+    languages:
+      - id: clangd
+        name: "C/C++"
+        display_name: "C/C++ (Clangd)"
+        type: binary
+        bundled: true
+        version: "19.1.2"
+        size_mb: 100
+        file_extensions: [".c", ".cpp", ".h", ".hpp", ".cc", ".cxx", ".hxx"]
+        experimental: false
+        platforms:
+          linux-x64: "https://github.com/clangd/clangd/releases/download/19.1.2/clangd-linux-19.1.2.zip"
+          win-x64: "https://github.com/clangd/clangd/releases/download/19.1.2/clangd-windows-19.1.2.zip"
+          osx-x64: "https://github.com/clangd/clangd/releases/download/19.1.2/clangd-mac-19.1.2.zip"
+          osx-arm64: "https://github.com/clangd/clangd/releases/download/19.1.2/clangd-mac-19.1.2.zip"
+
+      - id: rust-analyzer
+        name: "Rust"
+        display_name: "Rust (rust-analyzer)"
+        type: binary
+        bundled: true
+        version: "2025-11-24"
+        size_mb: 20
+        file_extensions: [".rs"]
+        experimental: false
+        platforms:
+          linux-x64: "https://github.com/rust-lang/rust-analyzer/releases/download/2025-11-24/rust-analyzer-x86_64-unknown-linux-gnu.gz"
+          win-x64: "https://github.com/rust-lang/rust-analyzer/releases/download/2025-11-24/rust-analyzer-x86_64-pc-windows-msvc.zip"
+          osx-x64: "https://github.com/rust-lang/rust-analyzer/releases/download/2025-11-24/rust-analyzer-x86_64-apple-darwin.gz"
+          osx-arm64: "https://github.com/rust-lang/rust-analyzer/releases/download/2025-11-24/rust-analyzer-aarch64-apple-darwin.gz"
+
+      - id: csharp
+        name: "C#"
+        display_name: "C# (csharp-ls)"
+        type: binary
+        bundled: false
+        requires_dotnet: true
+        size_mb: 30
+        file_extensions: [".cs"]
+        experimental: false
+        notes: "Downloaded from NuGet, requires .NET runtime"
+        platforms:
+          linux-x64: "Microsoft.CodeAnalysis.LanguageServer.linux-x64"
+          linux-arm64: "Microsoft.CodeAnalysis.LanguageServer.linux-arm64"
+          win-x64: "Microsoft.CodeAnalysis.LanguageServer.win-x64"
+          win-arm64: "Microsoft.CodeAnalysis.LanguageServer.win-arm64"
+          osx-x64: "Microsoft.CodeAnalysis.LanguageServer.osx-x64"
+          osx-arm64: "Microsoft.CodeAnalysis.LanguageServer.osx-arm64"
+
+      - id: csharp-omnisharp
+        name: "C# (OmniSharp)"
+        display_name: "C# (OmniSharp)"
+        type: binary
+        bundled: false
+        requires_mono: true
+        size_mb: 50
+        file_extensions: [".cs"]
+        experimental: true
+        notes: "Legacy C# LS, use csharp-ls instead"
+
+      - id: go
+        name: "Go"
+        display_name: "Go (gopls)"
+        type: binary
+        bundled: true
+        version: "v0.20.0"
+        size_mb: 30
+        file_extensions: [".go"]
+        experimental: false
+        notes: "Built from source, requires Go toolchain to bundle"
+        platforms:
+          linux-x64: "build-from-source:golang.org/x/tools/gopls@v0.20.0"
+          win-x64: "build-from-source:golang.org/x/tools/gopls@v0.20.0"
+          osx-x64: "build-from-source:golang.org/x/tools/gopls@v0.20.0"
+          osx-arm64: "build-from-source:golang.org/x/tools/gopls@v0.20.0"
+
+      - id: swift
+        name: "Swift"
+        display_name: "Swift (SourceKit-LSP)"
+        type: runtime
+        requires_swift: true
+        size_mb: 40
+        file_extensions: [".swift"]
+        experimental: false
+        notes: "Bundled with Xcode/Swift toolchain"
+
+      - id: zig
+        name: "Zig"
+        display_name: "Zig (ZLS)"
+        type: runtime
+        requires_zig: true
+        size_mb: 10
+        file_extensions: [".zig", ".zon"]
+        experimental: false
+        notes: "Must be installed separately"
+
+  jvm_languages:
+    name: "JVM Languages"
+    description: "Languages running on the Java Virtual Machine"
+    languages:
+      - id: jdtls
+        name: "Java"
+        display_name: "Java (Eclipse JDTLS)"
+        type: binary
+        bundled: true
+        version: "1.42.0"
+        size_mb: 150
+        file_extensions: [".java"]
+        experimental: false
+        notes: "Includes bundled JRE 21"
+        platforms:
+          linux-x64: "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-x64-1.42.0-561.vsix"
+          win-x64: "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-win32-x64-1.42.0-561.vsix"
+          osx-x64: "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-x64-1.42.0-561.vsix"
+          osx-arm64: "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-arm64-1.42.0-561.vsix"
+
+      - id: gradle
+        name: "Gradle"
+        display_name: "Gradle Build Tool"
+        type: binary
+        bundled: true
+        version: "8.14.2"
+        size_mb: 50
+        experimental: false
+        notes: "Build tool for Java/JVM projects, platform-agnostic"
+        platforms:
+          linux-x64: "https://services.gradle.org/distributions/gradle-8.14.2-bin.zip"
+          linux-arm64: "https://services.gradle.org/distributions/gradle-8.14.2-bin.zip"
+          win-x64: "https://services.gradle.org/distributions/gradle-8.14.2-bin.zip"
+          osx-x64: "https://services.gradle.org/distributions/gradle-8.14.2-bin.zip"
+          osx-arm64: "https://services.gradle.org/distributions/gradle-8.14.2-bin.zip"
+
+      - id: kotlin-ls
+        name: "Kotlin"
+        display_name: "Kotlin (kotlin-language-server)"
+        type: binary
+        bundled: true
+        version: "1.3.13"
+        size_mb: 85
+        file_extensions: [".kt", ".kts"]
+        experimental: false
+        notes: "Requires Java runtime (bundled with JDTLS)"
+        platforms:
+          linux-x64: "https://github.com/fwcd/kotlin-language-server/releases/download/1.3.13/server.zip"
+          win-x64: "https://github.com/fwcd/kotlin-language-server/releases/download/1.3.13/server.zip"
+          osx-x64: "https://github.com/fwcd/kotlin-language-server/releases/download/1.3.13/server.zip"
+          osx-arm64: "https://github.com/fwcd/kotlin-language-server/releases/download/1.3.13/server.zip"
+
+      - id: scala
+        name: "Scala"
+        display_name: "Scala (Metals)"
+        type: runtime
+        requires_java: true
+        size_mb: 100
+        file_extensions: [".scala", ".sbt"]
+        experimental: false
+        notes: "Uses Coursier to download"
+
+      - id: clojure
+        name: "Clojure"
+        display_name: "Clojure (clojure-lsp)"
+        type: runtime
+        size_mb: 50
+        file_extensions: [".clj", ".cljs", ".cljc", ".edn"]
+        experimental: false
+        notes: "Must be installed separately"
+
+  functional_languages:
+    name: "Functional Languages"
+    description: "Functional programming languages"
+    languages:
+      - id: elixir
+        name: "Elixir"
+        display_name: "Elixir (elixir-ls)"
+        type: runtime
+        requires_elixir: true
+        size_mb: 30
+        file_extensions: [".ex", ".exs"]
+        experimental: false
+        notes: "Requires Elixir runtime"
+
+      - id: erlang
+        name: "Erlang"
+        display_name: "Erlang (erlang_ls)"
+        type: runtime
+        requires_erlang: true
+        size_mb: 20
+        file_extensions: [".erl", ".hrl", ".escript", ".config", ".app", ".app.src"]
+        experimental: false
+        notes: "Requires Erlang runtime"
+
+      - id: haskell
+        name: "Haskell"
+        display_name: "Haskell (HLS)"
+        type: runtime
+        requires_ghcup: true
+        size_mb: 100
+        file_extensions: [".hs", ".lhs"]
+        experimental: false
+        notes: "Requires GHCup and Haskell toolchain"
+
+      - id: elm
+        name: "Elm"
+        display_name: "Elm Language Server"
+        type: runtime
+        requires_npm: true
+        size_mb: 20
+        file_extensions: [".elm"]
+        experimental: false
+        notes: "Installed via npm globally"
+
+  mobile_development:
+    name: "Mobile Development"
+    description: "Mobile app development languages"
+    languages:
+      - id: dart
+        name: "Dart/Flutter"
+        display_name: "Dart (Dart SDK)"
+        type: binary
+        bundled: true
+        version: "3.7.1"
+        size_mb: 200
+        file_extensions: [".dart"]
+        experimental: false
+        notes: "Full Dart SDK bundled"
+        platforms:
+          linux-x64: "https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-linux-x64-release.zip"
+          win-x64: "https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-windows-x64-release.zip"
+          win-arm64: "https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-windows-arm64-release.zip"
+          osx-x64: "https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-macos-x64-release.zip"
+          osx-arm64: "https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-macos-arm64-release.zip"
+
+  infrastructure:
+    name: "Infrastructure & DevOps"
+    description: "Infrastructure as Code and DevOps tools"
+    languages:
+      - id: terraform-ls
+        name: "Terraform"
+        display_name: "Terraform (terraform-ls)"
+        type: binary
+        bundled: true
+        version: "0.36.5"
+        size_mb: 50
+        file_extensions: [".tf", ".tfvars", ".tfstate"]
+        experimental: false
+        platforms:
+          linux-x64: "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_linux_amd64.zip"
+          linux-arm64: "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_linux_arm64.zip"
+          win-x64: "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_windows_amd64.zip"
+          osx-x64: "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_darwin_amd64.zip"
+          osx-arm64: "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_darwin_arm64.zip"
+
+      - id: nix
+        name: "Nix"
+        display_name: "Nix (nixd)"
+        type: runtime
+        requires_nix: true
+        size_mb: 15
+        file_extensions: [".nix"]
+        experimental: false
+        notes: "Must be installed via Nix"
+
+      - id: rego
+        name: "Rego"
+        display_name: "Rego (Regal)"
+        type: runtime
+        size_mb: 10
+        file_extensions: [".rego"]
+        experimental: false
+        notes: "Policy language for Open Policy Agent"
+
+  scripting_advanced:
+    name: "Advanced Scripting"
+    description: "Additional scripting and dynamic languages"
+    languages:
+      - id: lua-ls
+        name: "Lua"
+        display_name: "Lua (lua-language-server)"
+        type: binary
+        bundled: true
+        version: "3.15.0"
+        size_mb: 5
+        file_extensions: [".lua"]
+        experimental: false
+        platforms:
+          linux-x64: "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-linux-x64.tar.gz"
+          win-x64: "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-win32-x64.zip"
+          osx-x64: "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-darwin-x64.tar.gz"
+          osx-arm64: "https://github.com/LuaLS/lua-language-server/releases/download/3.15.0/lua-language-server-3.15.0-darwin-arm64.tar.gz"
+
+      - id: r
+        name: "R"
+        display_name: "R Language Server"
+        type: runtime
+        requires_r: true
+        size_mb: 30
+        file_extensions: [".R", ".r", ".Rmd", ".Rnw"]
+        experimental: false
+        notes: "Installed via R install.packages()"
+
+      - id: julia
+        name: "Julia"
+        display_name: "Julia Language Server"
+        type: runtime
+        requires_julia: true
+        size_mb: 50
+        file_extensions: [".jl"]
+        experimental: false
+        notes: "Requires Julia runtime"
+
+      - id: fortran
+        name: "Fortran"
+        display_name: "Fortran Language Server"
+        type: runtime
+        requires_pip: true
+        size_mb: 15
+        file_extensions: [".f90", ".F90", ".f95", ".F95", ".f03", ".F03", ".f08", ".F08", ".f", ".F", ".for", ".FOR", ".fpp", ".FPP"]
+        experimental: false
+        notes: "Installed via pip"
+
+  business_languages:
+    name: "Business Languages"
+    description: "Enterprise and business application languages"
+    languages:
+      - id: al
+        name: "AL (Business Central)"
+        display_name: "AL Language Server"
+        type: runtime
+        size_mb: 25
+        file_extensions: [".al", ".dal"]
+        experimental: false
+        notes: "Microsoft Dynamics 365 Business Central"
+
+  documentation:
+    name: "Documentation"
+    description: "Documentation and markup languages"
+    languages:
+      - id: markdown
+        name: "Markdown"
+        display_name: "Markdown (Marksman)"
+        type: runtime
+        size_mb: 5
+        file_extensions: [".md", ".markdown"]
+        experimental: true
+        notes: "Must be explicitly specified as main language"
+
+# Preset configurations for common use cases
+presets:
+  minimal:
+    name: "Minimal"
+    description: "Python support only (runtime-only, ~50 MB)"
+    includes: []
+    notes: "Python (Pyright) is always available via runtime installation"
+
+  standard:
+    name: "Standard"
+    description: "Core binary language servers (~375 MB)"
+    includes:
+      - clangd
+      - terraform-ls
+      - dart
+      - rust-analyzer
+      - lua-ls
+    estimated_size_mb: 375
+    notes: "Default preset for most development needs"
+
+  full:
+    name: "Full"
+    description: "Standard + Java ecosystem + Go (~660 MB)"
+    includes_preset: standard
+    includes:
+      - jdtls
+      - gradle
+      - kotlin-ls
+      - go
+    estimated_size_mb: 660
+    notes: "Includes Java runtime and build tools"
+
+  web:
+    name: "Web Development"
+    description: "TypeScript, PHP, YAML, Bash (~200 MB with Node.js)"
+    requires_node: true
+    includes:
+      - typescript
+      - php
+      - yaml
+      - bash
+    estimated_size_mb: 200
+    notes: "Requires bundled Node.js runtime for npm packages"
+
+  complete:
+    name: "Complete"
+    description: "All bundleable binary and npm language servers (~800 MB)"
+    includes_all_binary: true
+    includes_all_npm: true
+    requires_node: true
+    estimated_size_mb: 800
+    notes: "Maximum offline capability with all bundleable servers"
+
+# Dependency relationships between language servers
+dependencies:
+  kotlin-ls:
+    requires: [jdtls]
+    reason: "Kotlin requires Java runtime bundled with JDTLS"
+
+  gradle:
+    requires: [jdtls]
+    reason: "Gradle uses Java runtime bundled with JDTLS"
+
+  typescript:
+    requires_node: true
+    reason: "npm-based language server"
+
+  php:
+    requires_node: true
+    reason: "npm-based language server"
+
+  yaml:
+    requires_node: true
+    reason: "npm-based language server"
+
+  bash:
+    requires_node: true
+    reason: "npm-based language server"
+
+  typescript-vts:
+    requires_node: true
+    reason: "npm-based language server"
+
+# Summary statistics
+statistics:
+  total_languages: 36
+  bundleable_binary: 9
+  bundleable_npm: 5
+  runtime_only: 22
+  experimental: 6
+
+  bundleable_binary_list:
+    - clangd          # 100 MB
+    - terraform-ls    # 50 MB
+    - dart            # 200 MB
+    - rust-analyzer   # 20 MB
+    - lua-ls          # 5 MB
+    - jdtls           # 150 MB (optional)
+    - gradle          # 50 MB (optional)
+    - kotlin-ls       # 85 MB (optional)
+    - go              # 30 MB (optional, requires Go toolchain to build)
+
+  bundleable_npm_list:
+    - typescript      # 25 MB (requires Node.js)
+    - php             # 15 MB (requires Node.js)
+    - yaml            # 10 MB (requires Node.js)
+    - bash            # 10 MB (requires Node.js)
+    - typescript-vts  # 25 MB (requires Node.js, experimental)
+
+  runtime_installation:
+    python: "Installed via uv/pip (Pyright)"
+    csharp: "Downloaded from NuGet (requires .NET runtime)"
+    ruby: "Installed via gem"
+    perl: "Installed via CPAN"
+    swift: "Bundled with Xcode/Swift toolchain"
+    elixir: "Requires Elixir runtime"
+    haskell: "Requires GHCup and Haskell toolchain"
+    and_others: "See individual language entries for details"
+
+# Notes on bundling strategy
+bundling_notes:
+  binary_servers: "Pre-built binaries downloaded from official sources"
+  npm_servers: "Installed at build time when Node.js is bundled"
+  runtime_servers: "Users must install separately or via package managers"
+  standalone_builds: "Full variant includes binary servers + Node.js + npm servers"
+
+offline_support:
+  enabled_for: "All bundleable binary and npm language servers"
+  node_requirement: "Web preset and npm servers require bundled Node.js"
+  python_requirement: "Python is always available but installed at runtime"
+
+platform_support:
+  linux_x64: "Full support for all bundleable servers"
+  linux_arm64: "Limited support (terraform-ls, gradle)"
+  win_x64: "Full support for all bundleable servers"
+  win_arm64: "Limited support (dart, gradle)"
+  osx_x64: "Full support for all bundleable servers"
+  osx_arm64: "Full support for all bundleable servers"

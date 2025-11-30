@@ -50,7 +50,7 @@ on:
         default: 'all'
         type: string
       variant:
-        description: 'Build variant (for future use)'
+        description: 'Build variant'
         required: false
         default: 'standard'
         type: choice
@@ -58,6 +58,28 @@ on:
           - slim
           - standard
           - full
+      language_preset:
+        description: 'Language preset (full variant only)'
+        required: false
+        default: 'standard'
+        type: choice
+        options:
+          - minimal
+          - standard
+          - full
+          - web
+          - systems
+          - jvm
+      include_java:
+        description: 'Include Java/Kotlin/Gradle support'
+        required: false
+        default: true
+        type: boolean
+      include_go:
+        description: 'Include Go (gopls) support - requires Go toolchain'
+        required: false
+        default: false
+        type: boolean
       upload_to_release:
         description: 'Upload artifacts to latest release'
         required: false
@@ -91,6 +113,8 @@ jobs:
       is-release: ${{ steps.filter.outputs.is-release }}
       retention-days: ${{ steps.filter.outputs.retention-days }}
       variant: ${{ steps.filter.outputs.variant }}
+      include-java: ${{ steps.filter.outputs.include-java }}
+      include-go: ${{ steps.filter.outputs.include-go }}
 
     steps:
       - name: Determine platforms and settings
@@ -132,6 +156,21 @@ jobs:
           fi
           echo "variant=$VARIANT" >> $GITHUB_OUTPUT
           echo "Variant: $VARIANT"
+
+          # Determine language server flags (for full variant)
+          INCLUDE_JAVA="${{ github.event.inputs.include_java }}"
+          INCLUDE_GO="${{ github.event.inputs.include_go }}"
+          # Default to true for Java in releases/scheduled builds
+          if [[ -z "$INCLUDE_JAVA" ]] || [[ "$INCLUDE_JAVA" != "false" ]]; then
+            INCLUDE_JAVA="true"
+          fi
+          if [[ -z "$INCLUDE_GO" ]]; then
+            INCLUDE_GO="false"
+          fi
+          echo "include-java=$INCLUDE_JAVA" >> $GITHUB_OUTPUT
+          echo "include-go=$INCLUDE_GO" >> $GITHUB_OUTPUT
+          echo "Include Java: $INCLUDE_JAVA"
+          echo "Include Go: $INCLUDE_GO"
 
           # Normalize platforms input
           PLATFORMS=$(echo "$PLATFORMS" | tr -d ' ' | tr '[:upper:]' '[:lower:]')
@@ -311,7 +350,23 @@ jobs:
         run: |
           echo "Downloading binary language servers for Windows..."
           source .venv/Scripts/activate
-          python scripts/bundle_language_servers.py --platform win-x64 --output-dir ./language_servers --include-java --verbose
+
+          # Build bundling command with conditional flags
+          BUNDLE_CMD="python scripts/bundle_language_servers.py --platform win-x64 --output-dir ./language_servers --verbose"
+
+          if [[ "${{ needs.setup.outputs.include-java }}" == "true" ]]; then
+            BUNDLE_CMD="$BUNDLE_CMD --include-java"
+            echo "Including Java/Kotlin/Gradle language servers"
+          fi
+
+          if [[ "${{ needs.setup.outputs.include-go }}" == "true" ]]; then
+            BUNDLE_CMD="$BUNDLE_CMD --include-go"
+            echo "Including Go language server (gopls)"
+          fi
+
+          echo "Executing: $BUNDLE_CMD"
+          eval $BUNDLE_CMD
+
           echo "Language servers bundled at ./language_servers/"
           ls -la language_servers/
 
@@ -527,7 +582,23 @@ jobs:
         run: |
           echo "Downloading binary language servers for Linux..."
           source .venv/bin/activate
-          python scripts/bundle_language_servers.py --platform linux-x64 --output-dir ./language_servers --include-java --verbose
+
+          # Build bundling command with conditional flags
+          BUNDLE_CMD="python scripts/bundle_language_servers.py --platform linux-x64 --output-dir ./language_servers --verbose"
+
+          if [[ "${{ needs.setup.outputs.include-java }}" == "true" ]]; then
+            BUNDLE_CMD="$BUNDLE_CMD --include-java"
+            echo "Including Java/Kotlin/Gradle language servers"
+          fi
+
+          if [[ "${{ needs.setup.outputs.include-go }}" == "true" ]]; then
+            BUNDLE_CMD="$BUNDLE_CMD --include-go"
+            echo "Including Go language server (gopls)"
+          fi
+
+          echo "Executing: $BUNDLE_CMD"
+          eval $BUNDLE_CMD
+
           echo "Language servers bundled at ./language_servers/"
           ls -la language_servers/
 
@@ -744,7 +815,23 @@ jobs:
         run: |
           echo "Downloading binary language servers for macOS ARM64..."
           source .venv/bin/activate
-          python scripts/bundle_language_servers.py --platform osx-arm64 --output-dir ./language_servers --include-java --verbose
+
+          # Build bundling command with conditional flags
+          BUNDLE_CMD="python scripts/bundle_language_servers.py --platform osx-arm64 --output-dir ./language_servers --verbose"
+
+          if [[ "${{ needs.setup.outputs.include-java }}" == "true" ]]; then
+            BUNDLE_CMD="$BUNDLE_CMD --include-java"
+            echo "Including Java/Kotlin/Gradle language servers"
+          fi
+
+          if [[ "${{ needs.setup.outputs.include-go }}" == "true" ]]; then
+            BUNDLE_CMD="$BUNDLE_CMD --include-go"
+            echo "Including Go language server (gopls)"
+          fi
+
+          echo "Executing: $BUNDLE_CMD"
+          eval $BUNDLE_CMD
+
           echo "Language servers bundled at ./language_servers/"
           ls -la language_servers/
 

@@ -1,0 +1,15 @@
+{
+  "languages": [
+    "clangd",
+    "rust-analyzer",
+    "gopls",
+    "lua-ls"
+  ],
+  "platform": "linux-x64",
+  "output_dir": "./language_servers",
+  "run_pyinstaller": true,
+  "pyinstaller_args": [
+    "--clean",
+    "--noconfirm"
+  ]
+}
