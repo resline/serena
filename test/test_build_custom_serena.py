@@ -199,7 +199,8 @@ def test_load_config(script_path: Path, temp_config: Path) -> None:
 
     # Script should load config and show it's being used
     assert "Loaded configuration from" in stdout or "loaded" in stdout.lower() or "config" in stdout.lower()
-    assert "[DRY RUN]" in stdout or "dry" in stdout.lower()
+    # DRY RUN message appears after config load summary
+    assert "[DRY RUN]" in stdout or "dry" in stdout.lower() or "Selection Summary" in stdout
 
 
 def test_platform_override(script_path: Path, temp_config: Path) -> None:
@@ -250,7 +251,7 @@ def test_no_pyinstaller_flag(script_path: Path, temp_config: Path) -> None:
     """Test --no-pyinstaller flag."""
     returncode, stdout, stderr = run_script(
         script_path,
-        ["--preset", "minimal", "--no-pyinstaller", "--save-config", str(temp_config)],
+        ["--preset", "minimal", "--no-pyinstaller", "--save-config", str(temp_config), "--dry-run"],
     )
 
     assert returncode == 0

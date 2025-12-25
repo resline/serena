@@ -36,7 +36,8 @@ class TestCheckBundledLS:
             settings = SolidLSPSettings(bundled_ls_dir=str(bundled_dir))
             result = check_bundled_ls(settings, "clangd", "clangd_19.1.2/bin/clangd")
 
-            assert result == str(binary_path)
+            # Normalize paths for cross-platform comparison
+            assert Path(result) == binary_path
 
     def test_returns_none_when_bundled_binary_not_exists(self) -> None:
         """Should return None when bundled binary doesn't exist."""
@@ -60,7 +61,8 @@ class TestCheckBundledLS:
             settings = SolidLSPSettings(bundled_ls_dir=str(bundled_dir))
             result = check_bundled_ls(settings, "clangd", "clangd_19.1.2/bin/clangd.exe")
 
-            assert result == str(binary_path)
+            # Normalize paths for cross-platform comparison
+            assert Path(result) == binary_path
 
 
 class TestCopyBundledLSToCache:
