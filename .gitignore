@@ -254,3 +254,6 @@ stack.yaml.lock
 dist-newstyle/
 cabal.project.local*
 .ghc.environment.*
+
+zz-misc/
+vue-implementation/
