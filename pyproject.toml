@@ -317,4 +317,5 @@ skip = '.git*,*.svg,*.lock,*.min.*'
 check-hidden = true
 # ignore-regex = ''
 # "datas" is valid PyInstaller terminology (Analysis.datas, a.datas)
-ignore-words-list = 'datas,paket'
+# "edn" is a valid Clojure data format file extension
+ignore-words-list = 'datas,paket,edn'
