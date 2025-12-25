@@ -81,8 +81,8 @@ def test_preset_minimal_save_config(script_path: Path, temp_config: Path) -> Non
     returncode, stdout, stderr = run_script(script_path, ["--preset", "minimal", "--save-config", str(temp_config), "--dry-run"])
 
     # Should succeed and save config
-    assert returncode == 0, f"Script failed with stderr: {stderr}"
-    assert temp_config.exists(), "Config file was not created"
+    assert returncode == 0, f"Script failed with returncode {returncode}\nstdout: {stdout}\nstderr: {stderr}"
+    assert temp_config.exists(), f"Config file was not created\nstdout: {stdout}"
     assert "Configuration saved" in stdout or "saved" in stdout.lower()
 
     # Verify config contents
@@ -98,8 +98,8 @@ def test_preset_standard_save_config(script_path: Path, temp_config: Path) -> No
     """Test saving standard preset to config file."""
     returncode, stdout, stderr = run_script(script_path, ["--preset", "standard", "--save-config", str(temp_config), "--dry-run"])
 
-    assert returncode == 0
-    assert temp_config.exists()
+    assert returncode == 0, f"Script failed with returncode {returncode}\nstdout: {stdout}\nstderr: {stderr}"
+    assert temp_config.exists(), f"Config file was not created\nstdout: {stdout}"
 
     with open(temp_config) as f:
         config = json.load(f)
@@ -116,8 +116,8 @@ def test_preset_full_save_config(script_path: Path, temp_config: Path) -> None:
     """Test saving full preset to config file."""
     returncode, stdout, stderr = run_script(script_path, ["--preset", "full", "--save-config", str(temp_config), "--dry-run"])
 
-    assert returncode == 0
-    assert temp_config.exists()
+    assert returncode == 0, f"Script failed with returncode {returncode}\nstdout: {stdout}\nstderr: {stderr}"
+    assert temp_config.exists(), f"Config file was not created\nstdout: {stdout}"
 
     with open(temp_config) as f:
         config = json.load(f)
@@ -141,7 +141,7 @@ def test_preset_web_save_config(script_path: Path, temp_config: Path) -> None:
     """Test saving web preset to config file."""
     returncode, stdout, stderr = run_script(script_path, ["--preset", "web", "--save-config", str(temp_config), "--dry-run"])
 
-    assert returncode == 0
+    assert returncode == 0, f"Script failed with returncode {returncode}\nstdout: {stdout}\nstderr: {stderr}"
     with open(temp_config) as f:
         config = json.load(f)
 
@@ -156,7 +156,7 @@ def test_preset_systems_save_config(script_path: Path, temp_config: Path) -> Non
     """Test saving systems preset to config file."""
     returncode, stdout, stderr = run_script(script_path, ["--preset", "systems", "--save-config", str(temp_config), "--dry-run"])
 
-    assert returncode == 0
+    assert returncode == 0, f"Script failed with returncode {returncode}\nstdout: {stdout}\nstderr: {stderr}"
     with open(temp_config) as f:
         config = json.load(f)
 
@@ -170,7 +170,7 @@ def test_preset_jvm_save_config(script_path: Path, temp_config: Path) -> None:
     """Test saving JVM preset to config file."""
     returncode, stdout, stderr = run_script(script_path, ["--preset", "jvm", "--save-config", str(temp_config), "--dry-run"])
 
-    assert returncode == 0
+    assert returncode == 0, f"Script failed with returncode {returncode}\nstdout: {stdout}\nstderr: {stderr}"
     with open(temp_config) as f:
         config = json.load(f)
 
@@ -266,7 +266,7 @@ def test_config_json_format(script_path: Path, temp_config: Path) -> None:
     """Test that saved config is valid JSON with expected structure."""
     returncode, stdout, stderr = run_script(script_path, ["--preset", "standard", "--save-config", str(temp_config), "--dry-run"])
 
-    assert returncode == 0
+    assert returncode == 0, f"Script failed with returncode {returncode}\nstdout: {stdout}\nstderr: {stderr}"
 
     # Should be valid JSON
     with open(temp_config) as f:

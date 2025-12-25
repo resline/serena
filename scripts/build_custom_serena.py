@@ -1074,6 +1074,12 @@ Examples:
             json.dump(config.to_dict(), f, indent=2)
         print(f"Configuration saved to: {args.save_config}")
 
+        # If only saving config (with dry-run), show summary and exit without building
+        if config.dry_run:
+            display_selection_summary(config)
+            print("\n  [DRY RUN] Configuration saved. No build executed.")
+            return 0
+
     # Display summary for CLI mode
     if not args.interactive and (args.languages or args.preset or args.config):
         display_selection_summary(config)
