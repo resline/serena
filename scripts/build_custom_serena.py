@@ -478,20 +478,20 @@ def display_selection_summary(config: BuildConfig) -> None:
         for ls_id in by_category[category]:
             info = LANGUAGE_SERVERS[ls_id]
             auto = " (auto-added)" if ls_id in config.auto_added else ""
-            print(f"    • {info['name']:25} {info['size_mb']:3d} MB{auto}")
+            print(f"    - {info['name']:25} {info['size_mb']:3d} MB{auto}")
 
     # Total
-    print(f"\n  {'─' * 40}")
+    print(f"\n  {'-' * 40}")
     print(f"  Total: {len(config.resolved_languages)} language servers, ~{config.total_size_mb} MB")
 
     if config.requires_node:
-        print("  ⚠ Requires Node.js runtime (included in full variant)")
+        print("  [!] Requires Node.js runtime (included in full variant)")
 
     # Warnings
     if config.warnings:
         print("\n  Notes:")
         for warning in config.warnings:
-            print(f"    • {warning}")
+            print(f"    - {warning}")
 
 
 def display_presets() -> None:
@@ -622,13 +622,13 @@ def interactive_language_selection(initial: set[str] | None = None) -> list[str]
     print(
         """
   Select languages by entering numbers, ranges, or commands:
-    • Single: 1, 5, 12
-    • Range: 1-5, 8-10
-    • Multiple: 1,3,5-7,12
-    • Remove: -3, -5-7
-    • Select all: all
-    • Clear: none
-    • Finish: done (or press Enter with no input)
+    - Single: 1, 5, 12
+    - Range: 1-5, 8-10
+    - Multiple: 1,3,5-7,12
+    - Remove: -3, -5-7
+    - Select all: all
+    - Clear: none
+    - Finish: done (or press Enter with no input)
     """
     )
 
@@ -845,7 +845,7 @@ def run_build(config: BuildConfig) -> int:
 
         result = subprocess.run(bundle_cmd, check=False)
         if result.returncode != 0:
-            print("\n  ❌ Bundling failed!")
+            print("\n  [ERROR] Bundling failed!")
             return result.returncode
     else:
         print_section("No Binary Language Servers Selected")
@@ -858,7 +858,7 @@ def run_build(config: BuildConfig) -> int:
         for ls_id in npm_langs:
             info = LANGUAGE_SERVERS[ls_id]
             packages = info.get("npm_packages", [])
-            print(f"    • {info['name']}: {', '.join(packages)}")
+            print(f"    - {info['name']}: {', '.join(packages)}")
         print()
         if config.dry_run:
             print("  [DRY RUN] npm packages would be installed in full variant build")
@@ -879,7 +879,7 @@ def run_build(config: BuildConfig) -> int:
 
         result = subprocess.run(pyinstaller_cmd, check=False)
         if result.returncode != 0:
-            print("\n  ❌ PyInstaller failed!")
+            print("\n  [ERROR] PyInstaller failed!")
             return result.returncode
 
     print_header("Build Complete!")
